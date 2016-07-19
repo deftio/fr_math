@@ -1,11 +1,14 @@
-FR_Math TODO before release
+# FR_Math TODO 
 
-(done) tanI 
-tanFR version
-acos
-asin
-atan
-atan2
+(c) M. A. Chatterjee 2000-2016
+
+#Features
+	[x] tanI 
+	[ ]tanFR version
+	[ ]acos
+	[ ]asin
+	[ ]atan
+	[ ]atan2
 (done) degrees-->radians (macro (up to) 16bit FR)
 (done) radians-->degrees (macro (up to) 16bit FR)
 (done) macros for common constants
