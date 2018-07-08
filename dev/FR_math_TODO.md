@@ -4,11 +4,11 @@
 
 #Features
 	[x] tanI 
-	[ ]tanFR version
-	[ ]acos
-	[ ]asin
-	[ ]atan
-	[ ]atan2
+	[ ] tanFR version
+	[ ] acos
+	[ ] asin
+	[ ] atan
+	[ ] atan2
 (done) degrees-->radians (macro (up to) 16bit FR)
 (done) radians-->degrees (macro (up to) 16bit FR)
 (done) macros for common constants

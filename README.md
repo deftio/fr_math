@@ -4,7 +4,23 @@
  
 
 ## Overview
-FR_mathroutines are a small set of fixed-radix functions written in C/C++ for integer math / fixed radix operations.  I developed this several years ago for use in several embedded interized math projects and this small, slightly cleaned up version is made available for the public here.  It worked very well on 16MHz 68k processors for palm pilots (and later ARM cores) where we needed many integer point transforms for graphics.  This included things like fonting where each letter's M square needed to be computed and embedded graphics transforms.  The Inkstorm application for PalmOS (originally by Trumpetsoft) used a version of this. 
+
+FR_mathroutines are a small set of fixed-radix functions written in C/C++ for integer math / fixed radix operations.  This allows the computation of fractional quantities with only integer registers but with an eye towards performance rather than just packing floating point equivalents in integer registers.  This means that implementations were chosen to minimize the need for overflow tests and similar bounds checking.
+
+This library allows the programmer to choose the radix point (number of fractional bits) for all operations - so one can have 11.4 or 10.5 operations on the fly (where 11 and 10 are left of the radix point and 4 and 5 represent number of fractional bits respectively).  This is useful when using large quantities such occur in frequency domain math operation such as fourier analysis.
+
+A highlevel list of of operations is here:
+
+* fixed-radix multiply/add/sub with saturation
+* trig operations sin,cos, tan and inverse
+* log, log2, log10
+* exp, pow2, pow10
+* conversions from degrees / radians/ grads / freq without loss of precision even at high bit packing
+* coordinate transformations
+
+
+## History
+I developed this several years ago for use in several embedded interized math projects and this small, slightly cleaned up version is made available for the public here.  It worked very well on 16MHz 68k processors for palm pilots (and later ARM cores) where we needed many integer point transforms for graphics.  This included things like fonting where each letter's M square needed to be computed and embedded graphics transforms.  The Inkstorm application for PalmOS (originally by Trumpetsoft) used a version of this. 
 
 
 ## Usage
@@ -87,6 +103,7 @@ void main (void)
 But now comes the first of a few challenges.  How do we deal with the integer and fractional parts?  How do we display the results?  There is no compiler support, we as the programmer must separate the integer and fractional results.  The program above prints the result as 1070 not 10.70 because the compiler only knows about the integer variables we have used not our intended scaled up definitions.
 
 ### Thinking in powers of 2 (radixes)
+
 In the previous example we used base10 math, which while useful for humans is not an optimal use of bits as all the numerics in the machine will be using binary math.  If we use powers of two we can specify the precision in terms of bits instead of base10 for the fractional and integer parts and we get several other advantages:
 
 1. Ease of notation - for example with a 16 bit signed integer (typically a short in C/C++), we can say the number is "s11.4"  which means its a number that is signed with 11 bits of integer and 4 bits of fractional precision.  In fact one bit is not used for a sign representation but the number is represented as 2's complement format.  However _effectively_ 1 bit is used for sign representation from the point of precision represented.  If a number is unsigned, then we can say its u12.4 - yes the same number now has 12 integer bits of precision and 4 bits of fractional representation.  
@@ -110,14 +127,17 @@ Multiply an M bit number by a N bit number results in a N+M bit precision result
 Saturation can be useful in some circumstance but may result in performance hits or loss of data.
 
 #### Adding...
+
 When adding or subtracting fixed radix numbers the radix points must be aligned beforehand.  For example: to add a A is a s11.4 number and B is a 9.6 number.  We need to make some choices.  We could move them to larger registers first, say 32 bit registers. resulting in A2 being a s27.4 number and B2 being a s25.6 number.  Now we can safely shift A2 up by two bits so that A2 = A2<<2.  Now A2 is a s25.6 number but we haven't lost any data because the upper bits of the former A can be held in the larger register without precision loss.  
 
 Now we can add them and get the result C=A2+B2.  The result is a s25.6 number but the precision is actually 12.6 (we use the larger integer portion which comes from A which is 11 bits and the larger fractional portion, which comes from B which is 6 bits, plus 1 bit from addition operation).  So this s12.6 number has 18+1 bits of precision without any accuracy loss.  But if we need to convert it back to a 16 bit precision number we will need to make choices as to how much fractional accuracy to keep. The simplest way is to preserve all the integer bits so we shift C down by enough bits that the sign and integer bits fit in a 16 bit register.  So C=C>>3 results in a s12.3 number.  As long as we keep track of the radix point we will have maintained accuracy.  Now if we had tested A and B before hand we may have learned that we could keep more of the fractional bits.
 
 #### Multiplying...
+
 Multiplying does not require that the radix points be aligned before the operation is carried out.  Lets assume we have two numbers as we had in our Adding example.  A is a s11.4 precision number which we move to A2 now a s27.4 large register (but still a s11.4 number of bits are in use). B is a s9.6 number which we move to B2 now a s25.6 large registor (but still a s9.6 number of bits are in use).  C=A2*B2 results in C being a s20.10 number.  note that C *is* using the entire 32 bit register for the result.  Now if we want the result squished back in to a 16 bit register then we must make some hard choices.  Firstly we already have 20 bits if integer precision - so any attempt (without looking at the number of bits actually used) to fit the result in to a 16 bit regist must result in some type of truncation.  If we take the top 15 bits of the result (+1 bit for sign precision) we the programmers must remember that this scaled up by 20-5 = 5 bits of precision.  So when even though we can fit the top 15 bits in a 16 bit register we will lose the bottom 16 bits of precision and we have to remember that the result is scaled by 5 bits (or integer 32).  Interestingly if test both A and B beforehand we may find that while they had the stated incoming precion by wrote they may not actually contain that number of live, set bits (e.g. if A is a s11.4 number by programmer's convention but its actual value is integer 33 or fixed-radix 2and1/16 then we may not have as many bits to truncate in C).
 
 ## Conventions Used in the Library
+
 This library uses radix points (binary points) instead of base10 math, so for those who are not used to thinking in powers of two I suggest glancing at the FR_main code which contains a few examples of its use.
 
 Mixed radix types for matrices and numbers is allowed and encouraged but monitoring of mixed radix precisionis left to the user of the functions.
@@ -131,6 +151,7 @@ u16	= unsigned 16 bit integer
 u32	= unsigned 32 bit integer
 
 ## This Library...
+
 This library just includes a handful of functions for mixed integer radix math and for 2D coordinate transforms using fixed radix math.  this is especially useful on low end embedded systems or systems without floating point or SIMD support which need simple graphical transforms such as scale, rotate, skew, translate of both 16 or 32 bit integer coordinates.  The 2D matrix also allows for forward or backward transforms of points (e.g. camera to world and world to camera) transformations.
 
 Much of the library is given as MACROS (which always appear in UPPER CASE and always with the prefix FR_).  The reason for this is it keeps compiled library size down which can then be used as shared object rather than depending on an incremental linker.   However if some of the macros are used a lot it may be desirable to wrap them in a function call to trade inline expansion for code space reduction.
@@ -141,16 +162,13 @@ fr_add(s32 x, int xr, s32 y, int yr)
 	return FR_ADD(x,xr,y,yr);
 }
 
-## Finally ... A few thoughts on higher end CPUs, and embedded processors, and DSPs:
+## Finally ... A few thoughts on higher end CPUs, and embedded processors, GPUs, and DSPs:
 
-DSP (Digital Signal Processors) have built operations for saturating math.  Usually this is done by providing CPU instructions which have both traditional 2's complement and saturating math. e.g. The low level programmer can determine when to operands are multiplied *which* kind of multiply to use saturated or unsaturated.  This also applies to addition, subtraction and combined multiply-accumulate instructions.  Also modern CPUs (80x86, ARM, Power series and DSPs) often include parallel instruction sets (SIMD).  Examples include MMX, SSE, Altivec, NEON etc.  These instruction sets allow block-loads of data in to special registers which can execute multiple math operations in parallel.  For example in MMX or Altivec we can use  128 bit registers each of which can hold four 32 bit integers.  So now when we multiply 2 of these registers together we get 4 simultaneous multiplies.  Even better the instructions are flexible in how they the internal data of the 128 bit integers and can treat a 128 bit register as 4 separate numbers and the programmer can choose the saturating / nonsaturating behavior.  Most SIMD instruction sets allow the programmer to select the packing (four 32bit numbers or eight 16bit numbers or sixteen 8 bit numbers and even packed floating point) and signed/unsigned/saturated operations.
+DSP (Digital Signal Processors) have built operations for saturating math.  Usually this is done by providing CPU instructions which have both traditional 2's complement and saturating math. e.g. The low level programmer can determine when to operands are multiplied *which* kind of multiply to use saturated or unsaturated.  This also applies to addition, subtraction and combined multiply-accumulate instructions.  Also modern CPUs (80x86, x64, ARM, Power series and DSPs) often include parallel instruction sets (SIMD).  Examples include MMX, SSE, Altivec, NEON etc.  These instruction sets allow block-loads of data in to special registers which can execute multiple math operations in parallel.  For example in MMX or Altivec we can use  128 bit registers each of which can hold four 32 bit integers.  So now when we multiply 2 of these registers together we get 4 simultaneous multiplies.  Even better the instructions are flexible in how they the internal data of the 128 bit integers and can treat a 128 bit register as 4 separate numbers and the programmer can choose the saturating / nonsaturating behavior.  Most SIMD instruction sets allow the programmer to select the packing (four 32bit numbers or eight 16bit numbers or sixteen 8 bit numbers and even packed floating point) and signed/unsigned/saturated operations.  Also similar is GPU or tensor computing hardware which have usually been optimized for linear algebra / packed data operations.  In these systems packed data is also operated on en-masse to provide high performance vector computes.
 
-More recent instruction sets combine advanced cryptographic, image processing,
-and transcendental functions for use in DSP like media processing.
+More recent instruction sets combine advanced cryptographic, image processing, and transcendental functions for use in DSP like media processing.
 
-These powerful instruction sets can speed up repetive matrix oriented operations
-literally an order of magnitude or more compared with the regular CPU 
-instruction stream as long as the data is already packed in the correct format.
+These powerful instruction sets can speed up repetive matrix oriented operations literally an order of magnitude or more compared with the regular CPU instruction stream as long as the data is already acked in the correct format.
 
 Thanks for taking a look!
 
