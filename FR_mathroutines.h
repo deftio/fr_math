@@ -80,7 +80,8 @@ extern "C"
 /* Change Radix (x,current_radix, new_radix) 
  * change number from its current fixed radix (can be 0 or integer) to a new fixed radix
  * Useful when dealing with numbers with mixed radixes.  This is a MACRO so  
- * this code expands in place and x is modified. */
+ * this code expands in place and x is modified.
+ */
 #define FR_CHRDX(x,r_cur,r_new)	(((r_cur)-(r_new))>=0?((x)>>((r_cur)-(r_new))):((x)<<((r_new)-(r_cur))))
 
 /* return only the fractional part of x */
@@ -104,7 +105,8 @@ extern "C"
  * with a fractional delta, of a supplied precision.  
  * If delta is outside 0<= delta<=1 then extrapolation 
  * does work but programmer should watch for possible overflow.
- * x0,x1 need not have same radix as delta */
+ * x0,x1 need not have same radix as delta
+ */
 #define FR_INTERP(x0,x1,delta,prec) ((x0)+((((x1)-(x0))*(delta))>>(prec)))
 
 /* FR_INTERPI is the same as FR_INTERP except that  insures the
@@ -211,10 +213,10 @@ s32 FR_FixAddSat(s32 x, s32 y); // add signed/unsigned AND Saturated
 #define FR_RAD2DEG(x) (((x)>>6)+((x)>>9)-((x)>>13))
 
 #define FR_RAD2Q(x)   (((x)>>1)+((x)>>3)+((x)>>7)+((x)>>8)-((x)>>14))
-#define FR_Q2RAD(x)   ((x)+((x)>>1)+((x)>>4)+((x)>>7))+((x)>>11))
+#define FR_Q2RAD(x)   ((x)+((x)>>1)+((x)>>4)+((x)>>7)+((x)>>11))
 
-#define FR_DEG2Q(x)   ((x)>>6)-((x)>>8)-((x)>>11)-((x)>>13))
-#define FR_Q2DEG(x)   ((x)<<6)+((x)<<4)+((x)<<3)+((x)<<1))
+#define FR_DEG2Q(x)   (((x)>>6)-((x)>>8)-((x)>>11)-((x)>>13))
+#define FR_Q2DEG(x)   (((x)<<6)+((x)<<4)+((x)<<3)+((x)<<1))
 
 /* scale by 10s */
 #define FR_SMUL10(x)	(((x)<<3)+(((x)<<1)))
@@ -222,11 +224,13 @@ s32 FR_FixAddSat(s32 x, s32 y); // add signed/unsigned AND Saturated
 
 /* scale by 1/log2(e)  0.693147180560 used for converting log2() to ln()  */
 #define FR_SrLOG2E(x)   (((x)>>1)+((x)>>2)-((x)>>3)+((x)>>4)+((x)>>7)-((x)>>9)-((x)>>12)+((x)>>15))
+
 /* scale by log2(e)    1.442695040889 used for converting pow2() to exp() */
 #define FR_SLOG2E(x)	((x)+((x)>>1)-((x)>>4)+((x)>>8)+((x)>>10)+((x)>>12)+((x)>>14))
 
 /* scale by 1/log2(10) 0.30102999566 used for converting log2() to log10  */
 #define FR_SrLOG2_10(x) (((x)>>2)+((x)>>4)-((x)>>6)+((x)>>7)-((x)>>8)+((x)>>12))
+
 /* scale by log2(10)   3.32192809489 used for converting pow2() to pow10 */
 #define FR_SLOG2_10(x)  (((x)<<1)+(x)+((x)>>2)+((x)>>4)+((x)>>7)+((x)>>10)+((x)>>11)+((x)>>13))
 

@@ -2,58 +2,63 @@
 
 (c) M. A. Chatterjee 2000-2016
 
-#Features
+# Features
 	[x] tanI 
 	[ ] tanFR version
 	[ ] acos
 	[ ] asin
 	[ ] atan
 	[ ] atan2
-(done) degrees-->radians (macro (up to) 16bit FR)
-(done) radians-->degrees (macro (up to) 16bit FR)
-(done) macros for common constants
-(done) add/sub of different radixes as functions/macros
-rename FR_main_examples_and_test_suite.cpp
-rename integer trig functions to FR_cos_i FR_sin_i  or FR_cosD, FR_sinD (for degrees)
-move degree based trig to separate FR_TrigDegrees (all fns)
-add JSON output for error measurement
-add simple HTML error renderer
-rename FR_Sin --> FR_sin  
-use radians instead of degrees?  
-Provide macros for sin / cos in degrees?  or just example FR_SIN(FRDEG2RAD(x))
-Provide wave functions:
-FR_squareWavS //square wave of sin
-FR_squareWavC //square wave of cos
-FR_triangleWavS //triangle wav of sin
-FR_triangleWavC //triangle wav of cos
-FR_pwm(radians,duty) // starts hi goes low after duty percent of cycle, duty on scale of 0..16bits
+* (done) degrees-->radians (macro (up to) 16bit FR)
+* (done) radians-->degrees (macro (up to) 16bit FR)
+* (done) macros for common constants
+* (done) add/sub of different radixes as functions/macros
+* rename FR_main_examples_and_test_suite.cpp
+* rename integer trig functions to FR_cos_i FR_sin_i  or FR_cosD, FR_sinD (for degrees)
+* move degree based trig to separate FR_TrigDegrees (all fns)
+* add JSON output for error measurement
+* add simple HTML error renderer
+* rename FR_Sin --> FR_sin  
+* use radians instead of degrees?  
+* Provide macros for sin / cos in degrees?  or just example FR_SIN(FRDEG2RAD(x))
+* Provide wave functions:
+* FR_squareWavS //square wave of sin
+* FR_squareWavC //square wave of cos
+* FR_triangleWavS //triangle wav of sin
+* FR_triangleWavC //triangle wav of cos
+* FR_pwm(radians,duty) // starts hi goes low after duty percent of cycle, duty on scale of 0..16bits
 
 
 scale by Pi, e and their reciprocals by shifting
 #define FR_SMUL10(x)	(((x)<<3)+((x<<1)))
 #define FR_SPI(x)       (((x)<<1)+(x)+(x>>3)+(x>>6)+(x>>10))
 #define FR_SrPI(x)      ((x>>2)+(x>>4)+(x>>8)+(x>>9)-(x>>14)+(x>>16))
+
+Scale by a constant, by reciprocal
 FR_SE
 FR_SrE
 
-better explanations in FR_math_docs.txt
-Note on assumption of incremental linker usage
-examples:
-saturation
-switching radixes
-comparing to floating point
-why this libraries allows _arbitrary_ radix not just on byte boundaries
-why degrees were used and not radians and not binary degrees (e.g. 64 pts for a quadrant etc)
-notes on that all functions are stable (e.g. no div by zero even tan, acos etc).
-separate test suite and example programs
-test for arcxxx functions to work with different radixes eg 5 (etc)
-update license ?(if used attribution required)
+make better explanations in FR_math_docs.md
 
-add BitsInUse (a function which brackets highest and lowest set bits and their positions.  Note proper handling of negative numbers)
-add functions/macros for using the FR_kXXX constants eg FR_kScale(x,prec,FR_kCONST), FR_kADD(x,prec,FR_kCONST)
-move integer trig functions to macros
-make sin(), MACROs
-make arcsin MACRO
+Note on assumption of incremental linker usage
+
+TODO examples:
+* saturation
+* switching radixes
+* comparing to floating point
+* why this libraries allows _arbitrary_ radix not just on byte boundaries
+* why degrees were used and not radians and not binary degrees (e.g. 64 pts for a quadrant etc)
+
+notes on that all functions are stable (e.g. no div by zero even tan, acos etc).
+
+separate test suite and example programs
+* test for arcxxx functions to work with different radixes eg 5 (etc)
+
+* add BitsInUse (a function which brackets highest and lowest set bits and their positions.  Note proper handling of negative numbers)
+* add functions/macros for using the FR_kXXX constants eg FR_kScale(x,prec,FR_kCONST), FR_kADD(x,prec,FR_kCONST)
+* move integer trig functions to macros
+* make sin(), MACROs
+* make arcsin MACRO
 
 sqrt?
 1/sqrt --> inv_sqrt
@@ -79,6 +84,7 @@ Add FR_INTERP_COS()  //MACRO!!
         mu = I2FR(1,prec)-FR_COS(FR_sPI(delta))>>1; //mu = (1-FR_COS(delta*pi))>>1; 
         return FR_INTERPI(
     }
+
 clean up terminology (e.g. signed vs sat suffixes)
 make all standalone functions lowercase except for FR_ prefix to match math.h type libs
 add text on differences between fixed_radix, BCD, floating point 32 double, and bignum math systems
@@ -86,7 +92,7 @@ example code on how to use
 
 (done) add a namespace under C++
 
-V2
+# Version Next 
 Add, Mul, Sub (with Sat) on arbitrary long #s
 ? Conversions to Half precision FP (e.g. 11.5)
 ? Support for S3.12 FP?
