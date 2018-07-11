@@ -1,3 +1,5 @@
+[![License](https://img.shields.io/badge/License-BSD%202--Clause-blue.svg)](https://opensource.org/licenses/BSD-2-Clause)
+
 # FR_Math a Fixed Point Math library for embedded systems
 
 (c) 2000-2018  M. A. Chatterjee < deftio [at] deftio [dot] com >

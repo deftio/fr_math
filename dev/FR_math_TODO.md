@@ -1,4 +1,6 @@
 # FR_Math TODO 
+[![Build Status](https://travis-ci.org/deftio/fr_math.svg?branch=master)](https://travis-ci.org/deftio/fr_math)
+[![Coverage Status](https://coveralls.io/repos/github/deftio/fr_math/badge.svg?branch=master)](https://coveralls.io/github/deftio/fr_math?branch=master)
 
 (c) M. A. Chatterjee 2000-2016
 
