@@ -65,32 +65,32 @@ extern "C"
  * As these are MACROS, they take only compiled code space if actually used.
  * Consts here calculated by multiply the natural base10 value by (1<<FR_kPREC)
  */
-#define FR_kPREC	 (16)       /* bits of precision in constants listed below */
-#define FR_kE 	 (178145)   /* 2.718281828459 */	
-#define FR_krE	 (24109)    /* 0.367879441171 */
-#define FR_kPI	 (205887)	/* 3.141592653589 */
-#define FR_krPI	 (20861)	/* 0.318309886183 */
-#define FR_kDEG2RAD	 (1144)		/* 0.017453292519 */
-#define FR_kRAD2DEG	 (3754936)	/*57.295779513082 */
+#define FR_kPREC       (16)         /* bits of precision in constants listed below */
+#define FR_kE          (178145)     /* 2.718281828459 */	
+#define FR_krE         (24109)      /* 0.367879441171 */
+#define FR_kPI         (205887)	    /* 3.141592653589 */
+#define FR_krPI        (20861)	    /* 0.318309886183 */
+#define FR_kDEG2RAD    (1144)		/* 0.017453292519 */
+#define FR_kRAD2DEG    (3754936)	/*57.295779513082 */
 
-#define FR_kQ2RAD       (102944)   /* 1.570796326794 */
-#define FR_kRAD2Q       (41722)    /* 0.636619772367 */
+#define FR_kQ2RAD      (102944)     /* 1.570796326794 */
+#define FR_kRAD2Q      (41722)      /* 0.636619772367 */
 
 /*log2 to ln conversions (see MACROS) */
-#define FR_kLOG2E	  (94548)	/* 1.442695040890 */
-#define FR_krLOG2E	  (45426)	/* 0.693147180560 */
+#define FR_kLOG2E	   (94548)	    /* 1.442695040890 */
+#define FR_krLOG2E	   (45426)	    /* 0.693147180560 */
 
 /*log2 to log10 conversions (see MACROS) */
 #define FR_kLOG2_10     (217706)	/* 3.32192809489 */
-#define FR_krLOG2_10    (19728)	/* 0.30102999566 */
+#define FR_krLOG2_10    (19728)  	/* 0.30102999566 */
 
 //common sqrts
-#define FR_kSQRT2       (92682)	/* 1.414213562373 */
-#define FR_krSQRT2      (46341)	/* 0.707106781186 */
+#define FR_kSQRT2       (92682)	    /* 1.414213562373 */
+#define FR_krSQRT2      (46341)	    /* 0.707106781186 */
 #define FR_kSQRT3       (113512)	/* 1.732050807568 */
-#define FR_krSQRT3      (37837)	/* 0.577350269189 */
+#define FR_krSQRT3      (37837)	    /* 0.577350269189 */
 #define FR_kSQRT5       (146543)	/* 2.236067977599 */
-#define FR_krSQRT5      (29309)	/* 0.447213595499 */
+#define FR_krSQRT5      (29309)	    /* 0.447213595499 */
 #define FR_kSQRT10      (207243) 	/* 3.162277660168 */
 #define FR_krSQRT10     (20724) 	/* 0.316227766016 */
 
@@ -137,23 +137,7 @@ s32 FR_FixAddSat(s32 x, s32 y); // add signed/unsigned AND Saturated
  * scaled multiplies.  As always, mileage may vary depending on architecture,
  * compiler and other considerations.
  */
-/* TRIG Conversion macros
- * Convert degrees <--> radians <--> quadrants <--> degrees
- * no multiply (may reduce chances of overflow in certain circumstances)
- * works on all int types and radixes (pure ints will have trunc err)
- * radians   = 2*pi per revolution
- * degrees   = 360  per revolution
- * quadrants = 4 per revolution
- * freq      = 1 per revolution
- */
-#define FR_DEG2RAD(x) (((x)<<6)-((x)<<3)+(x)+((x)>>2)+((x>>4)-((x)>>6))-((x)>>10))
-#define FR_RAD2DEG(x) (((x)>>6)+((x)>>9)-((x)>>13))
 
-#define FR_RAD2Q(x)   (((x)>>1)+((x)>>3)+((x)>>7)+((x)>>8)-((x)>>14))
-#define FR_Q2RAD(x)   ((x)+((x)>>1)+((x)>>4)+((x)>>7))+((x)>>11))
-
-#define FR_DEG2Q(x)   ((x)>>6)-((x)>>8)-((x)>>11)-((x)>>13))
-#define FR_Q2DEG(x)   ((x)<<6)+((x)<<4)+((x)<<3)+((x)<<1))
 
 /* scale by 10s */
 #define FR_SMUL10(x)	(((x)<<3)+(((x)<<1)))
@@ -168,6 +152,24 @@ s32 FR_FixAddSat(s32 x, s32 y); // add signed/unsigned AND Saturated
 #define FR_SrLOG2_10(x) (((x)>>2)+((x)>>4)-((x)>>6)+((x)>>7)-((x)>>8)+((x)>>12))
 /* scale by log2(10)   3.32192809489 used for converting pow2() to pow10 */
 #define FR_SLOG2_10(x)  (((x)<<1)+(x)+((x)>>2)+((x)>>4)+((x)>>7)+((x)>>10)+((x)>>11)+((x)>>13))
+
+/* TRIG Conversion macros (using bit shifting)
+ * Convert degrees <--> radians <--> quadrants <--> degrees
+ * no multiply (may reduce chances of overflow in certain circumstances)
+ * works on all int types and radixes (pure ints will have trunc err)
+ * radians   = 2*pi per revolution
+ * degrees   = 360  per revolution
+ * quadrants = 4 per revolution
+ * freq      = 1 per revolution (1 freq == 4 quadrants)
+ */
+#define FR_DEG2RAD(x) (((x)<<6)-((x)<<3)+(x)+((x)>>2)+((x>>4)-((x)>>6))-((x)>>10))
+#define FR_RAD2DEG(x) (((x)>>6)+((x)>>9)-((x)>>13))
+
+#define FR_RAD2Q(x)   (((x)>>1)+((x)>>3)+((x)>>7)+((x)>>8)-((x)>>14))
+#define FR_Q2RAD(x)   ((x)+((x)>>1)+((x)>>4)+((x)>>7)+((x)>>11))
+
+#define FR_DEG2Q(x)   (((x)>>6)-((x)>>8)-((x)>>11)-((x)>>13))
+#define FR_Q2DEG(x)   (((x)<<6)+((x)<<4)+((x)<<3)+((x)<<1))
 
 /* sin, cos with integer input (degrees), s.15 result                  */
 s16 FR_CosI(s16 deg); 

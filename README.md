@@ -1,18 +1,18 @@
 # FR_Math a Fixed Point Math library for embedded systems
 
-(c) 2000-2016  M. A. Chatterjee < deftio [at] deftio [dot] com >
+(c) 2000-2018  M. A. Chatterjee < deftio [at] deftio [dot] com >
  
 
 ## Overview
 
-FR_mathroutines are a small set of fixed-radix functions written in C/C++ for integer math / fixed radix operations.  This allows the computation of fractional quantities with only integer registers but with an eye towards performance rather than just packing floating point equivalents in integer registers.  This means that implementations were chosen to minimize the need for overflow tests and similar bounds checking.
+FR_mathroutines are a small set of fixed-radix functions written in C (and exported to C++ as well) for integer math / fixed radix operations.  This allows the computation of fractional quantities with only integer registers but with an eye towards performance rather than just packing floating point equivalents in integer registers.  This means that implementations were chosen to minimize the need for overflow tests and similar bounds checking.
 
 This library allows the programmer to choose the radix point (number of fractional bits) for all operations - so one can have 11.4 or 10.5 operations on the fly (where 11 and 10 are left of the radix point and 4 and 5 represent number of fractional bits respectively).  This is useful when using large quantities such occur in frequency domain math operation such as fourier analysis.
 
 A highlevel list of of operations is here:
 
 * fixed-radix multiply/add/sub with saturation
-* trig operations sin,cos, tan and inverse
+* trig operations sin,cos, tan and inverse (asin, acos, atan)
 * log, log2, log10
 * exp, pow2, pow10
 * conversions from degrees / radians/ grads / freq without loss of precision even at high bit packing

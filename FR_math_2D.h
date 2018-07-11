@@ -45,8 +45,8 @@ extern "C"
 #include "FR_defs.h"
 #endif
 
-#ifndef __FR_MathRoutines_h__
-#include "FR_mathroutines.h"
+#ifndef __FR_Math_h__
+#include "FR_math.h"
 #endif
 
 //===============================================

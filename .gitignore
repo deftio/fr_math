@@ -32,3 +32,8 @@
 *.exe
 *.out
 *.app
+*.
+
+# profiling
+*.gcda
+*.gcno

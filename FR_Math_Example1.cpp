@@ -29,9 +29,9 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "FR_defs.h"
-#include "FR_mathroutines.h"
-#include "FR_math_2D.h"
+#include "FR_defs.h"     /* platform abstraction, constants, status codes */
+#include "FR_math.h"     /* header file for fr_math.h                     */
+#include "FR_math_2D.h"  /* 2D transformations, coordinate transforms     */
 
 //these next 2 lines are only for this demo and not a runtime dependancy on FR_math routines
 #include "math.h"	
