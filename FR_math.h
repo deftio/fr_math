@@ -206,6 +206,23 @@ s32 FR_FixAddSat(s32 x, s32 y); // add signed/unsigned AND Saturated
  * scaled multiplies.  As always, mileage may vary depending on architecture,
  * compiler and other considerations.
  */
+
+/* scale by 10s */
+#define FR_SMUL10(x)	(((x)<<3)+(((x)<<1)))
+#define FR_SDIV10(x)	(((x)>>3)-((x)>>5)+((x)>>7)-((x)>>9)+((x)>>11)) 
+
+/* scale by 1/log2(e)  0.693147180560 used for converting log2() to ln()  */
+#define FR_SrLOG2E(x)   (((x)>>1)+((x)>>2)-((x)>>3)+((x)>>4)+((x)>>7)-((x)>>9)-((x)>>12)+((x)>>15))
+
+/* scale by log2(e)    1.442695040889 used for converting pow2() to exp() */
+#define FR_SLOG2E(x)	((x)+((x)>>1)-((x)>>4)+((x)>>8)+((x)>>10)+((x)>>12)+((x)>>14))
+
+/* scale by 1/log2(10) 0.30102999566 used for converting log2() to log10  */
+#define FR_SrLOG2_10(x) (((x)>>2)+((x)>>4)-((x)>>6)+((x)>>7)-((x)>>8)+((x)>>12))
+
+/* scale by log2(10)   3.32192809489 used for converting pow2() to pow10 */
+#define FR_SLOG2_10(x)  (((x)<<1)+(x)+((x)>>2)+((x)>>4)+((x)>>7)+((x)>>10)+((x)>>11)+((x)>>13))
+
 /* TRIG Conversion macros
  * Convert degrees <--> radians <--> quadrants <--> degrees
  * no multiply (may reduce chances of overflow in certain circumstances)
@@ -223,22 +240,6 @@ s32 FR_FixAddSat(s32 x, s32 y); // add signed/unsigned AND Saturated
 
 #define FR_DEG2Q(x)   (((x)>>6)-((x)>>8)-((x)>>11)-((x)>>13))
 #define FR_Q2DEG(x)   (((x)<<6)+((x)<<4)+((x)<<3)+((x)<<1))
-
-/* scale by 10s */
-#define FR_SMUL10(x)	(((x)<<3)+(((x)<<1)))
-#define FR_SDIV10(x)	(((x)>>3)-((x)>>5)+((x)>>7)-((x)>>9)+((x)>>11)) 
-
-/* scale by 1/log2(e)  0.693147180560 used for converting log2() to ln()  */
-#define FR_SrLOG2E(x)   (((x)>>1)+((x)>>2)-((x)>>3)+((x)>>4)+((x)>>7)-((x)>>9)-((x)>>12)+((x)>>15))
-
-/* scale by log2(e)    1.442695040889 used for converting pow2() to exp() */
-#define FR_SLOG2E(x)	((x)+((x)>>1)-((x)>>4)+((x)>>8)+((x)>>10)+((x)>>12)+((x)>>14))
-
-/* scale by 1/log2(10) 0.30102999566 used for converting log2() to log10  */
-#define FR_SrLOG2_10(x) (((x)>>2)+((x)>>4)-((x)>>6)+((x)>>7)-((x)>>8)+((x)>>12))
-
-/* scale by log2(10)   3.32192809489 used for converting pow2() to pow10 */
-#define FR_SLOG2_10(x)  (((x)<<1)+(x)+((x)>>2)+((x)>>4)+((x)>>7)+((x)>>10)+((x)>>11)+((x)>>13))
 
 /* sin, cos with integer input (degrees), s.15 result                  */
 s16 FR_CosI(s16 deg); 
