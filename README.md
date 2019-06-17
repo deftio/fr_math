@@ -29,9 +29,10 @@ I developed this several years ago for use in several embedded interized math pr
 
 ```
 #include "FR_defs.h"
-#include "FR_mathroutines.h"
-no other dependancies are required.
-compile and link FR_mathroutines.cpp
+#include "FR_math.h"   // includes base fixed radix library
+#include "FR_math_2D.h" // optional, this provides the coordinate transform library, if you're not using this then this can be ommited.
+//no other dependancies are required.
+//compile and link FR_mathroutines.cpp
 ```
 
 ## Overview of Using Fixed Point Math 

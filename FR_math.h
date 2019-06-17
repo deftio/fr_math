@@ -1,5 +1,5 @@
 /**
- *	@FR_mathroutines.h - header definition file for fixed radix math routines
+ *	@FR_math.h - header definition file for fixed radix math routines
  *		
  *	@copy Copyright (C) <2001-2012>  <M. A. Chatterjee>
  *  @author M A Chatterjee <deftio [at] deftio [dot] com>
@@ -276,6 +276,14 @@ s32 FR_pow2( s32 input, u16 radix);
 s32 FR_exp(  s32 input, u16 radix);
 s32 FR_pow10(s32 input, u16 radix); 	
 */
+
+
+/* printing family of functions */
+int FR_printNumF (int (*f)(char), s32 n, int pad, int prec); /* print fixed radix num as floating point e.g.  -12.34" */ /**** NOT IMPLEMENTED FULLY YET (prec)
+int FR_printNumD( int (*f)(char), int n, int pad );          /* print decimal number with optional padding e.g. " 12" */
+int FR_printNumH( int (*f)(char), int n, int showPrefix );   /* print num as a hexidecimal e.g. "0x12ab"              */
+
+
 #ifdef __cplusplus
 
 } // extern "C"

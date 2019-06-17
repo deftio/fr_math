@@ -14,7 +14,7 @@ FR_math_example1.exe: $(OBJ)
 	gcc -o $@ $^ $(CFLAGS) -lm -lstdc++
 
 
-OBJTEST = FR_math.o FR_math_2D.o fr_math_test.o 
+OBJTEST = FR_math_test.o FR_math_2D.o fr_math_test.o 
 FR_math_test.exe: $(OBJTEST)
 	gcc -o $@ $^ $(CFLAGS) -lm  -Os 
 

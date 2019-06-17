@@ -22,6 +22,7 @@
 * add simple HTML error renderer
 * rename FR_Sin --> FR_sin  
 * use radians instead of degrees?  
+	* provide sep compile flags for radians vs degrees for quads
 * Provide macros for sin / cos in degrees?  or just example FR_SIN(FRDEG2RAD(x))
 * Provide wave functions:
 * FR_squareWavS //square wave of sin
@@ -29,6 +30,10 @@
 * FR_triangleWavS //triangle wav of sin
 * FR_triangleWavC //triangle wav of cos
 * FR_pwm(radians,duty) // starts hi goes low after duty percent of cycle, duty on scale of 0..16bits
+* need interp 
+	FR_Interp(x, y0, y1, FR_INTERP_TYPE) // interp types: FR_INTP_FLOOR, FR_INTERP_CEIL, FR_INTERP_NN, FR_INTERP_LIN, FR_INTERP_COS
+* test suite
+* printout out numbers e.g. FR_math_print((int *)f(char *),  s32 num, int padding, dec);
 
 
 scale by Pi, e and their reciprocals by shifting
@@ -94,7 +99,7 @@ example code on how to use
 
 (done) add a namespace under C++
 
-# Version Next 
+# Future Features
 Add, Mul, Sub (with Sat) on arbitrary long #s
 ? Conversions to Half precision FP (e.g. 11.5)
 ? Support for S3.12 FP?

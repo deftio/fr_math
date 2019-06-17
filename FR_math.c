@@ -356,3 +356,76 @@ s32 FR_log10(s32 input, u16 radix, u16 output_radix)
 	s32 r = FR_log2(input,radix,output_radix);
 	return FR_SrLOG2_10(r);/* Note: return FR_SrLOG2_10(FR_log2()) would be a very ugly macro expansion! */
 }
+
+/***************************************
+ FR_printNum write out fixed radix number with space padding
+  equiavlent ot %f in printf family
+  myNum = 12.34 // in fixed num
+  e.g. printf("%4.2f",myNum ) ==> "  12"  
+   
+ */
+
+int FR_printNumF (int (*f)(char), s32 n, int pad, int prec) //**** NOT IMPLEMENTED FULLY YET (prec)
+    int t=10,s=0;
+    if (f) {
+        if(n < 0) { n = -n, s=1;pad--;}
+        while ( (n/t) > 0) { t*=10; pad--;}
+        while (pad-- > 0) {f(' ');}
+        if (s) f('-');
+        while ( t>=10) {  
+            t/=10;
+            f((char)((n/t)%10)+'0');          
+        }        
+        return JB_PASS;
+    }
+    return JB_FAIL;
+}
+
+/***************************************
+ FR_printNumD write out a decimal integer with space padding
+  equiavlent ot %d in printf family
+  int num = 12
+  e.g. printf("%4d",num) ==> "  12"  
+   
+ */
+int FR_printNumD( int (*f)(char), int n, int pad )
+{
+    int t=10,s=0;
+    if (f) {
+        if(n < 0) { n = -n, s=1;pad--;}
+        while ( (n/t) > 0) { t*=10; pad--;}
+        while (pad-- > 0) {f(' ');}
+        if (s) f('-');
+        while ( t>=10) {  
+            t/=10;
+            f((char)((n/t)%10)+'0');          
+        }        
+        return JB_PASS;
+    }
+    return JB_FAIL;
+}
+/***************************************
+ FR_printNumH write out a integer as hex
+ if (showPrefix == true ) 
+    print "0x"
+ else
+    //no prefix printed
+ */
+
+int FR_printNumH( int (*f)(char), int n, int showPrefix ){
+    int d,x = ((sizeof(int))<<1)-1;
+    if (f) {
+        if (showPrefix) {
+            f('0');
+            f('x');
+        }
+
+        do  {
+            d = (n >> (x<<2))&0xf;
+            d = (d > 9) ? (d-0xa + 'a') : (d + '0');
+            f(d);
+        }while (x--);
+        return JB_PASS;
+    }
+    return JB_FAIL;
+}
