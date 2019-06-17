@@ -75,7 +75,11 @@ extern "C"
 #define I2FR(x,r)		((x)<<(r)) 
 #define FR2I(x,r)		((x)>>(r))
 
+/*
 #define FR_INT(x,r)		((x)>>(r))
+*/
+#define FR_INT(x,r)		(((x)<0)?-((-(x))>>(r)):((x)>>(r)))
+
 
 /* Change Radix (x,current_radix, new_radix) 
  * change number from its current fixed radix (can be 0 or integer) to a new fixed radix
@@ -85,8 +89,10 @@ extern "C"
 #define FR_CHRDX(x,r_cur,r_new)	(((r_cur)-(r_new))>=0?((x)>>((r_cur)-(r_new))):((x)<<((r_new)-(r_cur))))
 
 /* return only the fractional part of x */
+#define FR_FRAC(x,r)	((FR_ABS(x))&(((1<<(r))-1)))
+/*
 #define FR_FRAC(x,r)	((x)&(((1<<(r))-1)))
-
+*/
 /* return the fractional part of number x with radix xr scaled to radix nr bits */ 
 #define FR_FRACS(x,xr,nr) (FR_CHRDX(FR_FRAC((x),(xr)),(xr),(nr)))
 
@@ -279,7 +285,7 @@ s32 FR_pow10(s32 input, u16 radix);
 
 
 /* printing family of functions */
-int FR_printNumF (int (*f)(char), s32 n, int pad, int prec); /* print fixed radix num as floating point e.g.  -12.34" */ /**** NOT IMPLEMENTED FULLY YET (prec)
+int FR_printNumF (int (*f)(char), s32 n, int radix, int pad, int prec); /* print fixed radix num as floating point e.g.  -12.34" */ //*** NOT IMPLEMENTED FULLY YET (prec)
 int FR_printNumD( int (*f)(char), int n, int pad );          /* print decimal number with optional padding e.g. " 12" */
 int FR_printNumH( int (*f)(char), int n, int showPrefix );   /* print num as a hexidecimal e.g. "0x12ab"              */
 

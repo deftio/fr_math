@@ -363,10 +363,19 @@ s32 FR_log10(s32 input, u16 radix, u16 output_radix)
   myNum = 12.34 // in fixed num
   e.g. printf("%4.2f",myNum ) ==> "  12"  
    
+
+       printf("test fr math rad \n");
+#define D2FR(d,r)    ((s32)(d*(1<<r)))
+    FR_printNumF (putchar,  123456   , 0, 3, 0);    printf("\n");
+    FR_printNumF (putchar,  123456<<13 , 13, 3, 4);    printf(":\n");
+    FR_printNumF (putchar,  D2FR(1234.5678,13)   , 13, 3, 6);    printf(":\n");
+    FR_printNumF (putchar,  D2FR(-1234.5678,13)   , 13, 3, 6);    printf(":\n");
  */
 
-int FR_printNumF (int (*f)(char), s32 n, int pad, int prec) //**** NOT IMPLEMENTED FULLY YET (prec)
-    int t=10,s=0;
+int FR_printNumF(int(*f)(char), s32 n, int radix, int pad, int prec) 
+{
+    int t=10,s=0,r=FR_FRAC(n,radix);
+    n=FR_INT(n,radix); 
     if (f) {
         if(n < 0) { n = -n, s=1;pad--;}
         while ( (n/t) > 0) { t*=10; pad--;}
@@ -376,11 +385,30 @@ int FR_printNumF (int (*f)(char), s32 n, int pad, int prec) //**** NOT IMPLEMENT
             t/=10;
             f((char)((n/t)%10)+'0');          
         }        
-        return JB_PASS;
+        if(prec || r) 
+        {
+            f('.');
+            s = 1<<(radix);
+            if (r) {
+                while (s)  {
+                    r*=10;
+                    s/=10;
+                } 
+            }
+            r>>=radix;
+            r++;
+            t=1;
+            while ( (r/t) > 0) { t*=10;}
+            while ((t>=10)&&(prec)) {  
+                t/=10; prec--;
+                f((char)((r/t)%10)+'0');  
+            }
+            while (prec-- > 0) {f('0');}
+        }
+        return 0;
     }
-    return JB_FAIL;
+    return -1;
 }
-
 /***************************************
  FR_printNumD write out a decimal integer with space padding
   equiavlent ot %d in printf family
@@ -400,9 +428,9 @@ int FR_printNumD( int (*f)(char), int n, int pad )
             t/=10;
             f((char)((n/t)%10)+'0');          
         }        
-        return JB_PASS;
+        return FR_S_OK;
     }
-    return JB_FAIL;
+    return FR_E_FAIL;
 }
 /***************************************
  FR_printNumH write out a integer as hex
@@ -425,7 +453,7 @@ int FR_printNumH( int (*f)(char), int n, int showPrefix ){
             d = (d > 9) ? (d-0xa + 'a') : (d + '0');
             f(d);
         }while (x--);
-        return JB_PASS;
+        return FR_S_OK;
     }
-    return JB_FAIL;
+    return FR_E_FAIL;
 }
