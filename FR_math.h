@@ -174,13 +174,25 @@ extern "C"
  * note: FR_FIXMUL32u is for positive 32bit numbers only 
  * for signed and signed saturated use FR_FixMuls, FR_FixMulSat below
  */
- 
+
+/*this version is corrected */
+#define FR_FIXMUL32u(x,y)	(					\
+	(((x>>16)*(y>>16))<<16)+					\
+	((x>>16)*(y&0xffff))+						\
+	((y>>16)*(x&0xffff))+						\
+	((((x&0xffff)*(y&0xffff)))>>16)					\
+	)
+
+/* this version had overflow -- leaving here as a note until better test coverage is generated. 
 #define FR_FIXMUL32u(x,y)	(					\
 	(((x>>16)*(y>>16))<<16)+					\
 	((x>>16)*(y&0xffff))+						\
 	((y>>16)*(x&0xffff))+						\
 	((((x&0xffff)*(y&0xffff))))					\
 	)
+*/
+
+#define FR_SQUARE(x) (FR_FIXMUL32u((x), (x))
 
 /*===============================================
  * Arithmetic operations
