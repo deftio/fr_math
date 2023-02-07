@@ -2,7 +2,7 @@
 
 # FR_Math a Fixed Point Math library for embedded systems
 
-(c) 2000-2018  M. A. Chatterjee < deftio [at] deftio [dot] com >
+(c) 2000-2023  M. A. Chatterjee < deftio [at] deftio [dot] com >
  
 
 ## Overview
