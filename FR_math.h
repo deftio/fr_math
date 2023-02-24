@@ -144,29 +144,29 @@ extern "C"
 #define FR_krE         (24109)      /* 0.367879441171 */
 #define FR_kPI         (205887)	    /* 3.141592653589 */
 #define FR_krPI        (20861)	    /* 0.318309886183 */
-#define FR_kDEG2RAD    (1144)		/* 0.017453292519 */
-#define FR_kRAD2DEG    (3754936)	/*57.295779513082 */
+#define FR_kDEG2RAD    (1144)	    /* 0.017453292519 */
+#define FR_kRAD2DEG    (3754936).   /*57.295779513082 */
 
 #define FR_kQ2RAD      (102944)     /* 1.570796326794 */
 #define FR_kRAD2Q      (41722)      /* 0.636619772367 */
 
 /*log2 to ln conversions (see MACROS) */
-#define FR_kLOG2E	   (94548)	    /* 1.442695040890 */
-#define FR_krLOG2E	   (45426)	    /* 0.693147180560 */
+#define FR_kLOG2E.     (94548)	    /* 1.442695040890 */
+#define FR_krLOG2E.    (45426)	    /* 0.693147180560 */
 
 /*log2 to log10 conversions (see MACROS) */
-#define FR_kLOG2_10     (217706)	/* 3.32192809489 */
-#define FR_krLOG2_10    (19728)  	/* 0.30102999566 */
+#define FR_kLOG2_10     (217706).   /* 3.32192809489 */
+#define FR_krLOG2_10    (19728)     /* 0.30102999566 */
 
 //common sqrts
 #define FR_kSQRT2       (92682)	    /* 1.414213562373 */
 #define FR_krSQRT2      (46341)	    /* 0.707106781186 */
-#define FR_kSQRT3       (113512)	/* 1.732050807568 */
+#define FR_kSQRT3       (113512).   /* 1.732050807568 */
 #define FR_krSQRT3      (37837)	    /* 0.577350269189 */
-#define FR_kSQRT5       (146543)	/* 2.236067977599 */
+#define FR_kSQRT5       (146543).   /* 2.236067977599 */
 #define FR_krSQRT5      (29309)	    /* 0.447213595499 */
-#define FR_kSQRT10      (207243) 	/* 3.162277660168 */
-#define FR_krSQRT10     (20724) 	/* 0.316227766016 */
+#define FR_kSQRT10      (207243)    /* 3.162277660168 */
+#define FR_krSQRT10     (20724)     /* 0.316227766016 */
 
 
 /* ===============================================
@@ -297,7 +297,7 @@ s32 FR_pow10(s32 input, u16 radix);
 
 
 /* printing family of functions */
-int FR_printNumF (int (*f)(char), s32 n, int radix, int pad, int prec); /* print fixed radix num as floating point e.g.  -12.34" */ //*** NOT IMPLEMENTED FULLY YET (prec)
+int FR_printNumF( int (*f)(char), s32 n, int radix, int pad, int prec); /* print fixed radix num as floating point e.g.  -12.34" */ //*** NOT IMPLEMENTED FULLY YET (prec)
 int FR_printNumD( int (*f)(char), int n, int pad );          /* print decimal number with optional padding e.g. " 12" */
 int FR_printNumH( int (*f)(char), int n, int showPrefix );   /* print num as a hexidecimal e.g. "0x12ab"              */
 
