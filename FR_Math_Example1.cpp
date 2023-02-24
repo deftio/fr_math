@@ -245,7 +245,10 @@ s16 FR_cos(s32 rad, int prec)
 	return z;
 	
 }
-
+int putSingleChar(char x) 
+{
+	printf("%c",(char) x);
+}
 //===============================================
 //main program for testing the functions
 int main (int argc, char *argv[])
@@ -600,6 +603,39 @@ int main (int argc, char *argv[])
 			*/
 		}
 	}
+
+	printf("\nTes FR_printNum(..) fammily of functions showing various prec choices\n");
+	{
+		int z  = (int) ((123.345)*(1<<10));
+		int zn = -z; 
+		printf("z (int) %8d,  zn (int) %8d\n",z,zn);
+		printf("z %8.3f    zn %8.3f\n",FR2D(z,10),FR2D(zn,10));
+		printf("z  using printNumF( <serialOut> , z,10,3,3) :");
+		FR_printNumF(putSingleChar, z,10,3,3);
+		printf("\n");
+		printf("zn using printNumF( <serialOut> ,zn,10,3,3) :");
+		FR_printNumF(putSingleChar,zn,10,3,3);
+		printf("\n");
+
+		printf("z  using printNumF( <serialOut> , z,10,5,2) :");
+		FR_printNumF(putSingleChar, z,10,5,2);
+		printf("\n");
+		printf("zn using printNumF( <serialOut> ,zn,10,5,2) :");
+		FR_printNumF(putSingleChar,zn,10,5,2);
+		printf("\n");
+
+
+		printf("z  using printNumF( <serialOut> , z,10,5,5) :");
+		FR_printNumF(putSingleChar, z,10,5,5);
+		printf("\n");
+		printf("zn using printNumF( <serialOut> ,zn,10,5,5) :");
+		FR_printNumF(putSingleChar,zn,10,5,5);
+		printf("\n");
+
+	}
+	/*
+	int FR_printNumF( int (*f)(char), s32 n, int radix, int pad, int prec); /* print fixed radix num as floating point e.g.  -12.34" 
+     */
 	return ret_val;
 }
 
