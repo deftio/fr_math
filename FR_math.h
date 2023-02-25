@@ -3,7 +3,7 @@
  *		
  *	@copy Copyright (C) <2001-2012>  <M. A. Chatterjee>
  *  @author M A Chatterjee <deftio [at] deftio [dot] com>
- *	@version 1.01 M. A. Chatterjee, cleaned up naming
+ *	@version 1.02 M. A. Chatterjee, cleaned up naming
  *
  *  This file contains integer math settable fixed point radix math routines for
  *  use on systems in which floating point is not desired or unavailable.
@@ -63,7 +63,7 @@ extern "C"
  */
  
  
-/*absolute value for integer and fix types*/ 
+/*absolute value for integer and fixed radix types*/ 
 #define FR_ABS(x) (((x)<0)?(-(x)):(x))		
 
 /*sign of x.  Not as good as The Sign of Four, but I digress           */
@@ -75,8 +75,16 @@ extern "C"
 #define I2FR(x,r)		((x)<<(r)) 
 #define FR2I(x,r)		((x)>>(r))
 
+/*=============================================== 
+ * Make a fixed radix number from integer, fractional parts
+ * r is radix precision in bits
+ * FR_NUM(12,34,10) == 12.34 , radix 10 === (12.34)*(1<<10) = 12636
+ * fractional part = f * pow2(radix) / pow10( ceil( log10 (f) ) )
+ *                 = (f << r) / pow10 ( ceil ( log10 (f)))
+ */
+#define FR_NUM(i,f,r)        ((i)<<(r))
 /*
-#define FR_INT(x,r)		((x)>>(r))
+FR_INT(x,r) convert a fixed radix variable x of radix r to an integer 
 */
 #define FR_INT(x,r)		(((x)<0)?-((-(x))>>(r)):((x)>>(r)))
 
@@ -107,6 +115,12 @@ extern "C"
 
 /* Check if x is a power of 2. */
 #define FR_ISPOW2(x)	(!((x)&((x)-1)))
+
+/* floor and ceiling in current radix, leaving current radix intact 
+ * this means the lower radix number of bits are set to 0
+ */
+#define FR_FLOOR(x,r)      ((x)&(~((1<<r)-1)))
+#define FR_CEIL(x,r)       (FR_FLOOR(x,r)+((FR_FRAC(x,r)?(1<<r):0)))
 
 /******************************************************* 
   Interpolate between 2 fixed point values (x0,x1) of any radix, 
@@ -144,26 +158,26 @@ extern "C"
 #define FR_krE         (24109)      /* 0.367879441171 */
 #define FR_kPI         (205887)	    /* 3.141592653589 */
 #define FR_krPI        (20861)	    /* 0.318309886183 */
-#define FR_kDEG2RAD    (1144)	    /* 0.017453292519 */
-#define FR_kRAD2DEG    (3754936).   /*57.295779513082 */
+#define FR_kDEG2RAD    (1144)	      /* 0.017453292519 */
+#define FR_kRAD2DEG    (3754936)    /*57.295779513082 */
 
 #define FR_kQ2RAD      (102944)     /* 1.570796326794 */
 #define FR_kRAD2Q      (41722)      /* 0.636619772367 */
 
 /*log2 to ln conversions (see MACROS) */
-#define FR_kLOG2E.     (94548)	    /* 1.442695040890 */
-#define FR_krLOG2E.    (45426)	    /* 0.693147180560 */
+#define FR_kLOG2E      (94548)	    /* 1.442695040890 */
+#define FR_krLOG2E     (45426)	    /* 0.693147180560 */
 
 /*log2 to log10 conversions (see MACROS) */
-#define FR_kLOG2_10     (217706).   /* 3.32192809489 */
+#define FR_kLOG2_10     (217706)    /* 3.32192809489 */
 #define FR_krLOG2_10    (19728)     /* 0.30102999566 */
 
 //common sqrts
 #define FR_kSQRT2       (92682)	    /* 1.414213562373 */
 #define FR_krSQRT2      (46341)	    /* 0.707106781186 */
-#define FR_kSQRT3       (113512).   /* 1.732050807568 */
+#define FR_kSQRT3       (113512)    /* 1.732050807568 */
 #define FR_krSQRT3      (37837)	    /* 0.577350269189 */
-#define FR_kSQRT5       (146543).   /* 2.236067977599 */
+#define FR_kSQRT5       (146543)    /* 2.236067977599 */
 #define FR_krSQRT5      (29309)	    /* 0.447213595499 */
 #define FR_kSQRT10      (207243)    /* 3.162277660168 */
 #define FR_krSQRT10     (20724)     /* 0.316227766016 */
@@ -178,9 +192,9 @@ extern "C"
 /*this version is corrected */
 #define FR_FIXMUL32u(x,y)	(					\
 	(((x>>16)*(y>>16))<<16)+					\
-	((x>>16)*(y&0xffff))+						\
-	((y>>16)*(x&0xffff))+						\
-	((((x&0xffff)*(y&0xffff)))>>16)					\
+	((x>>16)*(y&0xffff))+						  \
+	((y>>16)*(x&0xffff))+						  \
+	((((x&0xffff)*(y&0xffff)))>>16)		\
 	)
 
 /* this version had overflow -- leaving here as a note until better test coverage is generated. 
@@ -204,9 +218,13 @@ s32 FR_FixAddSat(s32 x, s32 y); // add signed/unsigned AND Saturated
 
 /*================================================
  * Constants used in Trig tables, definitions
+ FR_TRIG_PREC == the number of bits of precision of built-in trig functions
+ FR_TRIG_MASK == masking of the lower FR_TRIG_PREC bits in internal operations
+ FR_TRIG_MAXVAL == maximum fixed pt num returned by trig operations (e.g. Tan(90 deg))
+ FR_TRIG_MINVAL == minumum fixed pt num returned by trig operations (e.g. Tan(270 deg))
  */
 #define FR_TRIG_PREC  	(15)
-#define FR_TRIG_MASK	((1<<FR_TRIG_PREC)-1)
+#define FR_TRIG_MASK	  ((1<<(FR_TRIG_PREC))-1)
 #define FR_TRIG_MAXVAL 	(FR_TRIG_MASK)
 #define FR_TRIG_MINVAL 	(-FR_TRIG_MASK)
 
@@ -279,7 +297,7 @@ s16 FR_asin(s32 input, u16 radix);
 s16 FR_atan(s32 input, u16 radix);
 
 /* Logarithms */
-#define FR_LOG2MIN ((-32767)<<16) /* returned instead of "negative infinity" */
+#define FR_LOG2MIN (-(32767<<16)) /* returned instead of "negative infinity" */
 
 s32 FR_log2( s32 input, u16 radix, u16 output_radix);
 s32 FR_ln(   s32 input, u16 radix, u16 output_radix);
@@ -297,7 +315,7 @@ s32 FR_pow10(s32 input, u16 radix);
 
 
 /* printing family of functions */
-int FR_printNumF( int (*f)(char), s32 n, int radix, int pad, int prec); /* print fixed radix num as floating point e.g.  -12.34" */ //*** NOT IMPLEMENTED FULLY YET (prec)
+int FR_printNumF( int (*f)(char), s32 n, int radix, int pad, int prec); /* print fixed radix num as floating point e.g.  -12.34" */ 
 int FR_printNumD( int (*f)(char), int n, int pad );          /* print decimal number with optional padding e.g. " 12" */
 int FR_printNumH( int (*f)(char), int n, int showPrefix );   /* print num as a hexidecimal e.g. "0x12ab"              */
 

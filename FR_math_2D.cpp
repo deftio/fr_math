@@ -5,7 +5,7 @@
  *	
  *	@copy Copyright (C) <2001-2014>  <M. A. Chatterjee>
  *  @author M A Chatterjee <deftio [at] deftio [dot] com>
- *	@version 1.01 M. A. Chatterjee, cleaned up naming
+ *	@version 1.02 M. A. Chatterjee, cleaned up naming
  *
  *  This file contains integer math settable fixed point radix math routines for
  *  use on systems in which floating point is not desired or unavailable.
@@ -109,6 +109,8 @@ FR_RESULT    FR_Matrix2D_CPT ::setrotate (s16 deg)
 	m10 =  (FR_SinI(deg))>>(FR_TRIG_PREC-radix);
 	m11 =  (FR_CosI(deg))>>(FR_TRIG_PREC-radix);
 	checkfast();
+ 	return FR_S_OK;
+;
 }
 //================================================================
 //set up a rotation with fixed radix input precision
@@ -119,6 +121,7 @@ FR_RESULT    FR_Matrix2D_CPT ::setrotate (s16 deg, u16 deg_radix)
 	m10 =  (FR_Sin(deg,deg_radix))>>(FR_TRIG_PREC-radix);
 	m11 =  (FR_Cos(deg,deg_radix))>>(FR_TRIG_PREC-radix);
 	checkfast();
+	return FR_S_OK;
 }
 //================================================================
 // Add two matrices together

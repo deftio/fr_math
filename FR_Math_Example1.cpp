@@ -161,7 +161,7 @@ void err_accum(FR_TEST_ERR *e, double val, double ref)
 void err_print(FR_TEST_ERR *e, const char *s)
 {
 	if (e->n >0)
-		printf("%sn[%5d] min_e: [%11.6f,%11.6f,%5d] max_e[%11.5f,%11.6f,%5d] min_pct[%11.5f,%5d] max_pct [%11.5f,%5d] tot_e[%13.7f] mse[%13.7f]\n",s,e->n,
+		printf("%sn[%5ld] min_e: [%11.6f,%11.6f,%5ld] max_e[%11.5f,%11.6f,%5ld] min_pct[%11.5f,%5ld] max_pct [%11.5f,%5ld] tot_e[%13.7f] mse[%13.7f]\n",s,e->n,
 			e->min_err,e->min_err_val,e->min_n,e->max_err,e->max_err_val,e->max_n,
 			e->min_err_pct,e->min_err_pct_n,e->max_err_pct,e->max_err_pct_n,
 			e->sum_total_err,e->sum_total_err2/(double)(e->n));
@@ -247,7 +247,7 @@ s16 FR_cos(s32 rad, int prec)
 }
 int putSingleChar(char x) 
 {
-	printf("%c",(char) x);
+	return printf("%c",(char) x);
 }
 //===============================================
 //main program for testing the functions
@@ -479,7 +479,7 @@ int main (int argc, char *argv[])
 			fs = FR2D(FR_SinI(i),15);
 			ft = FR2D(FR_TanI(i),15);
 			err_accum(&err_c,fc,zc);err_accum(&err_s,fs,zs);err_accum(&err_t,ft,zt);
-			printf("%4d : %4d : %9.5f %9.5f %9.5f : %9.5f %9.5f %9.5f : %9.5f %9.5f %9.5f\n",
+			printf("%4ld : %4d : %9.5f %9.5f %9.5f : %9.5f %9.5f %9.5f : %9.5f %9.5f %9.5f\n",
 				index,i,fc,zc,FR_ERR(fc,zc),fs,zs,FR_ERR(fs,zs),ft,zt,FR_ERR(ft,zt));
 			index++;
 		}
@@ -511,7 +511,7 @@ int main (int argc, char *argv[])
 				//fs = FR2D(FR_SinI(i),15);
 				//ft = FR2D(FR_TanI(i),15);
 				err_accum(&err_c,fc,zc);//err_accum(&err_s,fs,zs);err_accum(&err_t,ft,zt);
-				printf("%4d : %7.3f : %9.5f %9.5f %9.5f : %9.5f %9.5f %9.5f : %9.5f %9.5f %9.5f\n",
+				printf("%4ld : %7.3f : %9.5f %9.5f %9.5f : %9.5f %9.5f %9.5f : %9.5f %9.5f %9.5f\n",
 					index,id*360.0/lcl2pi,fc,zc,FR_ERR(fc,zc),fs,zs,FR_ERR(fs,zs),ft,zt,FR_ERR(ft,zt));
 				index++;
 					
@@ -574,7 +574,7 @@ int main (int argc, char *argv[])
 				err_accum(&err_p2,fp2,zp2);
 				err_accum(&err_pe,fpe,zpe);
 				err_accum(&err_p10,fp10,zp10);
-				printf("%4d: %7.3f : %11.5f %11.5f %11.5f : %11.5f %11.5f %11.5f : %11.5f %11.5f %11.5f\n",	index,id,
+				printf("%4ld: %7.3f : %11.5f %11.5f %11.5f : %11.5f %11.5f %11.5f : %11.5f %11.5f %11.5f\n",	index,id,
 					fp2,zp2,FR_ERR(fp2,zp2),fpe,zpe,FR_ERR(fpe,zpe),fp10,zp10,FR_ERR(fp10,zp10)
 					);
 				index++;
@@ -606,36 +606,44 @@ int main (int argc, char *argv[])
 
 	printf("\nTes FR_printNum(..) fammily of functions showing various prec choices\n");
 	{
-		int z  = (int) ((123.345)*(1<<10));
+		int rdx = 13;
+		int z  = (int) ((123.45678)*(1<<13));
 		int zn = -z; 
 		printf("z (int) %8d,  zn (int) %8d\n",z,zn);
-		printf("z %8.3f    zn %8.3f\n",FR2D(z,10),FR2D(zn,10));
-		printf("z  using printNumF( <serialOut> , z,10,3,3) :");
-		FR_printNumF(putSingleChar, z,10,3,3);
+		printf("z %8.3f    zn %8.3f\n",FR2D(z,rdx),FR2D(zn,rdx));
+		printf("z  using printNumF( <serialOut> , z,%3d,3,3) :  ",rdx);
+		FR_printNumF(putSingleChar, z,rdx,3,3);
 		printf("\n");
-		printf("zn using printNumF( <serialOut> ,zn,10,3,3) :");
-		FR_printNumF(putSingleChar,zn,10,3,3);
-		printf("\n");
-
-		printf("z  using printNumF( <serialOut> , z,10,5,2) :");
-		FR_printNumF(putSingleChar, z,10,5,2);
-		printf("\n");
-		printf("zn using printNumF( <serialOut> ,zn,10,5,2) :");
-		FR_printNumF(putSingleChar,zn,10,5,2);
+		printf("zn using printNumF( <serialOut> ,zn,%3d,3,3) : ",rdx);
+		FR_printNumF(putSingleChar,zn,rdx,3,3);
 		printf("\n");
 
+		printf("z  using printNumF( <serialOut> , z,%3d,5,2) :",rdx);
+		FR_printNumF(putSingleChar, z,rdx,5,2);
+		printf("\n");
+		printf("zn using printNumF( <serialOut> ,zn,%3d,5,2) :",rdx);
+		FR_printNumF(putSingleChar,zn,rdx,5,2);
+		printf("\n");
 
-		printf("z  using printNumF( <serialOut> , z,10,5,5) :");
-		FR_printNumF(putSingleChar, z,10,5,5);
+
+		printf("z  using printNumF( <serialOut> , z,%3d,5,5) :",rdx);
+		FR_printNumF(putSingleChar, z,rdx,5,5);
 		printf("\n");
-		printf("zn using printNumF( <serialOut> ,zn,10,5,5) :");
-		FR_printNumF(putSingleChar,zn,10,5,5);
+		printf("zn using printNumF( <serialOut> ,zn,%3d,5,5) :",rdx);
+		FR_printNumF(putSingleChar,zn,rdx,5,5);
 		printf("\n");
+
+		printf(" check floor and ceil macros\n");
+		printf("ceil:    z,  zn   (%10.5f,%10.5f) FR:",FR2D(FR_CEIL(z,rdx),rdx), FR2D(FR_CEIL(zn,rdx),rdx));
+		FR_printNumF(putSingleChar,FR_CEIL(z,rdx),rdx,5,5);  printf(" , ");
+		FR_printNumF(putSingleChar,FR_CEIL(zn,rdx),rdx,5,5); printf("\n\n");
+		
+		printf("floor:   z,  zn   (%10.5f,%10.5f) FR:",FR2D(FR_FLOOR(z,rdx),rdx), FR2D(FR_FLOOR(zn,rdx),rdx));
+		FR_printNumF(putSingleChar,FR_FLOOR(z,rdx),rdx,5,5);  printf(" , ");
+		FR_printNumF(putSingleChar,FR_FLOOR(zn,rdx),rdx,5,5); printf("\n\n");
 
 	}
-	/*
-	int FR_printNumF( int (*f)(char), s32 n, int radix, int pad, int prec); /* print fixed radix num as floating point e.g.  -12.34" 
-     */
+	
 	return ret_val;
 }
 

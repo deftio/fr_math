@@ -176,8 +176,8 @@ s16 const static gFR_TAND_TAB[]={
 
 /* tan with s15.16 result 
  * tan without table.
- * note: tan(90)  returns   32727 
- * and   tan(270) returns (-32727) (e.g. no div by zero)
+ * note: tan(90)  returns   32767 
+ * and   tan(270) returns (-32768) (e.g. no div by zero)
  */
 /*
 s32 FR_TanI (s16 deg) 
@@ -190,14 +190,14 @@ s32 FR_TanI (s16 deg)
 #define FR_TN(a) (((a)<= 45)?gFR_TAND_TAB[(a)]:(FR_TRIG_MAXVAL<<FR_TRIG_PREC)/(gFR_TAND_TAB[90-(a)]))	
 s32 FR_TanI (s16 deg)
 {
-	deg = deg%360; /* this is an expensive operation*/
+	deg = deg%360; /* this is an expensive operation */
 	if (deg > 180) { deg -= 360; }
 	else if (deg < -180) { deg += 360;}
 
 	if (90  == deg)
 		return (FR_TRIG_MAXVAL<<FR_TRIG_PREC);
 	if (270 == deg)
-		return (FR_TRIG_MINVAL<<FR_TRIG_PREC);
+		return -(FR_TRIG_MAXVAL<<FR_TRIG_PREC);
 
 	if (deg >= 0)
 		return   deg <=  (90) ?  FR_TN( deg ):-FR_TN(180-deg);		
@@ -337,10 +337,11 @@ s32 FR_pow10(s32 input, u16 radix)
 /*log2 returns FR_LOG2MIN if input <= 0 */
 s32 FR_log2(s32 input, u16 radix, u16 output_radix)
 {
-	s32 i=0,h=16;//,frac = FR_FRAC(input,radix);
-	while (h>>=1)
+	s32 h=16;//,frac = FR_FRAC(input,radix);
+	while (h>>=1) {
 		if (input>(1<<h))
-			{i+=h; input>>=h;}
+			{input>>=h;} // i+=h; input>>=h
+	}
 
 	return input <=0 ? FR_LOG2MIN : FR_CHRDX(input,radix,output_radix);
 }
@@ -364,8 +365,9 @@ s32 FR_log10(s32 input, u16 radix, u16 output_radix)
   e.g. printf("%4.2f",myNum ) ==> "  12"  
    
 
-       printf("test fr math rad \n");
+    printf("test fr math rad \n");
 #define D2FR(d,r)    ((s32)(d*(1<<r)))
+
     FR_printNumF (putchar,  123456   , 0, 3, 0);    printf("\n");
     FR_printNumF (putchar,  123456<<13 , 13, 3, 4);    printf(":\n");
     FR_printNumF (putchar,  D2FR(1234.5678,13)   , 13, 3, 6);    printf(":\n");
@@ -396,7 +398,7 @@ int FR_printNumF(int(*f)(char), s32 n, int radix, int pad, int prec)
                 } 
             }
             r>>=radix;
-            r++;
+            //r++;
             t=1;
             while ( (r/t) > 0) { t*=10;}
             while ((t>=10)&&(prec)) {  
