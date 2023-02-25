@@ -1,10 +1,8 @@
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-blue.svg)](https://opensource.org/licenses/BSD-2-Clause)
 
 # FR_Math a Fixed Point Math library for embedded systems
-
-(c) 2000-2023  M. A. Chatterjee < deftio [at] deftio [dot] com >
+(c) 2000-2023  M. A. Chatterjee 
  
-
 ## Overview
 
 FR_mathroutines are a small set of fixed-radix functions written in C (and exported to C++ as well) for integer math / fixed radix operations.  This allows the computation of fractional quantities with only integer registers but with an eye towards performance rather than just packing floating point equivalents in integer registers.  This means that implementations were chosen to minimize the need for overflow tests and similar bounds checking.
@@ -17,12 +15,16 @@ A highlevel list of of operations is here:
 * trig operations sin,cos, tan and inverse (asin, acos, atan)
 * log, log2, log10
 * exp, pow2, pow10
+* floor / ceil / trun (in fixed radix)
 * conversions from degrees / radians/ grads / freq without loss of precision even at high bit packing
 * coordinate transformations
+* printing of fixed radix numbers over serial
 
 
 ## History
 I developed this several years ago for use in several embedded interized math projects and this small, slightly cleaned up version is made available for the public here.  It worked very well on 16MHz 68k processors for palm pilots (and later ARM cores) where we needed many integer point transforms for graphics.  This included things like fonting where each letter's M square needed to be computed and embedded graphics transforms.  The Inkstorm application for PalmOS (originally by Trumpetsoft) used a version of this. 
+
+This library supports pure C compilation on x86, ARM, RISC-V, MIPS and other embedded targets.
 
 
 ## Usage

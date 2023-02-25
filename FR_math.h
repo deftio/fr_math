@@ -144,6 +144,7 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
   since this is a MACRO it will not be compiled or instantiated unless it is actually called in code. 
 */
 #define FR2D(x,r) ((double)(((double)(x))/((double)(1<<(r)))))
+#define D2FR(d,r) ((s32)(d*(1<<r)))
 
 /******************************************************
   Useful Constants

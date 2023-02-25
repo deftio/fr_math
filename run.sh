@@ -1,14 +1,15 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 printf "***************************************************************\n"
 printf "RUN + COMPILE SCRIPT HEADER ***********************************\n"
 
-#build it
-make
-
 #clean up *.o
 make clean
 
+#build it
+make
+
+
 #run it
-./FR_main
+./FR_math_example1.exe
 

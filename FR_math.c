@@ -366,7 +366,6 @@ s32 FR_log10(s32 input, u16 radix, u16 output_radix)
    
 
     printf("test fr math rad \n");
-#define D2FR(d,r)    ((s32)(d*(1<<r)))
 
     FR_printNumF (putchar,  123456   , 0, 3, 0);    printf("\n");
     FR_printNumF (putchar,  123456<<13 , 13, 3, 4);    printf(":\n");

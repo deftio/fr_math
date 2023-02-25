@@ -610,12 +610,14 @@ int main (int argc, char *argv[])
 		int z  = (int) ((123.45678)*(1<<13));
 		int zn = -z; 
 		printf("z (int) %8d,  zn (int) %8d\n",z,zn);
-		printf("z %8.3f    zn %8.3f\n",FR2D(z,rdx),FR2D(zn,rdx));
-		printf("z  using printNumF( <serialOut> , z,%3d,3,3) :  ",rdx);
-		FR_printNumF(putSingleChar, z,rdx,3,3);
+		printf("z %9.3f    zn %9.3f\n",FR2D(z,rdx),FR2D(zn,rdx));
+
+		
+		printf("z  using printNumF( <serialOut> , z,%3d,4,3) :  ",rdx);
+		FR_printNumF(putSingleChar, z,rdx,4,3);
 		printf("\n");
-		printf("zn using printNumF( <serialOut> ,zn,%3d,3,3) : ",rdx);
-		FR_printNumF(putSingleChar,zn,rdx,3,3);
+		printf("zn using printNumF( <serialOut> ,zn,%3d,4,3) : ",rdx);
+		FR_printNumF(putSingleChar,zn,rdx,4,3);
 		printf("\n");
 
 		printf("z  using printNumF( <serialOut> , z,%3d,5,2) :",rdx);
