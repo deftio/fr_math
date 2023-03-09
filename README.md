@@ -1,24 +1,27 @@
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-blue.svg)](https://opensource.org/licenses/BSD-2-Clause)
 
-# FR_Math a Fixed Point Math library for embedded systems
-(c) 2000-2023  M. A. Chatterjee 
+# FR_Math a C Language Fixed Point Math lib for embedded systems
  
 ## Overview
 
-FR_mathroutines are a small set of fixed-radix functions written in C (and exported to C++ as well) for integer math / fixed radix operations.  This allows the computation of fractional quantities with only integer registers but with an eye towards performance rather than just packing floating point equivalents in integer registers.  This means that implementations were chosen to minimize the need for overflow tests and similar bounds checking.
-
-This library allows the programmer to choose the radix point (number of fractional bits) for all operations - so one can have 11.4 or 10.5 operations on the fly (where 11 and 10 are left of the radix point and 4 and 5 represent number of fractional bits respectively).  This is useful when using large quantities such occur in frequency domain math operation such as fourier analysis.
+FR_Math is a small library provding a small set of fixed-radix functions written in C (and exported to C++ as well) for integer math / fixed radix operations.  
 
 A highlevel list of of operations is here:
 
 * fixed-radix multiply/add/sub with saturation
 * trig operations sin,cos, tan and inverse (asin, acos, atan)
+* quick interpoloation
 * log, log2, log10
 * exp, pow2, pow10
 * floor / ceil / trun (in fixed radix)
 * conversions from degrees / radians/ grads / freq without loss of precision even at high bit packing
-* coordinate transformations
-* printing of fixed radix numbers over serial
+* 2D coordinate transformations (rotate / translate / scale between local and global coordinates)
+* printing of fixed radix numbers over serial (e.g. print a signed fixed radix number to serial consoles)
+* the library has no dependcies and compiles on all C targets with no floating point libraries or emulation needed.
+
+FR_Math allows the computation of fractional quantities with only integer registers but with an eye towards performance rather than just packing floating point equivalents in integer registers.  The implementations here were chosen to minimize the need for overflow tests and similar bounds checking.
+
+This library allows the programmer to choose the radix point (number of fractional bits) for all operations - so one can have 11.4 or 10.5 operations on the fly (where 11 and 10 are left of the radix point and 4 and 5 represent number of fractional bits respectively).  This is useful when using large quantities such occur in frequency domain math operation such as fourier analysis.
 
 
 ## History
@@ -37,7 +40,7 @@ This library supports pure C compilation on x86, ARM, RISC-V, MIPS and other emb
 //compile and link FR_mathroutines.cpp
 ```
 
-## Overview of Using Fixed Point Math 
+## Introduction to Using Fixed Point Math 
 
 Key ideas that come up in the implementation of quantized or DSP type math areas include how to represent fractional units and what to do when math operations cause integer registers to overflow.  
 
@@ -179,6 +182,12 @@ Thanks for taking a look!
 
 Cheers and I hope you find this useful.  
 Feedback and bugs are welcome at the email address listed at the top.
+
+## LICENSE
+
+Licensed under BSD-2 License (see LICENSE.TXT included)
+This library can be used freely in open source or commercial projects.  
+(c) 2000-2023  M. A. Chatterjee 
 
 -Manjirnath (Manu) Chatterjee
 
