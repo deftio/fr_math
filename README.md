@@ -98,7 +98,7 @@ But lets look at this with some code:
 void main (void)
 {
 	int myIntegerizedNumber  = 1025;
-	int myIntegerizedNumber2 =  155;
+	int myIntegerizedNumber2 =  55;
 	int myIntegerizedNumber3;
 
 	myIntegerizedNumber3 = myIntegerizedNumber1 + myIntegerizedNumber2;
