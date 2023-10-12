@@ -86,7 +86,7 @@ so we have:
 If we wanted to add another number, say 0.55 to it
 we would take 1.55 and scale it too up by 100.  so 
 
-0.55 * 100  ==>  155
+0.55 * 100  ==>  55
 
 Now to add them together we add the integerized numbers
 
