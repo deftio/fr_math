@@ -86,7 +86,7 @@ so we have:
 If we wanted to add another number, say 0.55 to it
 we would take 1.55 and scale it too up by 100.  so 
 
-0.55 * 100  ==>  155
+0.55 * 100  ==>  55
 
 Now to add them together we add the integerized numbers
 
@@ -98,7 +98,7 @@ But lets look at this with some code:
 void main (void)
 {
 	int myIntegerizedNumber  = 1025;
-	int myIntegerizedNumber2 =  155;
+	int myIntegerizedNumber2 =  55;
 	int myIntegerizedNumber3;
 
 	myIntegerizedNumber3 = myIntegerizedNumber1 + myIntegerizedNumber2;
