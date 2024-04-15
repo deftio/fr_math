@@ -187,7 +187,7 @@ Feedback and bugs are welcome at the email address listed at the top.
 
 Licensed under BSD-2 License (see LICENSE.TXT included)
 This library can be used freely in open source or commercial projects.  
-(c) 2000-2023  M. A. Chatterjee 
+(c) 2000-2024  M. A. Chatterjee 
 
 -Manjirnath (Manu) Chatterjee
 
