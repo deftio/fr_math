@@ -4,10 +4,10 @@
 
   @copy Copyright (C)   <M. A. Chatterjee>
   @author M A Chatterjee <deftio [at] deftio [dot] com>
- 
+
   This file contains header defintions for travis-ci code testing example.
 
-  @license: 
+  @license:
 	Copyright (c) 2011-2018, M. A. Chatterjee <deftio at deftio dot com>
 	All rights reserved.
 
@@ -40,63 +40,58 @@
 #define S_OK (0)
 #define E_FAIL (-1)
 
-
 /* ************************************************
-	simple test cases for  library functions 
+	simple test cases for  library functions
    ************************************************
 */
 
-
-
 /*   test cases for op_and() function  */
-int test_FR_CosI() {
-	
+int test_FR_CosI()
+{
+
 	if (FR_CosI(90) != 0)
 		return E_FAIL;
 
-
 	// un comment me to make this fail!
-	//if ((f_ib_and(2,7) == (2&7))
+	// if ((f_ib_and(2,7) == (2&7))
 	//	return E_FAIL;)
 
 	return S_OK;
 }
 
-
 /* 	************************************************
-	this is a simple test suite.  
-	normally you would run cppUnit or some other 
+	this is a simple test suite.
+	normally you would run cppUnit or some other
 	more general purpose test framework.
 */
-int run_tests() {
-	if (E_FAIL == test_FR_CosI()) {
+int run_tests()
+{
+	if (E_FAIL == test_FR_CosI())
+	{
 		printf("failed test_FR_CosI()\n");
 		return E_FAIL;
 	}
 
-
 	return S_OK;
 }
 
-
-/* 
+/*
 	This main function only runs all the test code.
-    If successful it returns S_OK which is equal to the numerical value of 0.
- 	Any other value is considered a failure.
- 	
+	If successful it returns S_OK which is equal to the numerical value of 0.
+	Any other value is considered a failure.
+
  */
 int main()
 {
 	int result;
-	
+
 	printf("Running Example tests .. \n");
 	result = run_tests();
 
-	if (result == S_OK) 
-		printf ("tests passed.\n");
+	if (result == S_OK)
+		printf("tests passed.\n");
 	else
-		printf ("tests failed.\n");
+		printf("tests failed.\n");
 
-    return result;  /* remember the value 0 is considered passing in a travis-ci sense */
-
+	return result; /* remember the value 0 is considered passing in a travis-ci sense */
 }

@@ -1,6 +1,6 @@
 /**
  *	@FR_mathroutines.h - header definition file for fixed radix 2D coordinate transforms
- *		
+ *
  *	@copy Copyright (C) <2001-2012>  <M. A. Chatterjee>
  *  @author M A Chatterjee <deftio [at] deftio [dot] com>
  *	@version 1.01 M. A. Chatterjee, cleaned up naming
@@ -10,7 +10,7 @@
  *  naming cleaned up in 2012, but otherwise collected from random progs I've
  *  written in the last 15 or so years.
  *
- *  @license: 
+ *  @license:
  *	This software is provided 'as-is', without any express or implied
  *	warranty. In no event will the authors be held liable for any damages
  *	arising from the use of this software.
@@ -36,7 +36,7 @@
 #define __FR_math_2D_h__
 
 #ifdef __cplusplus
-//namespace  FR_MATH {
+// namespace  FR_MATH {
 extern "C"
 {
 #endif
@@ -56,104 +56,154 @@ extern "C"
 // precision/radix tradeoffs
 //================================================
 // Simple class to handle coord transforms
-#define FR_MAT_DEFPREC (8)	// default precision radix
+#define FR_MAT_DEFPREC (8) // default precision radix
 
-struct FR_Matrix2D_CPT
-{
-	//note: if modifying these variables by hand be sure to call checkfast() afterwards
-	s32 m00;
-	s32 m01;
-	s32 m02;
-	s32 m10;
-	s32 m11;
-	s32 m12;
+	struct FR_Matrix2D_CPT
+	{
+		// note: if modifying these variables by hand be sure to call checkfast() afterwards
+		s32 m00;
+		s32 m01;
+		s32 m02;
+		s32 m10;
+		s32 m11;
+		s32 m12;
 
-	// don't need m20 .. m22 because always 0 0 1 in coord-matrices
-	// wrote out m00 to make code easier to read in fix point (see the .cpp)
+		// don't need m20 .. m22 because always 0 0 1 in coord-matrices
+		// wrote out m00 to make code easier to read in fix point (see the .cpp)
 
-	u16		radix;	// internal precision radix point
-	int		fast;	// for taking advantage of scale-only matrices
+		u16 radix; // internal precision radix point
+		int fast;  // for taking advantage of scale-only matrices
 
-	//========================
-	void		ID  ();	// create Identity matrix
-	
-	//=======================
-	FR_Matrix2D_CPT (u16 nRadix = FR_MAT_DEFPREC ) : radix(nRadix) {ID();}; // constructor
-	
-	//matrix operators
-	s32			det ();	// compute determinant, result is in same precision as radix (not 2*radix)
-	FR_RESULT	inv (FR_Matrix2D_CPT* nInv); // compute matrix inverse and put in nInv
-	FR_RESULT	inv (); 					 // compute matrix inverse of this
-	FR_RESULT	add	(const FR_Matrix2D_CPT* pAdd); // matrix this = this+pAdd;
-	FR_RESULT	sub	(const FR_Matrix2D_CPT* pSub); // matrix this = this-pSub;
-	FR_RESULT   setrotate (s16 deg);			   // set upr left 2x2 to rot matrix
-	FR_RESULT   setrotate (s16 deg, u16 radix);	   // set upr left 2x2 to rot matrix
-	
-	FR_Matrix2D_CPT& operator =  (const FR_Matrix2D_CPT &nM);	
-	FR_Matrix2D_CPT& operator += (const FR_Matrix2D_CPT &nM);
-	FR_Matrix2D_CPT& operator -= (const FR_Matrix2D_CPT &nM);
+		//========================
+		void ID(); // create Identity matrix
 
-	//scalar operators
-	FR_Matrix2D_CPT& operator *= (const s32 &X);
-	
-	bool checkfast() {fast = ((m01==0) && (m10 ==0)) ? true:false; return fast;};
-	void set(s32 a00, s32 a01, s32 a02, s32 a10, s32 a11, s32 a12, u16 nRadix = FR_MAT_DEFPREC );
-	
-	//coordinate transform fns
-	void XlateI(s32 x, s32 y) {m02=x<<radix;m12=y<<radix;}
-	void XlateI(s32 x, s32 y, u16 nRadix) {m02=x<<nRadix;m12=y<<nRadix;}
-	void XlateRelativeI(s32 x, s32 y) {m02+=x<<radix;m12+=y<<radix;}
-	void XlateRelativeI(s32 x, s32 y, u16 nRadix) {m02+=x<<nRadix;m12+=y<<nRadix;}
+		//=======================
+		FR_Matrix2D_CPT(u16 nRadix = FR_MAT_DEFPREC) : radix(nRadix) { ID(); }; // constructor
 
-	//========================
-	// XFormPtI takes Integer input and produces fixed pt output for multiple Xforms
-	// user is responsible for watching location of radix point.  For integer results use:
-	// MyMatrix.XFormPtI(x,y,&xp,&yp,MyMatrix.radix);
-	// note that all precision etc. has been precomputed in inv()
-	// take a point and XForm it to coords represented by this matrix
-	void inline XFormPtI (s32 x, s32 y, s32* xp, s32* yp, u16 r) 
-		{	if(fast)
-				{*xp = (x*m00 + m02)>>r;	*yp = (y*m11 + m12)>>r;}
-			else
-				{*xp = (x*m00 + y*m01 + m02)>>r;	*yp = (x*m10 + y*m11 + m12)>>r;}
+		// matrix operators
+		s32 det();									// compute determinant, result is in same precision as radix (not 2*radix)
+		FR_RESULT inv(FR_Matrix2D_CPT *nInv);		// compute matrix inverse and put in nInv
+		FR_RESULT inv();							// compute matrix inverse of this
+		FR_RESULT add(const FR_Matrix2D_CPT *pAdd); // matrix this = this+pAdd;
+		FR_RESULT sub(const FR_Matrix2D_CPT *pSub); // matrix this = this-pSub;
+		FR_RESULT setrotate(s16 deg);				// set upr left 2x2 to rot matrix
+		FR_RESULT setrotate(s16 deg, u16 radix);	// set upr left 2x2 to rot matrix
+
+		FR_Matrix2D_CPT &operator=(const FR_Matrix2D_CPT &nM);
+		FR_Matrix2D_CPT &operator+=(const FR_Matrix2D_CPT &nM);
+		FR_Matrix2D_CPT &operator-=(const FR_Matrix2D_CPT &nM);
+
+		// scalar operators
+		FR_Matrix2D_CPT &operator*=(const s32 &X);
+
+		bool checkfast()
+		{
+			fast = ((m01 == 0) && (m10 == 0)) ? true : false;
+			return fast;
+		};
+		void set(s32 a00, s32 a01, s32 a02, s32 a10, s32 a11, s32 a12, u16 nRadix = FR_MAT_DEFPREC);
+
+		// coordinate transform fns
+		void XlateI(s32 x, s32 y)
+		{
+			m02 = x << radix;
+			m12 = y << radix;
 		}
-	void inline XFormPtI (s32 x, s32 y, s32* xp, s32* yp) 
-		{	if(fast)
-				{*xp = (x*m00 + m02)>>radix;	*yp = (y*m11 + m12)>>radix;}
-			else
-				{*xp = (x*m00 + y*m01 + m02)>>radix;	*yp = (x*m10 + y*m11 + m12)>>radix;}
+		void XlateI(s32 x, s32 y, u16 nRadix)
+		{
+			m02 = x << nRadix;
+			m12 = y << nRadix;
 		}
-	// take a point and XForm it to coords represented by this matrix w/o translation
-	void inline XFormPtINoTranslate (s32 x, s32 y, s32* xp, s32* yp, u16 r)
-		{	if(fast)
-				{*xp = (x*m00 )>>r;	*yp = (y*m11 )>>r;}
-			else
-				{*xp = (x*m00 + y*m01)>>r;	*yp = (x*m10 + y*m11)>>r;}
+		void XlateRelativeI(s32 x, s32 y)
+		{
+			m02 += x << radix;
+			m12 += y << radix;
+		}
+		void XlateRelativeI(s32 x, s32 y, u16 nRadix)
+		{
+			m02 += x << nRadix;
+			m12 += y << nRadix;
 		}
 
-	//========================
-	// XFormPtI16 takes Integer input and produces Integer output for quikr needs
-	// take a point and XForm it to coords represented by this matrix
-	void inline XFormPtI16 (s16 x, s16 y, s16* xp, s16* yp) 
-		{	if(fast)
-				{*xp = (s16)((((s32)x)*m00 + m02)>>radix);	
-				*yp = (s16)((((s32)y)*m11 + m12)>>radix);}
+		//========================
+		// XFormPtI takes Integer input and produces fixed pt output for multiple Xforms
+		// user is responsible for watching location of radix point.  For integer results use:
+		// MyMatrix.XFormPtI(x,y,&xp,&yp,MyMatrix.radix);
+		// note that all precision etc. has been precomputed in inv()
+		// take a point and XForm it to coords represented by this matrix
+		void inline XFormPtI(s32 x, s32 y, s32 *xp, s32 *yp, u16 r)
+		{
+			if (fast)
+			{
+				*xp = (x * m00 + m02) >> r;
+				*yp = (y * m11 + m12) >> r;
+			}
 			else
-				{*xp = (s16)((((s32)x)*m00 + ((s32)y)*m01 + m02)>>radix);	
-				 *yp = (s16)((((s32)x)*m10 + ((s32)y)*m11 + m12)>>radix);}
+			{
+				*xp = (x * m00 + y * m01 + m02) >> r;
+				*yp = (x * m10 + y * m11 + m12) >> r;
+			}
+		}
+		void inline XFormPtI(s32 x, s32 y, s32 *xp, s32 *yp)
+		{
+			if (fast)
+			{
+				*xp = (x * m00 + m02) >> radix;
+				*yp = (y * m11 + m12) >> radix;
+			}
+			else
+			{
+				*xp = (x * m00 + y * m01 + m02) >> radix;
+				*yp = (x * m10 + y * m11 + m12) >> radix;
+			}
+		}
+		// take a point and XForm it to coords represented by this matrix w/o translation
+		void inline XFormPtINoTranslate(s32 x, s32 y, s32 *xp, s32 *yp, u16 r)
+		{
+			if (fast)
+			{
+				*xp = (x * m00) >> r;
+				*yp = (y * m11) >> r;
+			}
+			else
+			{
+				*xp = (x * m00 + y * m01) >> r;
+				*yp = (x * m10 + y * m11) >> r;
+			}
 		}
 
-	// take a point and XForm it to coords represented by this matrix (no translate)
-	void inline XFormPtI16NoTranslate (s16 x, s16 y, s16* xp, s16* yp)
-		{	if(fast)
-				{*xp = (s16)((((s32)x)*m00 )>>radix);	*yp = (s16)((((s32)y)*m11 )>>radix);}
+		//========================
+		// XFormPtI16 takes Integer input and produces Integer output for quikr needs
+		// take a point and XForm it to coords represented by this matrix
+		void inline XFormPtI16(s16 x, s16 y, s16 *xp, s16 *yp)
+		{
+			if (fast)
+			{
+				*xp = (s16)((((s32)x) * m00 + m02) >> radix);
+				*yp = (s16)((((s32)y) * m11 + m12) >> radix);
+			}
 			else
-				{*xp = (s16)((((s32)x)*m00 + ((s32)y)*m01 )>>radix);	*yp = (s16)((((s32)x)*m10 + ((s32)y)*m11 )>>radix);}
+			{
+				*xp = (s16)((((s32)x) * m00 + ((s32)y) * m01 + m02) >> radix);
+				*yp = (s16)((((s32)x) * m10 + ((s32)y) * m11 + m12) >> radix);
+			}
 		}
-};
 
-
-
+		// take a point and XForm it to coords represented by this matrix (no translate)
+		void inline XFormPtI16NoTranslate(s16 x, s16 y, s16 *xp, s16 *yp)
+		{
+			if (fast)
+			{
+				*xp = (s16)((((s32)x) * m00) >> radix);
+				*yp = (s16)((((s32)y) * m11) >> radix);
+			}
+			else
+			{
+				*xp = (s16)((((s32)x) * m00 + ((s32)y) * m01) >> radix);
+				*yp = (s16)((((s32)x) * m10 + ((s32)y) * m11) >> radix);
+			}
+		}
+	};
 
 #ifdef __cplusplus
 } // extern "C"
