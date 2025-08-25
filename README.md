@@ -1,6 +1,5 @@
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-blue.svg)](https://opensource.org/licenses/BSD-2-Clause)
 [![CI](https://github.com/deftio/fr_math/actions/workflows/ci.yml/badge.svg)](https://github.com/deftio/fr_math/actions/workflows/ci.yml)
-[![codecov](https://codecov.io/gh/deftio/fr_math/branch/master/graph/badge.svg)](https://codecov.io/gh/deftio/fr_math)
 
 # FR_Math: A C Language Fixed-Point Math Library for Embedded Systems
  
