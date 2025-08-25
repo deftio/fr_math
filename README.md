@@ -5,7 +5,7 @@
  
 ## Overview
 
-FR_Math is a small library providing a comprehensive set of fixed-radix functions written in C (and exported to C++ as well) for integer math and fixed-radix operations.  
+FR_Math is a small library providing a comprehensive set of fixed-radix / mixed-radix functions written in C (and exported to C++ as well) for integer math arithmetic.  
 
 A high-level list of operations includes:
 
@@ -22,12 +22,12 @@ A high-level list of operations includes:
 
 FR_Math allows the computation of fractional quantities with only integer registers but with an eye towards performance rather than just packing floating-point equivalents in integer registers. The implementations here were chosen to minimize the need for overflow tests and similar bounds checking.
 
-This library allows the programmer to choose the radix point (number of fractional bits) for all operations—so one can have 11.4 or 10.5 operations on the fly (where 11 and 10 are left of the radix point and 4 and 5 represent the number of fractional bits respectively). This is useful when using large quantities such as those that occur in frequency domain math operations like Fourier analysis.
+This library allows the programmer to choose the radix point (number of fractional bits) for all operations—so one can have 11.4 or 10.5 operations on the fly (where 11 and 10 are left of the radix point and 4 and 5 represent the number of fractional bits respectively). This is useful when using large quantities such as those that occur in frequency domain math operations like Fourier analysis.  All operations are performed in integer registers using pure C (with exports to C++).  Integer registers from 16 / 32 / 64 bit widths are supported but the focus is on 32 bit registers.
 
 ## History
 I developed this several years ago for use in several embedded integer-only math projects, and this small, slightly cleaned-up version is made available for the public here. It worked very well on 16MHz 68k processors for Palm Pilots (and later ARM cores) where we needed many integer point transforms for graphics. This included things like font rendering where each letter's M-square needed to be computed and embedded graphics transforms. The Inkstorm application for PalmOS (originally by Trumpetsoft) used a version of this.
 
-This library supports pure C compilation on x86, ARM, RISC-V, MIPS, and other embedded targets.
+This library supports pure C compilation on x86, ARM, RISC-V, MIPS, ESP32, 68k and other embedded targets.
 
 
 ## Building and Testing

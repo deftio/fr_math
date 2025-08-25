@@ -13,10 +13,9 @@ int main() {
     printf("This test just verifies the library links correctly.\n\n");
     
     // Just test that basic FR_math functions work
-    s32 val = I2FR(10, 8);
     s32 result = FR_CosI(45);
     
-    printf("Basic math test: cos(45) = %d (fixed point)\n", result);
+    printf("Basic math test: cos(45) = %ld (fixed point)\n", (long)result);
     printf("Test passed.\n");
     
     return 0;

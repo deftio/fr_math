@@ -85,7 +85,7 @@ int test_point_transforms() {
     y = 20;  // Integer value
     mat.XFormPtI(x, y, &xp, &yp);
     if (xp != x || yp != y) {
-        printf("Identity transform failed: expected (%d,%d), got (%d,%d)\n", x, y, xp, yp);
+        printf("Identity transform failed: expected (%ld,%ld), got (%ld,%ld)\n", (long)x, (long)y, (long)xp, (long)yp);
         return TEST_FAIL;
     }
     
@@ -97,12 +97,12 @@ int test_point_transforms() {
     mat.XFormPtI(x, y, &xp, &yp);
     // The result should be the transformed point as integers
     if (xp != 15) {
-        printf("Translation X failed: expected %d, got %d\n", 15, xp);
-        printf("  x=%d, m00=%d, m02=%d\n", x, mat.m00, mat.m02);
+        printf("Translation X failed: expected %d, got %ld\n", 15, (long)xp);
+        printf("  x=%ld, m00=%ld, m02=%ld\n", (long)x, (long)mat.m00, (long)mat.m02);
         return TEST_FAIL;
     }
     if (yp != 30) {
-        printf("Translation Y failed: expected %d, got %d\n", 30, yp);
+        printf("Translation Y failed: expected %d, got %ld\n", 30, (long)yp);
         return TEST_FAIL;
     }
     
