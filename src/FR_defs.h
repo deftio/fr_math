@@ -3,7 +3,7 @@
  *
  *	@copy Copyright (C) <2001-2012>  <M. A. Chatterjee>
  *  @author M A Chatterjee <deftio [at] deftio [dot] com>
- *	@version 1.01 M. A. Chatterjee, cleaned up naming
+ *	@version 1.0.3 M. A. Chatterjee, cleaned up naming
  *
  *	This software is provided 'as-is', without any express or implied
  *	warranty. In no event will the authors be held liable for any damages

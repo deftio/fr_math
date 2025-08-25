@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  push:
+    branches: [ master, main, 2025_update ]
+  pull_request:
+    branches: [ master, main ]
+
+jobs:
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        compiler: [gcc, clang]
+        exclude:
+          - os: macos-latest
+            compiler: gcc  # Use default clang on macOS
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up compiler
+      run: |
+        if [ "${{ matrix.compiler }}" = "gcc" ]; then
+          echo "CC=gcc" >> $GITHUB_ENV
+          echo "CXX=g++" >> $GITHUB_ENV
+        else
+          echo "CC=clang" >> $GITHUB_ENV
+          echo "CXX=clang++" >> $GITHUB_ENV
+        fi
+    
+    - name: Build library
+      run: make lib
+    
+    - name: Build examples
+      run: make examples
+    
+    - name: Run tests
+      run: make test
+    
+    - name: Generate size report
+      run: |
+        echo "## Build Size Report (${{ matrix.os }} - ${{ matrix.compiler }})" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        size build/*.o 2>/dev/null | head -5 >> $GITHUB_STEP_SUMMARY || echo "Size command not available" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+    
+    - name: Generate coverage report
+      if: matrix.os == 'ubuntu-latest' && matrix.compiler == 'gcc'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y lcov
+        make coverage
+        echo "## Coverage Summary" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        lcov --summary coverage/coverage.info >> $GITHUB_STEP_SUMMARY 2>&1
+        echo '```' >> $GITHUB_STEP_SUMMARY
+    
+    - name: Upload coverage to Codecov
+      if: matrix.os == 'ubuntu-latest' && matrix.compiler == 'gcc'
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage/coverage.info
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+
+  cross-compile:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: arm-linux-gnueabihf
+            arch: ARM
+          - target: riscv64-linux-gnu
+            arch: RISC-V
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install cross-compiler
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-${{ matrix.target }}
+    
+    - name: Cross-compile
+      run: |
+        export CC=${{ matrix.target }}-gcc
+        export CXX=${{ matrix.target }}-g++
+        make lib
+    
+    - name: Generate cross-compile size report
+      run: |
+        echo "## Cross-Compile Size Report (${{ matrix.arch }})" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        ${{ matrix.target }}-size build/*.o | head -5 >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Detailed sizes:" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        ls -lh build/*.o >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+
+  test-32bit:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install 32-bit support
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-multilib g++-multilib
+    
+    - name: Build and test 32-bit
+      run: |
+        export CFLAGS="-m32"
+        export CXXFLAGS="-m32"
+        make clean
+        make test
+    
+    - name: Generate 32-bit size report
+      run: |
+        echo "## 32-bit Build Size Report" >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+        size build/*.o | head -5 >> $GITHUB_STEP_SUMMARY
+        echo '```' >> $GITHUB_STEP_SUMMARY
+
+  overflow-tests:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Build with sanitizers
+      run: |
+        export CFLAGS="-fsanitize=undefined -fsanitize=integer -fno-sanitize-recover=all"
+        export CXXFLAGS="-fsanitize=undefined -fsanitize=integer -fno-sanitize-recover=all"
+        make clean
+        make test || true  # Allow failure to see all issues
+    
+    - name: Run overflow edge case tests
+      run: |
+        echo "Testing overflow and saturation behavior..."
+        # This will be expanded when we enhance the test suite

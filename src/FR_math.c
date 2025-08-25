@@ -5,7 +5,7 @@
  *
  *	@copy Copyright (C) <2001-2014>  <M. A. Chatterjee>
  *  @author M A Chatterjee <deftio [at] deftio [dot] com>
- *	@version 1.01 M. A. Chatterjee, cleaned up naming
+ *	@version 1.0.3 M. A. Chatterjee, cleaned up naming
  *
  *  This file contains integer math settable fixed point radix math routines for
  *  use on systems in which floating point is not desired or unavailable.
