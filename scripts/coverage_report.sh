@@ -202,3 +202,6 @@ echo ""
 echo "To see detailed line-by-line coverage:"
 echo "  cat build/*.gcov"
 echo ""
+
+# Exit successfully
+exit 0
