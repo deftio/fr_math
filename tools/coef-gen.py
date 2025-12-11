@@ -63,10 +63,10 @@ def genCoef(n, max_power = -16):
 		if newterm !=0:
 			v.append(int(newterm))
 		z = z -1
-	print v
-	print len(v)
-	print n
-	print test(v)
+	print (v)
+	print (len(v))
+	print (n)
+	print (test(v))
 
 def main():
 	genCoef(3.141592653)
