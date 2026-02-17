@@ -6,7 +6,7 @@
 - [ ] Remove Travis CI configuration (.travis.yml)
 - [ ] Implement GitHub Actions workflow for:
   - [ ] Build and test on multiple platforms (Linux, macOS, Windows)
-  - [ ] Cross-compile tests for ARM/RISC-V targets
+  - [ ] Cross-compile tests for ARM/RISC-V/x86 targets
   - [ ] Coverage reporting with codecov or coveralls
   - [ ] Automated release builds
 
