@@ -51,7 +51,18 @@ $(BUILD_DIR)/fr_example: $(EXAMPLE_DIR)/FR_Math_Example1.cpp $(BUILD_DIR)/FR_mat
 
 # Build and run tests
 .PHONY: test
-test: dirs test-basic test-comprehensive test-2d test-overflow test-full test-2d-complete
+test: dirs test-basic test-comprehensive test-2d test-overflow test-full test-2d-complete test-tdd
+
+.PHONY: test-tdd
+test-tdd: $(BUILD_DIR)/test_tdd
+	@echo "Running TDD characterization tests..."
+	@./$(BUILD_DIR)/test_tdd > $(BUILD_DIR)/test_tdd_report.md
+	@echo "Report written to $(BUILD_DIR)/test_tdd_report.md"
+
+$(BUILD_DIR)/test_tdd: $(TEST_DIR)/test_tdd.cpp $(SRC_DIR)/FR_math.c $(SRC_DIR)/FR_math_2D.cpp
+	$(CC) $(CFLAGS) $(TEST_FLAGS) -c $(SRC_DIR)/FR_math.c -o $(BUILD_DIR)/test_tdd_FR_math.o
+	$(CXX) $(CXXFLAGS) $(TEST_FLAGS) -c $(SRC_DIR)/FR_math_2D.cpp -o $(BUILD_DIR)/test_tdd_FR_math_2D.o
+	$(CXX) $(CXXFLAGS) $(TEST_FLAGS) $(TEST_DIR)/test_tdd.cpp $(BUILD_DIR)/test_tdd_FR_math.o $(BUILD_DIR)/test_tdd_FR_math_2D.o $(LDFLAGS) -o $@
 
 .PHONY: test-basic
 test-basic: $(BUILD_DIR)/fr_test

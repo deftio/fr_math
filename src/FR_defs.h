@@ -29,12 +29,35 @@
 #ifndef __FR_Platform_Defs_H__
 #define __FR_Platform_Defs_H__
 
-typedef unsigned char u8;
-typedef signed char s8;
+/*
+ * 64-bit-safe fixed-width typedefs.
+ *
+ * Historical note: pre-2.0 builds used `signed long` / `unsigned long` for
+ * the 32-bit types, which silently became 64-bit on LP64 systems (Linux x64,
+ * macOS, ARM64). Math that depended on 32-bit overflow / saturation produced
+ * wrong answers on those hosts. v2 uses <stdint.h> which is exact-width on
+ * every conforming C99+ toolchain, including embedded targets.
+ *
+ * If you are on a pre-C99 toolchain that lacks <stdint.h>, define
+ * FR_NO_STDINT before including this header and provide the typedefs
+ * yourself.
+ */
+#ifndef FR_NO_STDINT
+#include <stdint.h>
+typedef uint8_t  u8;
+typedef int8_t   s8;
+typedef uint16_t u16;
+typedef int16_t  s16;
+typedef uint32_t u32;
+typedef int32_t  s32;
+#else
+typedef unsigned char  u8;
+typedef signed char    s8;
 typedef unsigned short u16;
-typedef signed short s16;
-typedef unsigned long u32;
-typedef signed long s32;
+typedef signed short   s16;
+typedef unsigned long  u32;
+typedef signed long    s32;
+#endif
 
 typedef short FR_bool;
 typedef u16 FR_RESULT;

@@ -74,13 +74,38 @@ extern "C"
 #define FR2I(x, r) ((x) >> (r))
 
 /*===============================================
- * Make a fixed radix number from integer, fractional parts
- * r is radix precision in bits
- * FR_NUM(12,34,10) == 12.34 , radix 10 === (12.34)*(1<<10) = 12636
- * fractional part = f * pow2(radix) / pow10( ceil( log10 (f) ) )
- *                 = (f << r) / pow10 ( ceil ( log10 (f)))
+ * Make a fixed radix number from integer + base-10 fractional parts.
+ * r  = output radix (fractional bits)
+ * i  = integer part (signed)
+ * f  = decimal-fraction digits as written, e.g. for "12.34" pass f=34
+ * d  = number of decimal digits in f, e.g. for "12.34" pass d=2
+ *
+ * FR_NUM(12, 34, 2, 10)  ≈ 12.34 in s.10  = (12<<10) + (34<<10)/100 = 12636
+ * FR_NUM(-3, 5,  1, 16)  ≈ -3.5  in s.16  = (-3<<16) - (5<<16)/10
+ *
+ * The fraction is rounded toward zero. For round-to-nearest, add half an LSB
+ * before scaling at the call site. Sign of the fractional part follows the
+ * sign of i (for i==0 the result is positive, matching "+0.5" intuition).
+ *
+ * Compatibility: the v1 macro had signature `FR_NUM(i, f, r)` and a body
+ * that ignored f entirely. v2 adds the explicit `d` digit count and honors
+ * both f and r. Callers of the broken v1 form must be updated.
  */
-#define FR_NUM(i, f, r) ((i) << (r))
+#define FR_NUM_POW10(d) (                                              \
+    ((d) == 0) ? 1L :                                                  \
+    ((d) == 1) ? 10L :                                                 \
+    ((d) == 2) ? 100L :                                                \
+    ((d) == 3) ? 1000L :                                               \
+    ((d) == 4) ? 10000L :                                              \
+    ((d) == 5) ? 100000L :                                             \
+    ((d) == 6) ? 1000000L :                                            \
+    ((d) == 7) ? 10000000L :                                           \
+    ((d) == 8) ? 100000000L : 1000000000L)
+#define FR_NUM(i, f, d, r) (                                           \
+    ((s32)(i) << (r)) +                                                \
+    (((i) < 0)                                                         \
+        ? -((s32)(((s32)(f) << (r)) / FR_NUM_POW10(d)))                \
+        :  ((s32)(((s32)(f) << (r)) / FR_NUM_POW10(d)))))
 /*
 FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 */
@@ -182,27 +207,22 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 
 /* ===============================================
  * Fixed Point Math Operations
- * note: FR_FIXMUL32u is for positive 32bit numbers only
- * for signed and signed saturated use FR_FixMuls, FR_FixMulSat below
+ * Note: FR_FIXMUL32u is for positive (unsigned) 32-bit numbers only and
+ * assumes both inputs are at radix 16. For signed and signed-saturated
+ * arithmetic use FR_FixMuls / FR_FixMulSat below — those use int64_t
+ * internally on modern toolchains and avoid the cross-term subtleties of
+ * the split-multiply form.
+ *
+ * Side-effect note: x and y are referenced 4 times each, so do not pass
+ * an expression with side effects.
  */
+#define FR_FIXMUL32u(x, y) (                            \
+    ((((x) >> 16) * ((y) >> 16)) << 16) +               \
+    (((x) >> 16) * ((y) & 0xffff)) +                    \
+    (((y) >> 16) * ((x) & 0xffff)) +                    \
+    ((((x) & 0xffff) * ((y) & 0xffff)) >> 16))
 
-/*this version is corrected */
-#define FR_FIXMUL32u(x, y) (          \
-    (((x >> 16) * (y >> 16)) << 16) + \
-    ((x >> 16) * (y & 0xffff)) +      \
-    ((y >> 16) * (x & 0xffff)) +      \
-    ((((x & 0xffff) * (y & 0xffff))) >> 16))
-
-  /* this version had overflow -- leaving here as a note until better test coverage is generated.
-  #define FR_FIXMUL32u(x,y)	(					\
-    (((x>>16)*(y>>16))<<16)+					\
-    ((x>>16)*(y&0xffff))+						\
-    ((y>>16)*(x&0xffff))+						\
-    ((((x&0xffff)*(y&0xffff))))					\
-    )
-  */
-
-#define FR_SQUARE(x) (FR_FIXMUL32u((x), (x))
+#define FR_SQUARE(x) (FR_FIXMUL32u((x), (x)))
 
   /*===============================================
    * Arithmetic operations
@@ -263,8 +283,23 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
  * quadrants = 4 per revolution
  * freq      = 1 per revolution
  */
-#define FR_DEG2RAD(x) (((x) << 6) - ((x) << 3) + (x) + ((x) >> 2) + ((x >> 4) - ((x) >> 6)) - ((x) >> 10))
-#define FR_RAD2DEG(x) (((x) >> 6) + ((x) >> 9) - ((x) >> 13))
+/* FR_DEG2RAD(x): multiply by pi/180 ≈ 0.017453 using shifts only.
+ * Worst-case relative error: ~1.6e-4 (acceptable for embedded use; if you
+ * need better precision, multiply by FR_kDEG2RAD and shift down by FR_kPREC).
+ * Side-effect note: x is referenced 3 times, so do not pass an expression
+ * with side effects.
+ *
+ * v1 bug: the body of FR_DEG2RAD and FR_RAD2DEG were swapped relative to
+ * their names, and FR_DEG2RAD was missing parens around `x` in one
+ * subexpression. v2 fixes both.
+ */
+#define FR_DEG2RAD(x) (((x) >> 6) + ((x) >> 9) - ((x) >> 13))
+
+/* FR_RAD2DEG(x): multiply by 180/pi ≈ 57.295780 using shifts only.
+ * Worst-case relative error: ~2.1e-6.
+ * Side-effect note: x is referenced 7 times.
+ */
+#define FR_RAD2DEG(x) (((x) << 6) - ((x) << 3) + (x) + ((x) >> 2) + (((x) >> 4) - ((x) >> 6)) - ((x) >> 10))
 
 #define FR_RAD2Q(x) (((x) >> 1) + ((x) >> 3) + ((x) >> 7) + ((x) >> 8) - ((x) >> 14))
 #define FR_Q2RAD(x) ((x) + ((x) >> 1) + ((x) >> 4) + ((x) >> 7) + ((x) >> 11))
@@ -272,9 +307,84 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 #define FR_DEG2Q(x) (((x) >> 6) - ((x) >> 8) - ((x) >> 11) - ((x) >> 13))
 #define FR_Q2DEG(x) (((x) << 6) + ((x) << 4) + ((x) << 3) + ((x) << 1))
 
-  /* sin, cos with integer input (degrees), s.15 result                  */
+/*===============================================
+ * BAM (Binary Angular Measure) — v2 internal angle representation
+ *
+ * One full circle = 2^16 BAM units. So:
+ *   0       = 0 deg     = 0 rad
+ *   16384   = 90 deg    = pi/2 rad   (FR_BAM_QUADRANT)
+ *   32768   = 180 deg   = pi rad
+ *   49152   = 270 deg   = 3pi/2 rad
+ *   65536   wraps to 0  (because BAM is u16)
+ *
+ * BAM is the natural representation for fixed-point trig because:
+ *   - The top 2 bits select the quadrant (no `% 360` modulo needed).
+ *   - The next 7 bits index the 128-entry quadrant table directly.
+ *   - The bottom 7 bits give linear-interpolation precision.
+ *
+ * All BAM macros are *macros* (not functions) so they evaluate inline and
+ * cost nothing if you don't call them. Side-effect note: each macro
+ * references its argument multiple times — do not pass an expression with
+ * side effects.
+ */
+#define FR_BAM_BITS         (16)
+#define FR_BAM_FULL         (1L << FR_BAM_BITS)         /* 65536 */
+#define FR_BAM_QUADRANT     (FR_BAM_FULL >> 2)          /* 16384 */
+#define FR_BAM_HALF         (FR_BAM_FULL >> 1)          /* 32768 */
+
+/* Convert degrees -> BAM. Exact formula: deg * 65536 / 360.
+ * Computed in s32; for s16-range deg the intermediate (deg << 16) fits.
+ * The cast to u16 wraps modulo full circle, which is mathematically correct.
+ * Side-effect note: deg is referenced twice for sign-aware rounding.
+ *
+ * Worst-case error: <= 0.5 LSB BAM (~0.0028 deg) per degree. No accumulation
+ * across full circles.
+ */
+#define FR_DEG2BAM(deg)     ((u16)((((s32)(deg) << 16) + ((deg) >= 0 ? 180 : -180)) / 360))
+
+/* Convert BAM -> degrees. bam * (360 / 65536) ≈ bam * (45/8192).
+ * Truncated; result is integer degrees.
+ */
+#define FR_BAM2DEG(bam)     ((s16)(((s32)(u16)(bam) * 45) >> 13))
+
+/* Convert radians (at given radix) -> BAM. rad * (65536 / (2*pi)) ≈ rad * 10430.378
+ * For radix-16 input: ((rad * 10430) >> 16). Approximated; for high accuracy
+ * combine with FR_kRAD2Q multiplier.
+ */
+#define FR_RAD2BAM(rad, radix)  ((u16)(((s32)(rad) * 10430L) >> (radix)))
+
+/* Convert BAM -> radians at the requested output radix. */
+#define FR_BAM2RAD(bam, radix)  (((s32)(u16)(bam) * 6434L) >> (16 - (radix)))
+
+/* sin, cos with integer input (degrees), s.15 result                  */
   s16 FR_CosI(s16 deg);
   s16 FR_SinI(s16 deg);
+
+/*===============================================
+ * v2 radian-native trig (recommended for new code)
+ *
+ *   fr_cos_bam(bam)         — cos of an angle in BAM units, s0.15 result
+ *   fr_sin_bam(bam)         — sin of an angle in BAM units, s0.15 result
+ *   fr_cos(rad, radix)      — cos of an angle in radians at given radix, s0.15
+ *   fr_sin(rad, radix)      — sin of an angle in radians at given radix, s0.15
+ *   fr_tan(rad, radix)      — tan of an angle in radians at given radix, s15.16
+ *   fr_cos_deg(deg)         — cos of an angle in integer degrees, s0.15
+ *   fr_sin_deg(deg)         — sin of an angle in integer degrees, s0.15
+ *
+ * All of these go through the same 129-entry quadrant table and use linear
+ * interpolation. Worst-case absolute error: ~4e-5 (1.3 LSB in s0.15).
+ *
+ * The deg/rad/BAM trio is provided as macros where possible so unused
+ * variants dissolve at compile time.
+ */
+  s16 fr_cos_bam(u16 bam);
+  s16 fr_sin_bam(u16 bam);
+  s16 fr_cos(s32 rad, u16 radix);
+  s16 fr_sin(s32 rad, u16 radix);
+  s32 fr_tan(s32 rad, u16 radix);
+
+#define fr_cos_deg(deg)  fr_cos_bam(FR_DEG2BAM(deg))
+#define fr_sin_deg(deg)  fr_sin_bam(FR_DEG2BAM(deg))
 
   /* tan with integer input precision in degrees, returns, s15.16 result */
   s32 FR_TanI(s16 deg);
@@ -286,10 +396,11 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
   /* Fixed radix tan returns fixed  s15.16 result result (interpolated) */
   s32 FR_Tan(s16 deg, u16 radix);
 
-  /* Inverse trig (output in degrees) */
+  /* Inverse trig (output in degrees, range [-180, 180] for atan2 / [-90, 90] for atan / [0, 180] for acos / [-90, 90] for asin) */
   s16 FR_acos(s32 input, u16 radix);
   s16 FR_asin(s32 input, u16 radix);
   s16 FR_atan(s32 input, u16 radix);
+  s16 FR_atan2(s32 y, s32 x, u16 radix); /* full-circle arctan, returns degrees */
 
 /* Logarithms */
 #define FR_LOG2MIN (-(32767 << 16)) /* returned instead of "negative infinity" */

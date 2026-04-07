@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>FR_Math: Trig Interpolation Error Analysis</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    max-width: 1100px;
+    margin: 24px auto;
+    padding: 0 16px;
+    color: #222;
+    line-height: 1.45;
+  }
+  h1 { font-size: 1.5em; margin-bottom: 4px; }
+  h2 { font-size: 1.1em; margin-top: 28px; border-bottom: 1px solid #ddd; padding-bottom: 4px; }
+  .lede { color: #555; font-size: 0.95em; }
+  .chartwrap { width: 100%; height: 480px; }
+  table.stats { border-collapse: collapse; margin-top: 12px; font-size: 0.9em; width: 100%; }
+  table.stats th, table.stats td { border: 1px solid #ccc; padding: 6px 10px; text-align: right; }
+  table.stats th { background: #f0f0f0; }
+  table.stats td.name { text-align: left; font-weight: 600; }
+  .notes {
+    background: #f8f8f8;
+    padding: 12px 16px;
+    border-left: 3px solid #888;
+    margin-top: 16px;
+    font-size: 0.9em;
+  }
+  code { background: #eef; padding: 1px 4px; border-radius: 3px; font-size: 0.9em; }
+  .swatch {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 2px;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+</style>
+</head>
+<body>
+
+<h1>FR_Math: Trig Interpolation Error Analysis</h1>
+<p class="lede">
+  All methods read the same 129-entry s0.15 quadrant cosine table (the one in
+  <code>src/FR_trig_table.h</code>). Reference is JavaScript <code>Math.cos()</code>
+  (IEEE-754 double). Sweep is <strong>−45° to +45° in 0.1° steps</strong> (901 samples).
+  Errors are reported in <strong>LSBs of s0.15</strong> (1 LSB ≈ 3.05e−5 absolute).
+</p>
+
+<h2>Per-angle error</h2>
+<div class="chartwrap"><canvas id="errChart"></canvas></div>
+
+<h2>Interpolated cos(θ) vs reference</h2>
+<p class="lede">
+  Each method's <em>output value</em> over the same sweep, with the
+  double-precision <code>Math.cos</code> reference overlaid as a dashed black line.
+  The methods all sit very close to each other at this scale — use mouse-wheel to
+  zoom in on a region, drag to pan, and toggle methods via the legend.
+  <button id="resetZoom" type="button">Reset zoom</button>
+</p>
+<div class="chartwrap"><canvas id="valChart"></canvas></div>
+
+<h2>Statistics</h2>
+<table class="stats" id="statsTable">
+  <thead>
+    <tr>
+      <th class="name">Method</th>
+      <th>min</th>
+      <th>max</th>
+      <th>mean</th>
+      <th>std</th>
+      <th>max&nbsp;|err|</th>
+      <th>max&nbsp;|err|&nbsp;abs</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<div class="notes">
+  <strong>How to read this:</strong> the chart shows
+  <em>(interpolated&nbsp;cos&nbsp;in&nbsp;s0.15) − (SCALE·Math.cos(θ))</em>.
+  A perfect method would sit on y = 0. A biased method drifts off center.
+  A high-variance method oscillates. Click any method in the legend to toggle it.
+  The "max |err| abs" column shows the same worst-case error converted from
+  LSBs back to absolute units for sanity-checking against floating-point references.
+</div>
+
+<script>
+// =====================================================================
+// Table generation — matches src/FR_trig_table.h exactly
+// =====================================================================
+const TABLE_BITS = 7;                          // log2(intervals)
+const TABLE_SIZE = (1 << TABLE_BITS) + 1;      // 129 entries
+const FRAC_BITS  = 14 - TABLE_BITS;            // 7 bits of in-cell interp
+const FRAC_MAX   = 1 << FRAC_BITS;             // 128
+const FRAC_MASK  = FRAC_MAX - 1;
+const FRAC_HALF  = FRAC_MAX >> 1;              // 64
+const SCALE      = 32767;                      // s0.15 max
+const H_RAD      = (Math.PI / 2) / (TABLE_SIZE - 1); // radians per table step
+
+const cosTab = [];
+for (let i = 0; i < TABLE_SIZE; i++) {
+  cosTab.push(Math.round(Math.cos(H_RAD * i) * SCALE));
+}
+
+// =====================================================================
+// BAM helpers — match the C fr_cos_bam decomposition
+// =====================================================================
+function degToBam(deg) {
+  // Same formula as the fixed FR_DEG2BAM (with high-precision rounding here
+  // because we feed fractional degrees).
+  let v = Math.round(deg * 65536 / 360);
+  return ((v % 65536) + 65536) % 65536;
+}
+
+function bamDecompose(bam) {
+  const q = (bam >> 14) & 0x3;
+  let inq = bam & 0x3fff;
+  if (q === 1 || q === 3) inq = 0x4000 - inq;   // mirror odd quadrants
+  const idx  = inq >> FRAC_BITS;
+  const frac = inq & FRAC_MASK;
+  const neg  = (q === 1 || q === 2);
+  return { idx, frac, neg };
+}
+
+// =====================================================================
+// Interpolation methods — all consume the same 129-entry table
+// =====================================================================
+
+// 0. Nearest neighbor — no interpolation, just pick the closer sample.
+//    This is the "worst case" reference: shows the raw table grid error.
+function cosNearest(bam) {
+  const { idx, frac, neg } = bamDecompose(bam);
+  const pick = (frac < FRAC_HALF) ? cosTab[idx]
+                                  : cosTab[Math.min(idx + 1, TABLE_SIZE - 1)];
+  return neg ? -pick : pick;
+}
+
+// 1. Linear with truncating (>>) — current C implementation
+function cosLinearTrunc(bam) {
+  const { idx, frac, neg } = bamDecompose(bam);
+  if (idx >= TABLE_SIZE - 1) { const t = cosTab[TABLE_SIZE - 1]; return neg ? -t : t; }
+  const lo = cosTab[idx], hi = cosTab[idx + 1];
+  const v = lo + (((hi - lo) * frac) >> FRAC_BITS);
+  return neg ? -v : v;
+}
+
+// 2. Linear with round-to-nearest — proposed minimal fix (free)
+function cosLinearRound(bam) {
+  const { idx, frac, neg } = bamDecompose(bam);
+  if (idx >= TABLE_SIZE - 1) { const t = cosTab[TABLE_SIZE - 1]; return neg ? -t : t; }
+  const lo = cosTab[idx], hi = cosTab[idx + 1];
+  const v = lo + (((hi - lo) * frac + FRAC_HALF) >> FRAC_BITS);
+  return neg ? -v : v;
+}
+
+// 3. Cosine interpolation — the suggested method
+//    mu2 = (1 - cos(pi*mu)) / 2;  result = y0*(1-mu2) + y1*mu2
+function cosCosineInterp(bam) {
+  const { idx, frac, neg } = bamDecompose(bam);
+  if (idx >= TABLE_SIZE - 1) { const t = cosTab[TABLE_SIZE - 1]; return neg ? -t : t; }
+  const lo = cosTab[idx], hi = cosTab[idx + 1];
+  const mu  = frac / FRAC_MAX;
+  const mu2 = (1 - Math.cos(mu * Math.PI)) / 2;
+  const v = Math.round(lo * (1 - mu2) + hi * mu2);
+  return neg ? -v : v;
+}
+
+// 4. Smoothstep — polynomial cousin of cosine interp, no transcendental needed
+//    mu2 = mu*mu*(3 - 2*mu)
+function cosSmoothstep(bam) {
+  const { idx, frac, neg } = bamDecompose(bam);
+  if (idx >= TABLE_SIZE - 1) { const t = cosTab[TABLE_SIZE - 1]; return neg ? -t : t; }
+  const lo = cosTab[idx], hi = cosTab[idx + 1];
+  const mu  = frac / FRAC_MAX;
+  const mu2 = mu * mu * (3 - 2 * mu);
+  const v = Math.round(lo * (1 - mu2) + hi * mu2);
+  return neg ? -v : v;
+}
+
+// 5. Cubic Hermite — uses same table as both samples *and* slopes.
+//    sin(theta_i) = cos(pi/2 - theta_i) = cosTab[(TABLE_SIZE-1) - i] / SCALE
+//    f'(theta_i) = -sin(theta_i)
+//    Slope per t-unit (t in [0,1] over interval h): m_i = f'(theta_i) * h
+function cosHermite(bam) {
+  const { idx, frac, neg } = bamDecompose(bam);
+  if (idx >= TABLE_SIZE - 1) { const t = cosTab[TABLE_SIZE - 1]; return neg ? -t : t; }
+  const t  = frac / FRAC_MAX;
+  const y0 = cosTab[idx];
+  const y1 = cosTab[idx + 1];
+  const m0 = -cosTab[(TABLE_SIZE - 1) - idx]       * H_RAD;
+  const m1 = -cosTab[(TABLE_SIZE - 1) - (idx + 1)] * H_RAD;
+  const t2 = t * t, t3 = t2 * t;
+  const h00 =  2*t3 - 3*t2 + 1;
+  const h10 =      t3 - 2*t2 + t;
+  const h01 = -2*t3 + 3*t2;
+  const h11 =      t3 -   t2;
+  const v = Math.round(h00*y0 + h10*m0 + h01*y1 + h11*m1);
+  return neg ? -v : v;
+}
+
+// 6. Catmull-Rom (4-point cubic, no derivative input).
+//    Boundary handling: cos is even at idx=0 and antisymmetric at idx=TABLE_SIZE-1
+//    around pi/2. cos(-h) = cos(h), cos(pi/2 + h) = -sin(h) = -cosTab[127].
+function cosCatmullRom(bam) {
+  const { idx, frac, neg } = bamDecompose(bam);
+  if (idx >= TABLE_SIZE - 1) { const t = cosTab[TABLE_SIZE - 1]; return neg ? -t : t; }
+  const t = frac / FRAC_MAX;
+  const pm1 = (idx > 0) ? cosTab[idx - 1] : cosTab[1];
+  const p0  = cosTab[idx];
+  const p1  = cosTab[idx + 1];
+  const p2  = (idx + 2 < TABLE_SIZE) ? cosTab[idx + 2]
+                                     : -cosTab[TABLE_SIZE - 2];
+  const t2 = t * t, t3 = t2 * t;
+  const v = 0.5 * (
+      (2 * p0) +
+      (-pm1 + p1) * t +
+      (2*pm1 - 5*p0 + 4*p1 - p2) * t2 +
+      (-pm1 + 3*p0 - 3*p1 + p2) * t3
+  );
+  const r = Math.round(v);
+  return neg ? -r : r;
+}
+
+// =====================================================================
+// Sweep
+// =====================================================================
+const methods = [
+  { name: 'Nearest neighbor',   fn: cosNearest,       color: 'rgba(140, 140, 140, 1)' },
+  { name: 'Linear (truncated)', fn: cosLinearTrunc,   color: 'rgba(220,  50,  50, 1)' },
+  { name: 'Linear (rounded)',   fn: cosLinearRound,   color: 'rgba( 50, 180,  50, 1)' },
+  { name: 'Cosine interp',      fn: cosCosineInterp,  color: 'rgba(180, 100, 220, 1)' },
+  { name: 'Smoothstep',         fn: cosSmoothstep,    color: 'rgba(220, 150,  30, 1)' },
+  { name: 'Cubic Hermite',      fn: cosHermite,       color: 'rgba( 30, 110, 220, 1)' },
+  { name: 'Catmull-Rom',        fn: cosCatmullRom,    color: 'rgba( 30, 170, 170, 1)' },
+];
+
+const xs       = [];
+const errs     = methods.map(() => []);
+const vals     = methods.map(() => []);
+const trueVals = [];
+
+const STEP = 0.1;
+const N = Math.round((45 - (-45)) / STEP) + 1;
+
+for (let i = 0; i < N; i++) {
+  const deg = -45 + i * STEP;
+  // round to one decimal so the labels stay clean
+  const degR = Math.round(deg * 10) / 10;
+  xs.push(degR);
+
+  const trueScaled = Math.cos(degR * Math.PI / 180) * SCALE;
+  trueVals.push(trueScaled);
+  const bam = degToBam(degR);
+
+  for (let m = 0; m < methods.length; m++) {
+    const v = methods[m].fn(bam);
+    errs[m].push(v - trueScaled);
+    vals[m].push(v);
+  }
+}
+
+// =====================================================================
+// Stats
+// =====================================================================
+function stats(arr) {
+  let mn = Infinity, mx = -Infinity, sum = 0, sum2 = 0;
+  for (const e of arr) {
+    if (e < mn) mn = e;
+    if (e > mx) mx = e;
+    sum  += e;
+    sum2 += e * e;
+  }
+  const n = arr.length;
+  const mean = sum / n;
+  const variance = Math.max(0, sum2 / n - mean * mean);
+  const std = Math.sqrt(variance);
+  const maxAbs = Math.max(Math.abs(mn), Math.abs(mx));
+  return { mn, mx, mean, std, maxAbs };
+}
+
+const fmt  = x => x.toFixed(3);
+const fmtA = x => (x / SCALE).toExponential(2);
+const tbody = document.querySelector('#statsTable tbody');
+methods.forEach((m, i) => {
+  const s = stats(errs[i]);
+  const row = document.createElement('tr');
+  row.innerHTML = `
+    <td class="name"><span class="swatch" style="background:${m.color}"></span>${m.name}</td>
+    <td>${fmt(s.mn)}</td>
+    <td>${fmt(s.mx)}</td>
+    <td>${fmt(s.mean)}</td>
+    <td>${fmt(s.std)}</td>
+    <td>${fmt(s.maxAbs)}</td>
+    <td>${fmtA(s.maxAbs)}</td>
+  `;
+  tbody.appendChild(row);
+});
+
+// =====================================================================
+// Chart 1: error
+// =====================================================================
+const ctx = document.getElementById('errChart').getContext('2d');
+new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels: xs.map(x => x.toFixed(1)),
+    datasets: methods.map((m, i) => ({
+      label: m.name,
+      data: errs[i],
+      borderColor: m.color,
+      backgroundColor: m.color.replace('1)', '0.1)'),
+      borderWidth: 1.2,
+      pointRadius: 0,
+      tension: 0,
+    })),
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'top' },
+      tooltip: { mode: 'index', intersect: false },
+    },
+    interaction: { mode: 'nearest', axis: 'x', intersect: false },
+    scales: {
+      x: {
+        title: { display: true, text: 'angle (deg)' },
+        ticks: { maxTicksLimit: 19, autoSkip: true },
+      },
+      y: {
+        title: { display: true, text: 'error (LSB of s0.15)' },
+        grid: { color: ctx => ctx.tick.value === 0 ? '#888' : '#eee' },
+      },
+    },
+  },
+});
+
+// =====================================================================
+// Chart 2: actual values overlay (with pan + zoom)
+// =====================================================================
+const ctx2 = document.getElementById('valChart').getContext('2d');
+const valChart = new Chart(ctx2, {
+  type: 'line',
+  data: {
+    labels: xs.map(x => x.toFixed(1)),
+    datasets: [
+      // Reference first so it draws under the methods
+      {
+        label: 'Math.cos (reference)',
+        data: trueVals,
+        borderColor: 'rgba(0, 0, 0, 1)',
+        backgroundColor: 'rgba(0, 0, 0, 0)',
+        borderWidth: 2,
+        borderDash: [6, 4],
+        pointRadius: 0,
+        tension: 0,
+      },
+      ...methods.map((m, i) => ({
+        label: m.name,
+        data: vals[i],
+        borderColor: m.color,
+        backgroundColor: m.color.replace('1)', '0.1)'),
+        borderWidth: 1.4,
+        pointRadius: 0,
+        tension: 0,
+      })),
+    ],
+  },
+  options: {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { position: 'top' },
+      tooltip: { mode: 'index', intersect: false },
+      zoom: {
+        pan: {
+          enabled: true,
+          mode: 'xy',
+          modifierKey: null,
+        },
+        zoom: {
+          wheel: { enabled: true, speed: 0.1 },
+          pinch: { enabled: true },
+          drag: {
+            enabled: true,
+            modifierKey: 'shift',
+            backgroundColor: 'rgba(80, 120, 220, 0.2)',
+          },
+          mode: 'xy',
+        },
+        limits: {
+          x: { min: 'original', max: 'original' },
+          y: { min: -SCALE * 1.05, max: SCALE * 1.05 },
+        },
+      },
+    },
+    interaction: { mode: 'nearest', axis: 'x', intersect: false },
+    scales: {
+      x: {
+        title: { display: true, text: 'angle (deg)' },
+        ticks: { maxTicksLimit: 19, autoSkip: true },
+      },
+      y: {
+        title: { display: true, text: 'cos value (s0.15 units, SCALE = 32767)' },
+        grid: { color: ctx => ctx.tick.value === 0 ? '#888' : '#eee' },
+      },
+    },
+  },
+});
+
+document.getElementById('resetZoom').addEventListener('click', () => {
+  valChart.resetZoom();
+});
+</script>
+
+</body>
+</html>

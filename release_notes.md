@@ -1,5 +1,118 @@
 # FR_Math Release Notes
 
+## Version 2.0.0 (2026)
+
+This is a significant bug-fix and precision-improvement release. Several
+v1 functions produced wrong numerical results on every platform due to
+arithmetic bugs; others produced wrong results specifically on 64-bit
+hosts because of a typedef choice. Every changed function is covered by
+the TDD characterization suite in `tests/test_tdd.cpp`.
+
+See `dev/fr_math_precision.md` for the full per-symbol reference
+(inputs, outputs, precision, saturation) and `dev/fr_math2_impl_plan.md`
+for the implementation plan this release executed.
+
+### 64-bit safety (portability)
+
+- **`FR_defs.h`: migrated typedefs to `<stdint.h>`** (`s8` → `int8_t`,
+  `s32` → `int32_t`, etc.). v1 defined `s32` as `signed long`, which is
+  64 bits on LP64 platforms (Linux and macOS on x64 / ARM64), so every
+  fixed-point computation that relied on `s32` being exactly 32 bits
+  silently produced wrong answers on desktop Linux and macOS. To opt
+  out on ancient toolchains without `<stdint.h>`, build with
+  `-DFR_NO_STDINT`.
+
+### Numerical fixes
+
+- **`FR_FixMulSat` / `FR_FixMuls`**: v1 used a split-multiply formula
+  with an algebraic bug that returned wrong values for certain sign
+  combinations. v2 uses an `int64_t` fast path (with a corrected
+  fallback for `FR_NO_INT64` builds) and explicit saturation.
+- **`FR_log2`**: v1 was missing the accumulator in the mantissa-table
+  step and returned wrong values for non-power-of-2 inputs. v2 rewrites
+  the algorithm: leading-bit-position → normalize to s1.30 → 33-entry
+  mantissa lookup with linear interpolation.
+- **`FR_ln` / `FR_log10`**: inherit the `FR_log2` fix automatically
+  (they are multiplies of `FR_log2` by a constant).
+- **`FR_pow2`**: v1 used C truncation toward zero to extract the integer
+  exponent, which gave wrong answers for negative non-integer inputs
+  (e.g. `FR_pow2(-0.5)` returned ~2 instead of ~0.707). v2 uses
+  mathematical floor (toward −∞) and a 17-entry fraction table with
+  linear interp.
+- **`FR_atan2`**: v1 was a placeholder that returned garbage. v2 is a
+  correct octant-reduced arctan with a 33-entry table. Max error ≤ 1°.
+- **`FR_atan`**: v1 was wired up incorrectly. v2 implements as
+  `FR_atan2(input, 1<<radix, radix)`.
+- **`FR_Tan`**: v1 used `s16` loop variables that overflowed for angles
+  near 90°. v2 uses `s32`.
+- **`FR_TanI`**: removed dead unreachable code (`if (270 == deg)`).
+- **`FR_printNumD`**: v1 invoked unary minus on `INT_MIN`, which is
+  undefined behavior, and always returned 0. v2 works in unsigned
+  magnitude and returns the real byte count (or −1 on null `f`).
+- **`FR_printNumF`**: same INT_MIN fix, plus v1's fraction extraction
+  was mathematically wrong and printed bogus tail digits.
+- **`FR_printNumH`**: v1 shifted a signed negative int right. v2 casts
+  to unsigned first.
+
+### Macro fixes
+
+- **`FR_DEG2RAD` and `FR_RAD2DEG`**: v1 had the macro bodies swapped
+  relative to their names, so `FR_DEG2RAD(x)` actually multiplied by
+  57.3 and `FR_RAD2DEG(x)` multiplied by 0.017. v2 swaps them back.
+  `FR_DEG2RAD` also had missing parens around `x` in a subexpression.
+- **`FR_NUM`**: v1 signature was `FR_NUM(i, f, r)` and the body ignored
+  the `f` argument entirely. v2 adds an explicit `d` digit-count
+  argument — new signature is `FR_NUM(i, f, d, r)`. Any caller of the
+  v1 form must be updated.
+- **`FR_SQUARE`**: v1 was missing a closing parenthesis. Fixed.
+- **`FR_FIXMUL32u`**: wrapped `x` and `y` in parentheses to fix macro
+  hygiene.
+
+### New functionality
+
+- **Radian-native trig** (`fr_cos`, `fr_sin`, `fr_tan`, `fr_cos_bam`,
+  `fr_sin_bam`, `fr_cos_deg`, `fr_sin_deg`): takes radians (or BAM, or
+  integer degrees) directly rather than forcing everything through
+  integer degrees. Uses a new 129-entry s0.15 quadrant cosine table in
+  `src/FR_trig_table.h` with linear interpolation and round-to-nearest.
+  Max error ≤ 1 LSB of s0.15 (~3e−5). Mean error ~0.
+- **BAM (Binary Angular Measure) macros**: `FR_DEG2BAM`, `FR_BAM2DEG`,
+  `FR_RAD2BAM`, `FR_BAM2RAD`. BAM is the natural integer representation
+  for trig: 16 bits per full circle, top 2 bits select the quadrant,
+  next 7 bits index the table, bottom 7 bits drive interpolation.
+- **Table size is a compile-time knob**: `-DFR_TRIG_TABLE_BITS=8` gives
+  a 257-entry table for halved worst-case error (default is 7 / 129
+  entries).
+
+### New documentation
+
+- **`dev/fr_math_precision.md`** — comprehensive per-symbol precision
+  reference. Every public macro, constant, and function is documented
+  with inputs, output format, worst-case error, saturation behavior,
+  and side-effect notes.
+- **`CONTRIBUTING.md`** — PR expectations, test discipline, portability
+  rules, commit message format.
+- **`tools/interp_analysis.html`** — interactive Chart.js analysis of
+  trig interpolation methods. Compares nearest-neighbor, linear
+  truncated, linear rounded, cosine interp, smoothstep, Hermite cubic,
+  and Catmull-Rom on the same 129-entry table, over θ ∈ [−45°, +45°].
+  Includes pan/zoom on a second chart showing the actual interpolated
+  values vs `Math.cos` reference. Use this to verify interpolation
+  claims and to pick a default for the library.
+- **`scripts/clean_build.sh`** — one-shot clean of `build/` and
+  `coverage/` directories. Handy when switching branches or debugging
+  stale object files.
+
+### Breaking changes
+
+- **`FR_NUM` signature**: `FR_NUM(i, f, r)` → `FR_NUM(i, f, d, r)`. Any
+  code that called the 3-argument form will fail to compile. The old
+  form was broken (it ignored `f` entirely), so any caller was already
+  getting wrong results.
+- **Wider intermediate types**: if you had code that poked at `s32` as
+  if it were `long` (e.g. printing with `%ld`), that will now warn.
+  Use `%d` with `s32` / `int32_t`, or cast.
+
 ## Version 1.0.3 (2025)
 
 ### Test Coverage Improvements
