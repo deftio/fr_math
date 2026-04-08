@@ -27,10 +27,6 @@
 #include "../src/FR_math.h"
 #include "../src/FR_math_2D.h"
 
-/* FR_atan2 is defined in FR_math.c but missing from FR_math.h.
- * We forward-declare it locally so the test suite can characterize it. */
-extern "C" s16 FR_atan2(s32 y, s32 x, u16 radix);
-
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -138,9 +134,8 @@ static void section_platform(void) {
     printf("| long | %lu |\n", (unsigned long)sizeof(long));
     printf("\n");
     if (sizeof(s32) != 4) {
-        printf("> **WARNING**: `s32` is %lu bytes, not 4. In v2, `FR_defs.h` maps `s32` to "
-               "`int32_t` via `<stdint.h>`, so this should never fire. If you see this, you "
-               "probably built with `-DFR_NO_STDINT` on a toolchain where `long` is 64 bits.\n\n",
+        printf("> **WARNING**: `s32` is %lu bytes, not 4. `FR_defs.h` maps `s32` to "
+               "`int32_t` via `<stdint.h>`, so this should never fire on a C99-or-newer toolchain.\n\n",
                (unsigned long)sizeof(s32));
     }
 }
@@ -222,13 +217,13 @@ static void section_macros_basic(void) {
     printf("| I2FR(-50, 4) | %d |\n", I2FR(-50, 4));
     printf("| FR2I(I2FR(-50,4), 4) | %d |\n", FR2I(I2FR(-50, 4), 4));
 
-    md_h3("2.4 FR_NUM (v2: 4-arg form, honors fractional digits)");
+    md_h3("2.4 FR_NUM");
     printf("| Op | Result | Expected |\n|---|---:|---:|\n");
     printf("| FR_NUM(12, 34, 2, 10) | %d | 12.34 << 10 ≈ 12636 |\n", FR_NUM(12, 34, 2, 10));
     printf("| FR_NUM(-3, 5, 1, 16) | %d | -3.5 << 16 = -229376 |\n", FR_NUM(-3, 5, 1, 16));
     printf("| FR_NUM(0, 25, 2, 16) | %d | 0.25 << 16 = 16384 |\n", FR_NUM(0, 25, 2, 16));
     printf("| FR_NUM(1, 0, 0, 8) | %d | 1.0 << 8 = 256 |\n", FR_NUM(1, 0, 0, 8));
-    printf("\n> v2 signature: `FR_NUM(int, frac_digits, num_digits, radix)`. v1 silently dropped the fraction; v2 honors it.\n\n");
+    printf("\n> Signature: `FR_NUM(int, frac_digits, num_digits, radix)`.\n\n");
 
     md_h3("2.5 FR_INT");
     printf("| Op | Result |\n|---|---:|\n");
@@ -320,25 +315,8 @@ static void section_macros_basic(void) {
     printf("| 0x1234 | 0x%04x |\n", FR_SWAP_BYTES(0x1234));
     printf("| 0xff00 | 0x%04x |\n", FR_SWAP_BYTES(0xff00));
 
-    md_h3("2.16 FR_FAILED / FR_SUCCEEDED");
-    printf("| Code | FR_FAILED | FR_SUCCEEDED |\n|---|---:|---:|\n");
-    printf("| FR_S_OK | %d | %d |\n",
-           FR_FAILED(FR_S_OK) ? 1 : 0, FR_SUCCEEDED(FR_S_OK) ? 1 : 0);
-    printf("| FR_E_FAIL | %d | %d |\n",
-           FR_FAILED(FR_E_FAIL) ? 1 : 0, FR_SUCCEEDED(FR_E_FAIL) ? 1 : 0);
-    printf("| FR_E_BADARGUMENTS | %d | %d |\n",
-           FR_FAILED(FR_E_BADARGUMENTS) ? 1 : 0, FR_SUCCEEDED(FR_E_BADARGUMENTS) ? 1 : 0);
-    printf("| FR_E_UNABLE | %d | %d |\n",
-           FR_FAILED(FR_E_UNABLE) ? 1 : 0, FR_SUCCEEDED(FR_E_UNABLE) ? 1 : 0);
-
-    md_h3("2.17 FR_TRUE / FR_FALSE");
+    md_h3("2.16 FR_TRUE / FR_FALSE");
     printf("| FR_TRUE = %d, FR_FALSE = %d |\n\n", FR_TRUE, FR_FALSE);
-
-    md_h3("2.18 FR_SQUARE (v2: paren fixed)");
-    printf("```c\n");
-    printf("#define FR_SQUARE(x) (FR_FIXMUL32u((x), (x)))   /* v2: paren fixed */\n");
-    printf("```\n\n");
-    printf("> v2: the missing close paren was added; FR_SQUARE is now usable.\n\n");
 }
 
 /* ============================================================
@@ -415,21 +393,6 @@ static void section_shift_macros(void) {
                (int)FR_DEG2RAD(x), x * (M_PI / 180.0),
                (int)FR_RAD2DEG(x), x * (180.0 / M_PI));
     }
-    printf("\n> v2: macro bodies were swapped in v1 (`FR_DEG2RAD` was actually multiplying by 57.3 and vice versa). v2 swaps them back. The table above should now show `FR_DEG2RAD(x)` matching `x * π/180` and `FR_RAD2DEG(x)` matching `x * 180/π`.\n\n");
-
-    md_h3("3.2 FR_FIXMUL32u");
-    printf("| x | y | FR_FIXMUL32u(x,y) | int64 ref ((x*y)>>16) |\n");
-    printf("|---:|---:|---:|---:|\n");
-    s32 mul_xs[] = {0x10000, 0x20000, 0x12345, 0x7fffffff, 0x100, 0x10000000};
-    s32 mul_ys[] = {0x10000, 0x10000, 0x67890, 0x2,        0x100, 0x00000010};
-    for (int i = 0; i < 6; i++) {
-        s32 x = mul_xs[i], y = mul_ys[i];
-        s32 actual = FR_FIXMUL32u(x, y);
-        int64_t ref = ((int64_t)x * (int64_t)y) >> 16;
-        printf("| 0x%lx | 0x%lx | 0x%lx | 0x%llx |\n",
-               (unsigned long)x, (unsigned long)y,
-               (unsigned long)actual, (long long)ref);
-    }
     printf("\n");
 }
 
@@ -444,8 +407,7 @@ static int64_t sat64(int64_t v) {
 }
 
 /* Reference matching FR_FixMuls's intended contract:
- * Take absolute values, compute (|x|*|y|) >> 16, re-apply sign.
- * This mirrors FR_FIXMUL32u. */
+ * Take absolute values, compute (|x|*|y|) >> 16, re-apply sign. */
 static int64_t fixmuls_ref(s32 x, s32 y) {
     int sign = ((x < 0) != (y < 0));
     int64_t ax = (x < 0) ? -(int64_t)x : (int64_t)x;
@@ -724,20 +686,20 @@ static void section_inverse_trig(void) {
     table_row_stats("FR_asin vs asin() (deg)", &asin_stats);
     printf("\n");
 
-    md_h3("7.3 FR_atan2 (v2: octant-reduced arctan, returns degrees)");
+    md_h3("7.3 FR_atan2 (octant-reduced arctan, returns degrees)");
     printf("| (y, x) | FR_atan2 | atan2() degrees |\n|---|---:|---:|\n");
     struct { s32 y, x; } pts[] = {
         {0, 1}, {1, 1}, {1, 0}, {1, -1}, {0, -1}, {-1, -1}, {-1, 0}, {-1, 1},
         {3, 4}, {-3, 4}, {3, -4}, {-3, -4}
     };
     for (int i = 0; i < (int)(sizeof(pts)/sizeof(pts[0])); i++) {
-        s16 r = FR_atan2(pts[i].y, pts[i].x, 0);
+        s16 r = FR_atan2(pts[i].y, pts[i].x);
         double ref = atan2((double)pts[i].y, (double)pts[i].x) * 180.0 / M_PI;
         printf("| (%ld, %ld) | %d | %.4g |\n",
                (long)pts[i].y, (long)pts[i].x, r, ref);
     }
-    printf("\n> **v2**: `FR_atan2` now returns degrees with max error ~1 LSB (= 1 degree at radix 0).\n");
-    printf("> `FR_atan(x, radix)` is implemented as `FR_atan2(x, 1<<radix, radix)` and returns degrees.\n\n");
+    printf("\n> `FR_atan2` returns degrees with max error ~1 LSB (= 1 degree).\n");
+    printf("> `FR_atan(x, radix)` is implemented as `FR_atan2(x, 1<<radix)` and returns degrees.\n\n");
 }
 
 /* ============================================================
@@ -784,9 +746,8 @@ static void section_pow_log(void) {
     printf("\n");
 
     md_h3("8.3 FR_log2 — empirical behavior on integer powers of 2");
-    printf("> v2 implementation: leading-bit-position → normalize the remainder to s1.30 →\n");
-    printf("> 33-entry mantissa lookup with linear interpolation. v1 was missing the\n");
-    printf("> accumulator; v2 fixes it.\n\n");
+    printf("> Implementation: leading-bit-position → normalize the remainder to s1.30 →\n");
+    printf("> 33-entry mantissa lookup with linear interpolation.\n\n");
     printf("| input | radix | out_radix | FR_log2 | as double | log2(x) |\n");
     printf("|---:|---:|---:|---:|---:|---:|\n");
     struct { s32 in; u16 r; u16 or_; double ref; } log2_cases[] = {
@@ -886,7 +847,7 @@ static void section_pow_log(void) {
     printf("| Call | Result |\n|---|---:|\n");
     printf("| FR_TanI(-200) | %ld |\n", (long)FR_TanI((s16)-200));
     printf("| FR_TanI(200)  | %ld |\n", (long)FR_TanI((s16)200));
-    /* Print helpers with NULL function pointer should hit FR_E_FAIL paths */
+    /* Print helpers with NULL stream should return -1 */
     printf("| FR_printNumD(NULL,1,0) | %d |\n", FR_printNumD(NULL, 1, 0));
     printf("| FR_printNumH(NULL,1,0) | %d |\n", FR_printNumH(NULL, 1, 0));
     printf("| FR_printNumF(NULL,1,16,0,4) | %d |\n", FR_printNumF(NULL, 1, 16, 0, 4));
@@ -1115,8 +1076,8 @@ static void section_matrix2d(void) {
         printf("| det of diag(2,3) (radix 8) | %ld | %ld |\n",
                (long)d, (long)I2FR(6, 8));
 
-        FR_RESULT r = m.inv(&inv);
-        printf("| inv() returns FR_S_OK | %d | %d |\n", r, FR_S_OK);
+        bool r = m.inv(&inv);
+        printf("| inv() returns true | %d | %d |\n", r ? 1 : 0, 1);
         printf("| inv.m00 (~1/2 in s.8) | %ld | %ld |\n",
                (long)inv.m00, (long)(I2FR(1,8) / 2));
         printf("| inv.m11 (~1/3 in s.8) | %ld | %ld |\n",
@@ -1126,14 +1087,14 @@ static void section_matrix2d(void) {
         FR_Matrix2D_CPT m2(8);
         m2.set(I2FR(2, 8), 0, I2FR(5, 8),
                0, I2FR(2, 8), I2FR(7, 8), 8);
-        FR_RESULT r2 = m2.inv();
-        printf("| in-place inv() returns | %d | %d |\n", r2, FR_S_OK);
+        bool r2 = m2.inv();
+        printf("| in-place inv() returns | %d | %d |\n", r2 ? 1 : 0, 1);
 
         /* singular */
         FR_Matrix2D_CPT s_(8);
         s_.set(0, 0, 0, 0, 0, 0, 8);
-        FR_RESULT r3 = s_.inv(&inv);
-        printf("| inv of singular matrix | %d | not FR_S_OK |\n", r3);
+        bool r3 = s_.inv(&inv);
+        printf("| inv of singular matrix | %d | %d |\n", r3 ? 1 : 0, 0);
     }
     printf("\n");
 
@@ -1180,116 +1141,264 @@ static void section_matrix2d(void) {
 }
 
 /* ============================================================
- * Section 11: Summary of Findings
+ * Section 11: Sqrt, Hypot, Waves, and ADSR (v2 new)
+ * ============================================================ */
+
+static void section_v2_new(void) {
+    md_h2("11. Sqrt, Hypot, Waves, and ADSR (v2 new)");
+
+    md_h3("11.1 FR_sqrt vs sqrt(), radix 16");
+    printf("| input (double) | FR_sqrt | as double | sqrt() | abs err |\n");
+    printf("|---:|---:|---:|---:|---:|\n");
+    /* Inputs must fit in s.16 (max representable is ~32767). */
+    double sqrt_inputs[] = {0, 0.0001, 0.25, 0.5, 1, 2, 3, 4, 7, 9, 16, 25, 100, 1024, 10000, 32000};
+    stats_t sqrt_stats; stats_reset(&sqrt_stats);
+    for (int i = 0; i < (int)(sizeof(sqrt_inputs)/sizeof(sqrt_inputs[0])); i++) {
+        double x = sqrt_inputs[i];
+        s32 fr = (s32)(x * (1L << 16));
+        s32 r = FR_sqrt(fr, 16);
+        double rd = frd(r, 16);
+        double ref = sqrt(x);
+        double err = rd - ref; if (err < 0) err = -err;
+        stats_add(&sqrt_stats, x, rd, ref);
+        printf("| %.6g | %ld | %.6g | %.6g | %.4g |\n",
+               x, (long)r, rd, ref, err);
+    }
+    printf("\n");
+    table_header_stats();
+    table_row_stats("FR_sqrt sweep", &sqrt_stats);
+    printf("\n");
+
+    md_h3("11.2 FR_sqrt fine sweep, radix 16");
+    stats_t sqrt_fine; stats_reset(&sqrt_fine);
+    for (int i = 1; i <= 1000; i++) {
+        double x = i * 10.0;     /* 10..10000 */
+        s32 fr = (s32)(x * (1L << 16));
+        s32 r = FR_sqrt(fr, 16);
+        double rd = frd(r, 16);
+        double ref = sqrt(x);
+        stats_add(&sqrt_fine, x, rd, ref);
+    }
+    table_header_stats();
+    table_row_stats("FR_sqrt [10,10000]", &sqrt_fine);
+    printf("\n");
+
+    md_h3("11.3 FR_sqrt domain sentinel");
+    printf("| Call | Result | INT32_MIN |\n|---|---:|---:|\n");
+    printf("| FR_sqrt(-1, 16) | %ld | %ld |\n",
+           (long)FR_sqrt(-1, 16), (long)(s32)0x80000000);
+    printf("| FR_sqrt(-65536, 16) | %ld | %ld |\n",
+           (long)FR_sqrt(-65536, 16), (long)(s32)0x80000000);
+    printf("\n");
+
+    md_h3("11.4 FR_hypot vs hypot(), radix 16");
+    printf("| x | y | FR_hypot | as double | hypot() | abs err |\n");
+    printf("|---:|---:|---:|---:|---:|---:|\n");
+    struct { double x, y; } hyp_cases[] = {
+        {0, 0},     {1, 0},     {0, 1},
+        {3, 4},     {5, 12},    {8, 15},
+        {-3, -4},   {-3, 4},    {3, -4},
+        {1, 1},     {0.5, 0.5}, {100, 100},
+        {1000, 1},  {1, 1000},
+    };
+    stats_t hyp_stats; stats_reset(&hyp_stats);
+    for (int i = 0; i < (int)(sizeof(hyp_cases)/sizeof(hyp_cases[0])); i++) {
+        s32 fx = (s32)(hyp_cases[i].x * (1L << 16));
+        s32 fy = (s32)(hyp_cases[i].y * (1L << 16));
+        s32 r  = FR_hypot(fx, fy, 16);
+        double rd = frd(r, 16);
+        double ref = hypot(hyp_cases[i].x, hyp_cases[i].y);
+        double err = rd - ref; if (err < 0) err = -err;
+        stats_add(&hyp_stats, sqrt(hyp_cases[i].x*hyp_cases[i].x + hyp_cases[i].y*hyp_cases[i].y),
+                  rd, ref);
+        printf("| %g | %g | %ld | %.6g | %.6g | %.4g |\n",
+               hyp_cases[i].x, hyp_cases[i].y, (long)r, rd, ref, err);
+    }
+    printf("\n");
+    table_header_stats();
+    table_row_stats("FR_hypot sweep", &hyp_stats);
+    printf("\n");
+
+    md_h3("11.5 fr_wave_sqr / fr_wave_pwm at key BAM phases");
+    printf("| phase | duty | sqr | pwm |\n|---:|---:|---:|---:|\n");
+    u16 phs[] = {0, 0x2000, 0x4000, 0x6000, 0x8000, 0xa000, 0xc000, 0xe000, 0xffff};
+    u16 duties[] = {0x4000, 0x8000, 0xc000};
+    for (int i = 0; i < (int)(sizeof(phs)/sizeof(phs[0])); i++) {
+        for (int j = 0; j < (int)(sizeof(duties)/sizeof(duties[0])); j++) {
+            printf("| 0x%04x | 0x%04x | %d | %d |\n",
+                   phs[i], duties[j], fr_wave_sqr(phs[i]),
+                   fr_wave_pwm(phs[i], duties[j]));
+        }
+    }
+    printf("\n");
+
+    md_h3("11.6 fr_wave_tri / fr_wave_saw at key BAM phases");
+    printf("| phase | tri | saw | reference (ideal) |\n|---:|---:|---:|---|\n");
+    {
+        struct { u16 ph; const char *desc; } cases[] = {
+            {0x0000, "0° (zero)"},
+            {0x1000, "22.5° (rising)"},
+            {0x2000, "45° (rising)"},
+            {0x4000, "90° (peak)"},
+            {0x6000, "135° (falling)"},
+            {0x8000, "180° (zero)"},
+            {0xa000, "225° (descending)"},
+            {0xc000, "270° (trough)"},
+            {0xe000, "315° (rising)"},
+            {0xffff, "360° (just before zero)"},
+        };
+        for (int i = 0; i < (int)(sizeof(cases)/sizeof(cases[0])); i++) {
+            printf("| 0x%04x | %d | %d | %s |\n",
+                   cases[i].ph, fr_wave_tri(cases[i].ph),
+                   fr_wave_saw(cases[i].ph), cases[i].desc);
+        }
+    }
+    printf("\n");
+
+    md_h3("11.7 fr_wave_tri error vs ideal triangle (full sweep)");
+    {
+        stats_t tri_stats; stats_reset(&tri_stats);
+        for (int i = 0; i < 65536; i++) {
+            u16 ph = (u16)i;
+            s16 actual = fr_wave_tri(ph);
+            /* Ideal triangle: piecewise linear with peak +1 at 90° and trough -1 at 270° */
+            double t = (double)i / 65536.0;     /* [0, 1) */
+            double ideal;
+            if      (t < 0.25) ideal =  4.0 * t;             /* 0 → 1 */
+            else if (t < 0.50) ideal =  2.0 - 4.0 * t;       /* 1 → 0 */
+            else if (t < 0.75) ideal = -4.0 * (t - 0.5);     /* 0 → -1 */
+            else               ideal = -1.0 + 4.0 * (t - 0.75); /* -1 → 0 */
+            stats_add(&tri_stats, t * 360.0, (double)actual / 32767.0, ideal);
+        }
+        table_header_stats();
+        table_row_stats("fr_wave_tri vs ideal", &tri_stats);
+        printf("\n");
+    }
+
+    md_h3("11.8 fr_wave_tri_morph at multiple break points");
+    printf("| phase | brk=0x4000 | brk=0x8000 (sym) | brk=0xc000 |\n");
+    printf("|---:|---:|---:|---:|\n");
+    for (int i = 0; i < (int)(sizeof(phs)/sizeof(phs[0])); i++) {
+        printf("| 0x%04x | %d | %d | %d |\n",
+               phs[i],
+               fr_wave_tri_morph(phs[i], 0x4000),
+               fr_wave_tri_morph(phs[i], 0x8000),
+               fr_wave_tri_morph(phs[i], 0xc000));
+    }
+    printf("\n");
+
+    md_h3("11.9 fr_wave_noise: first 16 samples from seed 0xACE1");
+    {
+        u32 state = 0xACE1u;
+        printf("| step | state (hex) | sample |\n|---:|---:|---:|\n");
+        for (int i = 0; i < 16; i++) {
+            s16 v = fr_wave_noise(&state);
+            printf("| %d | 0x%08x | %d |\n", i, (unsigned)state, v);
+        }
+        printf("\n");
+    }
+
+    md_h3("11.10 FR_HZ2BAM_INC at common audio rates");
+    printf("| freq (Hz) | sample rate | inc | implied freq |\n");
+    printf("|---:|---:|---:|---:|\n");
+    {
+        struct { u32 hz, sr; } cases[] = {
+            {440, 48000}, {440, 44100}, {1000, 48000}, {261, 48000}, {1, 65536}
+        };
+        for (int i = 0; i < (int)(sizeof(cases)/sizeof(cases[0])); i++) {
+            u16 inc = FR_HZ2BAM_INC(cases[i].hz, cases[i].sr);
+            double implied = (double)inc * (double)cases[i].sr / 65536.0;
+            printf("| %u | %u | %u | %.4f |\n",
+                   (unsigned)cases[i].hz, (unsigned)cases[i].sr,
+                   (unsigned)inc, implied);
+        }
+        printf("\n");
+    }
+
+    md_h3("11.11 ADSR full lifecycle (atk=10, dec=20, sus=16384, rel=30)");
+    {
+        fr_adsr_t env;
+        fr_adsr_init(&env, 10, 20, 16384, 30);
+        printf("> Initial state: %u, level: %ld\n\n", env.state, (long)env.level);
+        printf("| step | state | output |\n|---:|---:|---:|\n");
+        fr_adsr_trigger(&env);
+        int step = 0;
+        for (int i = 0; i < 35; i++) {
+            s16 v = fr_adsr_step(&env);
+            printf("| %d | %u | %d |\n", step++, env.state, v);
+        }
+        fr_adsr_release(&env);
+        for (int i = 0; i < 40; i++) {
+            s16 v = fr_adsr_step(&env);
+            printf("| %d | %u | %d |\n", step++, env.state, v);
+            if (env.state == FR_ADSR_IDLE) break;
+        }
+        printf("\n");
+    }
+}
+
+/* ============================================================
+ * Section 12: Summary of Findings
  * ============================================================ */
 
 static void section_summary(void) {
-    md_h2("11. Summary of Findings");
+    md_h2("12. Summary of Findings");
 
-    md_h3("11.1 Status by Function (empirical, this run — v2)");
+    md_h3("12.1 Status by Function (empirical, this run)");
     printf("| Function / Macro | Status | Evidence (section) | Notes |\n");
     printf("|---|:---:|:---:|---|\n");
-    printf("| Type sizes (s32 = 4 bytes) | OK (v2) | 0 | `FR_defs.h` now uses `<stdint.h>` (`int32_t` etc.); `s32` is exactly 4 bytes on LP64 and ILP32 alike |\n");
+    printf("| Type sizes (s32 = 4 bytes) | OK | 0 | `FR_defs.h` uses `<stdint.h>`; `s32` is exactly 4 bytes on LP64 and ILP32 alike |\n");
     printf("| Header constants (FR_kPI etc.) | OK | 1 | All within 1 LSB of libm |\n");
     printf("| FR_ABS, FR_SGN, I2FR, FR2I, FR_INT, FR_CHRDX, FR_FRAC, FR_FRACS | OK | 2 | Behave as documented |\n");
-    printf("| FR_NUM | OK (v2) | 2.4 | Signature changed to `FR_NUM(i,f,d,r)`; fractional argument now honored |\n");
-    printf("| FR_SQUARE | OK (v2) | 2.18 | Missing close paren fixed |\n");
-    printf("| FR_DEG2RAD / FR_RAD2DEG | OK (v2) | 3, 3.1 | Macro bodies swapped back; `FR_DEG2RAD(x)` multiplies by π/180, `FR_RAD2DEG(x)` by 180/π |\n");
+    printf("| FR_NUM | OK | 2.4 | `FR_NUM(i,f,d,r)` honors fractional argument |\n");
+    printf("| FR_DEG2RAD / FR_RAD2DEG | OK | 3, 3.1 | `FR_DEG2RAD(x)` multiplies by π/180, `FR_RAD2DEG(x)` by 180/π |\n");
     printf("| FR_SMUL10, FR_SDIV10, FR_S(r)LOG2*, FR_RAD2Q/Q2RAD/DEG2Q/Q2DEG | OK | 3 | Approximation factors match expected to ~5 decimals |\n");
-    printf("| FR_FIXMUL32u | OK | 3.2 | Matches `(int64)(x*y) >> 16` |\n");
-    printf("| FR_FixMuls | OK (v2) | 4.1 | Rewritten with `int64_t` fast path |\n");
-    printf("| FR_FixMulSat | OK (v2) | 4.2, 4.3 | Rewritten with `int64_t` fast path and explicit saturation; `FR_NO_INT64` fallback provided |\n");
-    printf("| FR_FixAddSat | OK | 4.4, 4.5 | Now that `s32` is genuinely 32-bit, overflow and saturation behave identically on LP64 host and ILP32 MCU |\n");
-    printf("| FR_CosI / FR_SinI | OK | 5 | Max abs error ~3e-5 (1 LSB in s0.15) over [-720, +720] |\n");
-    printf("| FR_TanI (integer degrees) | OK (v2) | 5.1, 5.2 | Loop variables widened from s16 to s32; no more overflow near 90° |\n");
-    printf("| FR_TanI (deg == 270) | OK (v2) | gcov | Dead `if (270 == deg)` branch removed |\n");
+    printf("| FR_FixMuls | OK | 4.1 | int64 fast path |\n");
+    printf("| FR_FixMulSat | OK | 4.2, 4.3 | int64 fast path with explicit saturation |\n");
+    printf("| FR_FixAddSat | OK | 4.4, 4.5 | Saturation behaves identically on LP64 host and ILP32 MCU |\n");
+    printf("| FR_CosI / FR_SinI | OK | 5 | Max abs error ~3e-5 (1 LSB in s0.15) over [-720, +720]; implemented as macros routing to fr_*_bam |\n");
+    printf("| FR_TanI (integer degrees) | OK | 5.1, 5.2 | Routed through BAM trig |\n");
     printf("| FR_Cos / FR_Sin (interpolated) | OK | 6.1 | Within LSB-level error for r8 inputs in s16 |\n");
-    printf("| FR_Tan (interpolated) | OK (v2) | 6.2 | Local variables widened to s32 |\n");
-    printf("| fr_cos / fr_sin / fr_cos_bam / fr_sin_bam / fr_cos_deg / fr_sin_deg (v2 new) | OK (v2) | 6 | Radian/BAM/degree-native trig; 129-entry s0.15 quadrant table with round-to-nearest linear interp; max err ≤1 LSB s0.15 |\n");
+    printf("| FR_Tan (interpolated) | OK | 6.2 | Locals are s32 |\n");
+    printf("| fr_cos / fr_sin / fr_cos_bam / fr_sin_bam / fr_cos_deg / fr_sin_deg | OK | 6 | Radian/BAM/degree-native trig; 129-entry s0.15 quadrant table with round-to-nearest linear interp; max err ≤1 LSB s0.15 |\n");
     printf("| FR_acos | OK | 7.1 | Max error ~0.83° over [-1, +1] swept at 200 points |\n");
     printf("| FR_asin | OK | 7.2 | Same precision as FR_acos |\n");
-    printf("| FR_atan2 | OK (v2) | 7.3 | Rewritten as octant-reduced arctan with 33-entry table; max err ≤1° |\n");
-    printf("| FR_atan | OK (v2) | 7.3 | Now implemented as `FR_atan2(x, 1<<radix, radix)` |\n");
+    printf("| FR_atan2 | OK | 7.3 | Octant-reduced arctan with 33-entry table; max err ≤1°; signature `FR_atan2(y, x)` returns degrees |\n");
+    printf("| FR_atan | OK | 7.3 | `FR_atan(x, radix)` calls `FR_atan2(x, 1<<radix)` |\n");
     printf("| FR_pow2 (positive integer x) | OK | 8.1 | Bit-exact for integer exponents in test range |\n");
     printf("| FR_pow2 (positive fractional x) | OK | 8.1, 8.2 | ~1e-6 error |\n");
-    printf("| FR_pow2 (negative fractional x) | OK (v2) | 8.1, 8.2 | Floor semantics fixed (mathematical floor toward −∞, not C truncation toward zero); 17-entry fraction table with linear interp |\n");
-    printf("| FR_log2 | OK (v2) | 8.3 | Rewritten: leading-bit-position → normalize to s1.30 → 33-entry mantissa lookup with linear interp |\n");
-    printf("| FR_ln, FR_log10 | OK (v2) | 8.4, 8.5 | Inherit FR_log2 fix via constant multiply |\n");
+    printf("| FR_pow2 (negative fractional x) | OK | 8.1, 8.2 | Mathematical floor (toward −∞); 17-entry fraction table with linear interp |\n");
+    printf("| FR_log2 | OK | 8.3 | Leading-bit-position → normalize to s1.30 → 33-entry mantissa lookup with linear interp |\n");
+    printf("| FR_ln, FR_log10 | OK | 8.4, 8.5 | Constant multiply of FR_log2 |\n");
     printf("| FR_EXP, FR_POW10 | OK | 8.6 | Wrap FR_pow2 |\n");
     printf("| FR_LOG2MIN sentinel | OK | 8.7 | Returned for input <= 0 |\n");
-    printf("| FR_printNumD | OK (v2) | 9.1 | Works in unsigned magnitude (no INT_MIN UB); returns real byte count |\n");
-    printf("| FR_printNumH | OK (v2) | 9.2 | Casts to unsigned before shifting; portable on all compilers |\n");
-    printf("| FR_printNumF | OK (v2) | 9.3 | Fraction extraction rewritten; INT_MIN safe |\n");
-    printf("| FR_Matrix2D_CPT::ID, set, det, inv (incl. in-place + singular detection) | OK | 10.1, 10.8 | All correct |\n");
+    printf("| FR_printNumD | OK | 9.1 | Works in unsigned magnitude; returns real byte count |\n");
+    printf("| FR_printNumH | OK | 9.2 | Casts to unsigned before shifting |\n");
+    printf("| FR_printNumF | OK | 9.3 | Fraction extraction correct; INT_MIN safe |\n");
+    printf("| FR_Matrix2D_CPT::ID, set, det, inv (incl. in-place + singular detection) | OK | 10.1, 10.8 | `inv()` returns bool |\n");
     printf("| FR_Matrix2D_CPT::XlateI, XlateRelativeI (both overloads) | OK | 10.3 | All correct |\n");
     printf("| FR_Matrix2D_CPT::XFormPtI, XFormPtINoTranslate | OK | 10.2, 10.5, 10.7 | Correct, fast and slow paths |\n");
     printf("| FR_Matrix2D_CPT::XFormPtI16, XFormPtI16NoTranslate | OK | 10.6 | Correct |\n");
     printf("| FR_Matrix2D_CPT::setrotate (both overloads) | OK | 10.4 | Within 1 LSB of `cos`/`sin` from libm; sign convention is `[c -s; s c]` (CCW rotation) |\n");
-    printf("| FR_Matrix2D_CPT::add, sub, +=, -=, *= | OK | 10.9 | All correct |\n");
+    printf("| FR_Matrix2D_CPT::add, sub, +=, -=, *= | OK | 10.9 | Return void |\n");
     printf("| FR_Matrix2D_CPT::checkfast | OK | 10.10 | Detects scale-only matrices |\n");
+    printf("| FR_sqrt | OK | 11.1, 11.2 | Digit-by-digit isqrt64; bit-exact floor; FR_DOMAIN_ERROR sentinel for negative |\n");
+    printf("| FR_hypot | OK | 11.4 | Direct sum-of-squares on int64 |\n");
+    printf("| fr_wave_sqr / fr_wave_pwm | OK | 11.5 | Single-comparison pulse generators; ±32767 amplitude |\n");
+    printf("| fr_wave_tri | OK | 11.6, 11.7 | Symmetric triangle, peaks clamped to ±32767 |\n");
+    printf("| fr_wave_saw | OK | 11.6 | Rising sawtooth, single boundary clamp |\n");
+    printf("| fr_wave_tri_morph | OK | 11.8 | Variable-symmetry triangle (morphs to saw); one division per sample |\n");
+    printf("| fr_wave_noise | OK | 11.9 | 32-bit Galois LFSR (poly 0xD0000001); period 2^32-1 |\n");
+    printf("| FR_HZ2BAM_INC | OK | 11.10 | Macro: hz * 65536 / sample_rate, returns u16 |\n");
+    printf("| fr_adsr_t / init / trigger / release / step | OK | 11.11 | Linear ADSR; s1.30 internal level; s0.15 output |\n");
     printf("\n");
 
-    md_h3("11.2 v2 Bug-Fix Summary (cross-referenced with dev/fixes.md and release_notes.md)");
-    printf("| Original reviewer concern | v2 status | Notes |\n");
-    printf("|---|:---:|---|\n");
-    printf("| P0 FR_FixMulSat wrong algorithm | **FIXED** | Rewritten with `int64_t` fast path and explicit saturation |\n");
-    printf("| P0 FR_atan2 returned quadrant only | **FIXED** | Octant-reduced arctan with 33-entry table; ≤1° max error |\n");
-    printf("| P0 FR_log2 / ln / log10 broken | **FIXED** | Rewritten: leading-bit-position → s1.30 normalize → 33-entry mantissa LUT |\n");
-    printf("| P1 FR_Tan stored s32 in s16 | **FIXED** | Locals widened to s32 |\n");
-    printf("| P1 FR_acos suspect | OK (was overstated) | Max 0.83° error; no change needed |\n");
-    printf("| P1 print helpers min-int negation (D/F) | **FIXED** | Unsigned-magnitude rewrite; correct byte count |\n");
-    printf("\n");
-
-    md_h3("11.3 Additional v2 fixes (beyond dev/fixes.md)");
-    printf("- `FR_DEG2RAD` / `FR_RAD2DEG` macro bodies unswapped and parenthesized.\n");
-    printf("- `FR_NUM` signature changed to `FR_NUM(i, f, d, r)` so the fractional argument is honored.\n");
-    printf("- `FR_SQUARE` close paren added.\n");
-    printf("- `FR_atan` now implemented as `FR_atan2(x, 1<<radix, radix)`.\n");
-    printf("- `FR_atan2` added to the public header.\n");
-    printf("- `FR_pow2` negative-fractional path fixed: now uses mathematical floor (toward −∞) and a 17-entry fraction table.\n");
-    printf("- `FR_defs.h` migrated to `<stdint.h>` so `s32` is exactly 32 bits on LP64 and ILP32. Opt-out: `-DFR_NO_STDINT`.\n");
-    printf("- `FR_TanI`'s `if (270 == deg)` dead branch removed.\n");
-    printf("- `FR_printNumD/F/H` return the real byte count (or −1 on null `f`).\n");
-    printf("- `FR_FIXMUL32u` macro arguments parenthesized.\n");
-    printf("- **New v2 radian-native trig**: `fr_cos`, `fr_sin`, `fr_tan`, `fr_cos_bam`, `fr_sin_bam`, `fr_cos_deg`, `fr_sin_deg` backed by a 129-entry s0.15 quadrant cosine table in `src/FR_trig_table.h` with round-to-nearest linear interp. Max error ≤1 LSB s0.15.\n");
-    printf("- **New BAM macros**: `FR_DEG2BAM`, `FR_BAM2DEG`, `FR_RAD2BAM`, `FR_BAM2RAD` for integer angle work.\n");
-    printf("- **Trig table size is a compile-time knob**: `-DFR_TRIG_TABLE_BITS=8` gives a 257-entry table for halved worst-case error.\n");
-    printf("\n");
-
-    md_h3("11.4 Coverage");
-    printf("- `FR_math.c`: this TDD suite exercises every public function. v2 removed the `FR_TanI` `if (270 == deg)` dead branch; uncovered lines that remain are deep saturation branches inside `FR_FixMulSat` that need very specific intermediate overflow patterns.\n");
-    printf("- `FR_math_2D.cpp`: **98.0%%** (99/101). The 2 uncovered lines are `inv()` failure returns inside `inv(FR_Matrix2D_CPT*)` for malformed input.\n");
-    printf("- `FR_math_2D.h`: **100%%** (4/4 inline lines).\n");
-    printf("- Every macro in `FR_math.h` is exercised at least once in section 2 / 3.\n");
+    md_h3("12.2 Coverage");
+    printf("- `FR_math.c`: this TDD suite exercises every public function. Uncovered lines that remain are deep saturation branches inside `FR_FixMulSat` that need very specific intermediate overflow patterns.\n");
+    printf("- `FR_math_2D.cpp`: covered by sections 10.1–10.10. The `inv()` failure path is exercised in 10.8.\n");
+    printf("- `FR_math_2D.h`: inline transform helpers covered.\n");
+    printf("- Every macro in `FR_math.h` is exercised at least once in sections 2 and 3.\n");
     printf("- Run `gcov -o build build/test_tdd_FR_math.gcno` after `make test-tdd` to confirm.\n");
-    printf("\n");
-
-    md_h3("11.5 Release-blocker status (all cleared in v2)");
-    printf("Every v1 release blocker has been fixed in v2. See `release_notes.md` for the full changelog:\n");
-    printf("1. `FR_log2`, `FR_ln`, `FR_log10` — **FIXED** (rewritten).\n");
-    printf("2. `FR_pow2` negative fractional inputs — **FIXED** (mathematical floor + fraction LUT).\n");
-    printf("3. `FR_atan2` — **FIXED** (octant-reduced, returns degrees).\n");
-    printf("4. `FR_Tan` — **FIXED** (locals widened to s32).\n");
-    printf("5. `FR_FixMulSat` — **FIXED** (`int64_t` fast path).\n");
-    printf("6. `FR_DEG2RAD` / `FR_RAD2DEG` — **FIXED** (bodies unswapped).\n");
-    printf("7. `FR_NUM` — **FIXED** (new signature `FR_NUM(i,f,d,r)`).\n");
-    printf("8. `FR_SQUARE` — **FIXED** (missing paren added).\n");
-    printf("9. `FR_printNumD` / `FR_printNumF` — **FIXED** (unsigned-magnitude rewrite).\n");
-    printf("10. `s32` typedef — **FIXED** (`FR_defs.h` uses `<stdint.h>`).\n\n");
-    printf("Everything that was fine in v1 is still fine in v2:\n");
-    printf("- All header constants.\n");
-    printf("- `FR_CosI`, `FR_SinI`, `FR_TanI` (integer degrees), `FR_Cos`, `FR_Sin`.\n");
-    printf("- `FR_acos`, `FR_asin`.\n");
-    printf("- `FR_FixMuls`.\n");
-    printf("- The whole `FR_Matrix2D_CPT` 2D matrix class.\n");
-    printf("- All basic macros (`FR_ABS`, `FR_SGN`, `I2FR`, `FR2I`, `FR_INT`, `FR_CHRDX`, `FR_FRAC`, `FR_FRACS`, `FR_ADD`, `FR_SUB`, `FR_INTERP`, `FR_INTERPI`, `FR_FLOOR`, `FR_CEIL`, `FR_ISPOW2`, `FR_SWAP_BYTES`).\n\n");
-    printf("New in v2:\n");
-    printf("- Radian/BAM-native trig (`fr_cos`, `fr_sin`, `fr_tan`, `fr_cos_bam`, etc.) backed by a 129-entry s0.15 quadrant cosine table.\n");
-    printf("- `FR_DEG2BAM`, `FR_BAM2DEG`, `FR_RAD2BAM`, `FR_BAM2RAD` angle-conversion macros.\n");
-    printf("- Compile-time trig-table-size knob (`FR_TRIG_TABLE_BITS`).\n");
-    printf("- `dev/fr_math_precision.md`: comprehensive per-symbol precision reference.\n");
-    printf("- `CONTRIBUTING.md`: PR expectations, test discipline, portability rules.\n");
-    printf("- `tools/interp_analysis.html`: interactive Chart.js analysis of trig interpolation methods.\n");
     printf("\n");
 }
 
@@ -1309,6 +1418,7 @@ int main(void) {
     section_pow_log();
     section_print();
     section_matrix2d();
+    section_v2_new();
     section_summary();
 
     return 0;

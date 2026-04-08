@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>API Reference — FR_Math</title>
+  <meta name="description" content="Complete FR_Math API reference: inputs, outputs, radix, precision, and saturation behaviour for every public symbol.">
+  <link rel="stylesheet" href="../assets/main.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<main class="page-content">
+  <div class="wrapper">
+
+<h1>API Reference</h1>
+
+<p>Every public symbol, grouped by topic. Each entry lists the radix
+convention, the precision, and the error / saturation behaviour. All
+types are from <code>FR_defs.h</code>: <code>s8 s16 s32</code> for
+signed and <code>u8 u16 u32</code> for unsigned integers (these are
+aliases for the <code>&lt;stdint.h&gt;</code> types).</p>
+
+<blockquote>
+<p><strong>Radix convention.</strong> Unless noted otherwise, every
+function that takes a <code>radix</code> argument interprets
+<em>all</em> of its fixed-point inputs and outputs at that radix. The
+library never stores the radix next to the value &mdash; it&rsquo;s
+your job to track.</p>
+</blockquote>
+
+<hr>
+
+<h2>Types and constants</h2>
+
+<table>
+<thead><tr><th>Symbol</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>s8 s16 s32</code></td><td>Signed integer typedefs (<code>int8_t</code>, <code>int16_t</code>, <code>int32_t</code>).</td></tr>
+<tr><td><code>u8 u16 u32</code></td><td>Unsigned integer typedefs.</td></tr>
+<tr><td><code>FR_OVERFLOW_POS</code></td><td><code>INT32_MAX</code> &mdash; positive saturation sentinel.</td></tr>
+<tr><td><code>FR_OVERFLOW_NEG</code></td><td><code>INT32_MIN + 1</code> &mdash; negative saturation sentinel.</td></tr>
+<tr><td><code>FR_DOMAIN_ERROR</code></td><td><code>INT32_MIN</code> &mdash; returned from functions given invalid input (e.g. <code>FR_sqrt(-1)</code>).</td></tr>
+<tr><td><code>FR_PI_S15_16</code></td><td>&pi; at radix 16 (<code>0x0003243F</code>).</td></tr>
+<tr><td><code>FR_2PI_S15_16</code></td><td>2&pi; at radix 16.</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>Conversions</h2>
+
+<table>
+<thead><tr><th>Macro</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td><code>I2FR(i, r)</code></td><td>Integer to fixed-point at radix <code>r</code>: <code>(i) &lt;&lt; (r)</code>.</td></tr>
+<tr><td><code>FR_FR2I(x, r)</code></td><td>Fixed-point to integer (truncates toward &minus;&infin;): <code>(x) &gt;&gt; (r)</code>.</td></tr>
+<tr><td><code>FR_FR2Iround(x, r)</code></td><td>Round-to-nearest fixed-point to integer.</td></tr>
+<tr><td><code>FR_CHRDX(x, from_r, to_r)</code></td><td>Change radix of a value (precision-preserving where possible).</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>Arithmetic</h2>
+
+<table>
+<thead><tr><th>Symbol</th><th>Signature</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>FR_ADD</code></td><td><code>FR_ADD(a, ar, b, br, r)</code></td><td>Aligned add, returns <code>s32</code> at radix <code>r</code>. Wrap-around on overflow.</td></tr>
+<tr><td><code>FR_SUB</code></td><td><code>FR_SUB(a, ar, b, br, r)</code></td><td>Aligned subtract. Wrap-around on overflow.</td></tr>
+<tr><td><code>FR_MUL</code></td><td><code>FR_MUL(a, ar, b, br, r)</code></td><td>Macro multiply. Uses <code>int64_t</code> intermediate. Truncates.</td></tr>
+<tr><td><code>FR_FixMuls</code></td><td><code>s32 FR_FixMuls(s32 a, s32 b, s32 r)</code></td><td>Same-radix multiply, <code>int64_t</code> intermediate, truncates.</td></tr>
+<tr><td><code>FR_FixMulSat</code></td><td><code>s32 FR_FixMulSat(s32 a, s32 b, s32 r)</code></td><td>Same, but saturates on overflow instead of wrapping.</td></tr>
+<tr><td><code>FR_FixAddSat</code></td><td><code>s32 FR_FixAddSat(s32 a, s32 b)</code></td><td>Saturating add.</td></tr>
+<tr><td><code>FR_ABS</code></td><td><code>FR_ABS(x)</code></td><td>Branchless absolute value.</td></tr>
+<tr><td><code>FR_SIGN</code></td><td><code>FR_SIGN(x)</code></td><td>-1, 0, or +1.</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>Trigonometry &mdash; integer degrees (legacy)</h2>
+
+<p>The classic <code>FR_Sin</code> / <code>FR_Cos</code> API takes
+angles as integer degrees in <code>[0, 360)</code>. Results are
+<code>s32</code> values at the requested radix. All four integer-deg
+functions use a 90-entry lookup table with quadrant folding.</p>
+
+<table>
+<thead><tr><th>Function</th><th>Signature</th><th>Accuracy</th></tr></thead>
+<tbody>
+<tr><td><code>FR_Sin</code></td><td><code>s32 FR_Sin(s16 deg, s32 r)</code></td><td>&plusmn;1 LSB at radix 14.</td></tr>
+<tr><td><code>FR_Cos</code></td><td><code>s32 FR_Cos(s16 deg, s32 r)</code></td><td>&plusmn;1 LSB at radix 14.</td></tr>
+<tr><td><code>FR_Tan</code></td><td><code>s32 FR_Tan(s16 deg, s32 r)</code></td><td>Saturates near 90&deg; / 270&deg;.</td></tr>
+<tr><td><code>FR_SinI</code> / <code>FR_CosI</code> / <code>FR_TanI</code></td><td>Return plain <code>s16</code> integer percentage (0&ndash;100).</td><td>For quick-and-dirty use.</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>Trigonometry &mdash; radian / BAM (v2)</h2>
+
+<p>The newer <code>fr_sin</code> / <code>fr_cos</code> / <code>fr_tan</code>
+family takes angles in radians at a caller-chosen radix, or in BAM
+(<code>u16</code>, full circle = 65536). These are the recommended APIs
+for new code because they&rsquo;re resolution-independent and integrate
+cleanly with phase accumulators.</p>
+
+<table>
+<thead><tr><th>Function</th><th>Signature</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>fr_sin</code></td><td><code>s32 fr_sin(s32 theta, s32 r)</code></td><td>Sine of an angle in radians at radix <code>r</code>.</td></tr>
+<tr><td><code>fr_cos</code></td><td><code>s32 fr_cos(s32 theta, s32 r)</code></td><td>Cosine.</td></tr>
+<tr><td><code>fr_tan</code></td><td><code>s32 fr_tan(s32 theta, s32 r)</code></td><td>Saturates near &pi;/2 + k&pi;.</td></tr>
+<tr><td><code>fr_sin_bam</code></td><td><code>s32 fr_sin_bam(u16 bam, s32 r)</code></td><td>Direct BAM input. No reduction needed.</td></tr>
+<tr><td><code>fr_cos_bam</code></td><td><code>s32 fr_cos_bam(u16 bam, s32 r)</code></td><td>Direct BAM input.</td></tr>
+<tr><td><code>fr_sin_deg</code> / <code>fr_cos_deg</code></td><td><code>s32 fr_sin_deg(s32 deg_fp, s32 r)</code></td><td>Degrees as fixed-point (supports fractional degrees).</td></tr>
+</tbody>
+</table>
+
+<p><strong>Accuracy:</strong> all radian/BAM functions are bounded by
+&plusmn;2 LSB at radix 14 across the full domain. See
+<code>dev/fr_math_precision.md</code> for the full table.</p>
+
+<hr>
+
+<h2>Inverse trigonometry</h2>
+
+<table>
+<thead><tr><th>Function</th><th>Signature</th><th>Output</th></tr></thead>
+<tbody>
+<tr><td><code>FR_atan</code></td><td><code>s32 FR_atan(s32 x, s32 r)</code></td><td>Result in radians at radix <code>r</code>. Range (&minus;&pi;/2, +&pi;/2).</td></tr>
+<tr><td><code>FR_atan2</code></td><td><code>s32 FR_atan2(s32 y, s32 x, s32 r)</code></td><td>Full-quadrant arctangent. Returns <code>FR_DOMAIN_ERROR</code> for (0, 0).</td></tr>
+<tr><td><code>FR_asin</code></td><td><code>s32 FR_asin(s32 x, s32 r)</code></td><td>Result in radians. Returns <code>FR_DOMAIN_ERROR</code> for |x| &gt; 1.</td></tr>
+<tr><td><code>FR_acos</code></td><td><code>s32 FR_acos(s32 x, s32 r)</code></td><td>Result in radians. Same domain check.</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>Logarithm and exponential</h2>
+
+<p>All log / exp functions use the same identity-driven
+implementation: normalise the input into <code>[1, 2)</code> (or
+<code>[0, 1)</code> for exp), look up in a small polynomial, and
+fix up the exponent. Worst-case error is <code>&plusmn; 2 LSB</code>
+at the output radix.</p>
+
+<table>
+<thead><tr><th>Function</th><th>Signature</th><th>Domain / error</th></tr></thead>
+<tbody>
+<tr><td><code>FR_log2</code></td><td><code>s32 FR_log2(s32 x, s32 r)</code></td><td>x &gt; 0. Returns <code>FR_DOMAIN_ERROR</code> for x &le; 0.</td></tr>
+<tr><td><code>FR_ln</code></td><td><code>s32 FR_ln(s32 x, s32 r)</code></td><td>Natural log.</td></tr>
+<tr><td><code>FR_log10</code></td><td><code>s32 FR_log10(s32 x, s32 r)</code></td><td>Common log.</td></tr>
+<tr><td><code>FR_pow2</code></td><td><code>s32 FR_pow2(s32 x, s32 r)</code></td><td>Saturates for x &ge; 30 at radix 16.</td></tr>
+<tr><td><code>FR_exp</code></td><td><code>s32 FR_exp(s32 x, s32 r)</code></td><td>Saturates similarly.</td></tr>
+<tr><td><code>FR_pow10</code></td><td><code>s32 FR_pow10(s32 x, s32 r)</code></td><td>Saturates around x &ge; 9 at radix 16.</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>Roots</h2>
+
+<table>
+<thead><tr><th>Function</th><th>Signature</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>FR_sqrt</code></td><td><code>s32 FR_sqrt(s32 x, s32 r)</code></td><td>Newton&rsquo;s method with integer seed. Returns <code>FR_DOMAIN_ERROR</code> for x &lt; 0. Worst-case error &plusmn;1 LSB.</td></tr>
+<tr><td><code>FR_hypot</code></td><td><code>s32 FR_hypot(s32 x, s32 y, s32 r)</code></td><td>Overflow-safe magnitude. Uses a scale factor to keep the intermediate sum of squares in 32-bit range.</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>Wave generators</h2>
+
+<p>All wave generators take a phase as <code>u16</code> BAM and return
+a bipolar amplitude in <code>[&minus;FR_WAVE_PEAK, +FR_WAVE_PEAK]</code>.
+They are pure functions: no internal state. Drive them from a phase
+accumulator in your own code.</p>
+
+<table>
+<thead><tr><th>Function</th><th>Signature</th><th>Shape</th></tr></thead>
+<tbody>
+<tr><td><code>fr_wave_sqr</code></td><td><code>s16 fr_wave_sqr(u16 phase)</code></td><td>50% square.</td></tr>
+<tr><td><code>fr_wave_pwm</code></td><td><code>s16 fr_wave_pwm(u16 phase, u16 duty)</code></td><td>Variable-duty square. <code>duty</code> is a <code>u16</code> threshold (32768 = 50%).</td></tr>
+<tr><td><code>fr_wave_tri</code></td><td><code>s16 fr_wave_tri(u16 phase)</code></td><td>Triangle.</td></tr>
+<tr><td><code>fr_wave_saw</code></td><td><code>s16 fr_wave_saw(u16 phase)</code></td><td>Ramp saw (ascending).</td></tr>
+<tr><td><code>fr_wave_tri_morph</code></td><td><code>s16 fr_wave_tri_morph(u16 phase, u16 sym)</code></td><td>Triangle with adjustable peak position. <code>sym</code> is the BAM position of the peak.</td></tr>
+<tr><td><code>fr_wave_noise</code></td><td><code>s16 fr_wave_noise(u32 *state)</code></td><td>Xorshift-based white noise. Caller owns the 32-bit state.</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>ADSR envelope</h2>
+
+<p>The envelope generator is a 4-state machine:
+<em>Attack &rarr; Decay &rarr; Sustain &rarr; Release</em>. It is
+sample-rate agnostic &mdash; times are expressed in samples, not
+seconds.</p>
+
+<table>
+<thead><tr><th>Function</th><th>Signature</th><th>Notes</th></tr></thead>
+<tbody>
+<tr><td><code>fr_adsr_init</code></td><td><code>void fr_adsr_init(fr_adsr_t *env, u32 a, u32 d, s16 s, u32 r)</code></td><td>Set attack/decay/release times (in samples) and sustain level (bipolar amplitude).</td></tr>
+<tr><td><code>fr_adsr_trigger</code></td><td><code>void fr_adsr_trigger(fr_adsr_t *env)</code></td><td>Note-on: moves state to Attack.</td></tr>
+<tr><td><code>fr_adsr_release</code></td><td><code>void fr_adsr_release(fr_adsr_t *env)</code></td><td>Note-off: moves state to Release from wherever it is.</td></tr>
+<tr><td><code>fr_adsr_step</code></td><td><code>s16 fr_adsr_step(fr_adsr_t *env)</code></td><td>Advance one sample. Returns the current amplitude.</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>2D transforms (<code>FR_math_2D.h</code>)</h2>
+
+<p><code>FR_Matrix2D_CP</code> is a C++ class wrapping a 3&times;3
+<code>s32</code> matrix at a configurable radix. It covers the
+standard 2D graphics operations. The class uses no dynamic
+allocation &mdash; all state is inline.</p>
+
+<table>
+<thead><tr><th>Method</th><th>Effect</th></tr></thead>
+<tbody>
+<tr><td><code>setidentity()</code></td><td>Load the identity matrix.</td></tr>
+<tr><td><code>setrotate(s16 deg)</code></td><td>Replace with a rotation matrix (integer degrees).</td></tr>
+<tr><td><code>setscale(s32 sx, s32 sy)</code></td><td>Replace with a scale matrix.</td></tr>
+<tr><td><code>settranslate(s32 tx, s32 ty)</code></td><td>Replace with a translation matrix.</td></tr>
+<tr><td><code>mul(const FR_Matrix2D_CP &amp;o)</code></td><td>Right-multiply by <code>o</code>.</td></tr>
+<tr><td><code>add(const FR_Matrix2D_CP &amp;o)</code></td><td>Element-wise add.</td></tr>
+<tr><td><code>sub(const FR_Matrix2D_CP &amp;o)</code></td><td>Element-wise subtract.</td></tr>
+<tr><td><code>det()</code></td><td>Determinant.</td></tr>
+<tr><td><code>inv()</code></td><td>In-place invert. Returns <code>false</code> if the matrix is singular.</td></tr>
+<tr><td><code>XformPt(FR_2DPoint *p)</code></td><td>Apply the transform to a point in place.</td></tr>
+<tr><td><code>XformPtI(FR_2DPointI *p)</code></td><td>Same, but with integer-only points (faster, lossier).</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2>Formatted output</h2>
+
+<table>
+<thead><tr><th>Function</th><th>Signature</th></tr></thead>
+<tbody>
+<tr><td><code>FR_printNumD</code></td><td>Pretty-print an <code>s32</code> as signed decimal.</td></tr>
+<tr><td><code>FR_printNumF</code></td><td>Pretty-print an <code>s32</code> as fixed-point at a given radix (e.g. &ldquo;3.14159&rdquo;).</td></tr>
+<tr><td><code>FR_printNumH</code></td><td>Pretty-print an <code>s32</code> as hex.</td></tr>
+</tbody>
+</table>
+
+<p>All three take a user-supplied <code>putc</code> callback so you
+can direct output at a UART, an in-memory buffer, or
+<code>stdout</code> without pulling in <code>printf</code>.</p>
+
+<hr>
+
+<h2>See also</h2>
+
+<ul>
+  <li><a href="fixed-point-primer.html">Fixed-Point Primer</a>
+      &mdash; what radixes are and how to pick one.</li>
+  <li><a href="examples.html">Examples</a> &mdash; runnable snippets.</li>
+  <li><a href="https://github.com/deftio/fr_math/blob/master/dev/fr_math_precision.md">dev/fr_math_precision.md</a>
+      &mdash; numerical specification with bit-level error bounds.</li>
+</ul>
+
+  </div>
+</main>
+
+<footer id="site-footer"></footer>
+
+<script src="../assets/site.js"></script>
+</body>
+</html>

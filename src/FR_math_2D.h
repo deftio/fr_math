@@ -81,13 +81,13 @@ extern "C"
 		FR_Matrix2D_CPT(u16 nRadix = FR_MAT_DEFPREC) : radix(nRadix) { ID(); }; // constructor
 
 		// matrix operators
-		s32 det();									// compute determinant, result is in same precision as radix (not 2*radix)
-		FR_RESULT inv(FR_Matrix2D_CPT *nInv);		// compute matrix inverse and put in nInv
-		FR_RESULT inv();							// compute matrix inverse of this
-		FR_RESULT add(const FR_Matrix2D_CPT *pAdd); // matrix this = this+pAdd;
-		FR_RESULT sub(const FR_Matrix2D_CPT *pSub); // matrix this = this-pSub;
-		FR_RESULT setrotate(s16 deg);				// set upr left 2x2 to rot matrix
-		FR_RESULT setrotate(s16 deg, u16 radix);	// set upr left 2x2 to rot matrix
+		s32 det();								// compute determinant, result is in same precision as radix (not 2*radix)
+		bool inv(FR_Matrix2D_CPT *nInv);		// inverse into nInv; returns false if singular or aliased
+		bool inv();								// inverse of this in place; returns false if singular
+		void add(const FR_Matrix2D_CPT *pAdd);	// matrix this = this+pAdd;
+		void sub(const FR_Matrix2D_CPT *pSub);	// matrix this = this-pSub;
+		void setrotate(s16 deg);				// set upr left 2x2 to rot matrix
+		void setrotate(s16 deg, u16 radix);		// set upr left 2x2 to rot matrix
 
 		FR_Matrix2D_CPT &operator=(const FR_Matrix2D_CPT &nM);
 		FR_Matrix2D_CPT &operator+=(const FR_Matrix2D_CPT &nM);

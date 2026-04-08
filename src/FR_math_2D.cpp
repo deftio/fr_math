@@ -66,15 +66,15 @@ s32 FR_Matrix2D_CPT ::det()
 // when once each time the user changes the zoom or rotation etc.  This fn is not called
 // in the rendering loop
 
-FR_RESULT FR_Matrix2D_CPT ::inv(FR_Matrix2D_CPT *npI)
+bool FR_Matrix2D_CPT ::inv(FR_Matrix2D_CPT *npI)
 {
 	s32 d = det();
 	if (0 == d)
-		return FR_E_UNABLE;
+		return false;
 
 	if (npI == this)
 	{
-		return FR_E_BADARGUMENTS;
+		return false;
 	}
 	npI->m00 = (m11 << radix) / d;
 	npI->m01 = ((-m01) << radix) / d;
@@ -87,45 +87,42 @@ FR_RESULT FR_Matrix2D_CPT ::inv(FR_Matrix2D_CPT *npI)
 	npI->fast = npI->checkfast();
 	npI->radix = radix;
 
-	return FR_S_OK;
+	return true;
 }
 //===============================================================
 // compute inverse of self, note some matrices not invertable
-FR_RESULT FR_Matrix2D_CPT ::inv()
+bool FR_Matrix2D_CPT ::inv()
 {
-	FR_RESULT res = FR_S_OK;
 	FR_Matrix2D_CPT n;
-	inv(&n);
+	if (!inv(&n))
+		return false;
 	*this = n;
-	return res;
+	return true;
 }
 //================================================================
 // set up an integer rotation in degrees.
-FR_RESULT FR_Matrix2D_CPT ::setrotate(s16 deg)
+void FR_Matrix2D_CPT ::setrotate(s16 deg)
 {
-	m00 = (FR_CosI(deg)) >> (FR_TRIG_PREC - radix);	 // the 15 comes from Cos/Sin precision
-	m01 = -(FR_SinI(deg)) >> (FR_TRIG_PREC - radix); // see those fns for more details
+	m00 = (FR_CosI(deg)) >> (FR_TRIG_PREC - radix);
+	m01 = -(FR_SinI(deg)) >> (FR_TRIG_PREC - radix);
 	m10 = (FR_SinI(deg)) >> (FR_TRIG_PREC - radix);
 	m11 = (FR_CosI(deg)) >> (FR_TRIG_PREC - radix);
 	checkfast();
-	return FR_S_OK;
-	;
 }
 //================================================================
 // set up a rotation with fixed radix input precision
-FR_RESULT FR_Matrix2D_CPT ::setrotate(s16 deg, u16 deg_radix)
+void FR_Matrix2D_CPT ::setrotate(s16 deg, u16 deg_radix)
 {
-	m00 = (FR_Cos(deg, deg_radix)) >> (FR_TRIG_PREC - radix);  // the 15 comes from Cos/Sin precision
-	m01 = -(FR_Sin(deg, deg_radix)) >> (FR_TRIG_PREC - radix); // see those fns for more details
+	m00 = (FR_Cos(deg, deg_radix)) >> (FR_TRIG_PREC - radix);
+	m01 = -(FR_Sin(deg, deg_radix)) >> (FR_TRIG_PREC - radix);
 	m10 = (FR_Sin(deg, deg_radix)) >> (FR_TRIG_PREC - radix);
 	m11 = (FR_Cos(deg, deg_radix)) >> (FR_TRIG_PREC - radix);
 	checkfast();
-	return FR_S_OK;
 }
 //================================================================
 // Add two matrices together
 
-FR_RESULT FR_Matrix2D_CPT ::add(const FR_Matrix2D_CPT *pAdd)
+void FR_Matrix2D_CPT ::add(const FR_Matrix2D_CPT *pAdd)
 {
 	m00 = FR_FixAddSat(m00, pAdd->m00);
 	m01 = FR_FixAddSat(m01, pAdd->m01);
@@ -134,12 +131,11 @@ FR_RESULT FR_Matrix2D_CPT ::add(const FR_Matrix2D_CPT *pAdd)
 	m11 = FR_FixAddSat(m11, pAdd->m11);
 	m12 = FR_FixAddSat(m12, pAdd->m12);
 	checkfast();
-	return FR_S_OK;
 }
 //=======================================================
 // Sub two matrices this -= pSub
 
-FR_RESULT FR_Matrix2D_CPT ::sub(const FR_Matrix2D_CPT *pSub)
+void FR_Matrix2D_CPT ::sub(const FR_Matrix2D_CPT *pSub)
 {
 	m00 = FR_FixAddSat(m00, -(pSub->m00));
 	m01 = FR_FixAddSat(m01, -(pSub->m01));
@@ -148,7 +144,6 @@ FR_RESULT FR_Matrix2D_CPT ::sub(const FR_Matrix2D_CPT *pSub)
 	m11 = FR_FixAddSat(m11, -(pSub->m11));
 	m12 = FR_FixAddSat(m12, -(pSub->m12));
 	checkfast();
-	return FR_S_OK;
 }
 
 //=======================================================

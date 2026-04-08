@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Building &amp; Testing — FR_Math</title>
+  <meta name="description" content="Build, test, cross-compile, and release FR_Math. Makefile targets, scripts, coverage, and release validation.">
+  <link rel="stylesheet" href="../assets/main.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<main class="page-content">
+  <div class="wrapper">
+
+<h1>Building &amp; Testing</h1>
+
+<p>FR_Math has no dependencies beyond a C99 compiler and
+<code>&lt;stdint.h&gt;</code>. The provided build system wraps
+<code>make</code> with a few convenience scripts.</p>
+
+<hr>
+
+<h2>Requirements</h2>
+
+<ul>
+  <li>A C99 compiler (<code>gcc</code>, <code>clang</code>, MSVC, IAR,
+      Keil, sdcc, AVR-gcc, MSP430-gcc, RISC-V gcc).</li>
+  <li>A C++98 compiler if you want the 2D transform module
+      (<code>FR_math_2D.cpp</code>).</li>
+  <li><code>make</code> (GNU make recommended).</li>
+  <li>Optional: <code>lcov</code> / <code>gcov</code> for coverage
+      reports.</li>
+</ul>
+
+<p>There is no Autotools, no CMake, no Ninja, no package-manager
+integration. The library is small enough that the Makefile fits on
+one screen.</p>
+
+<hr>
+
+<h2>Makefile targets</h2>
+
+<table>
+<thead><tr><th>Target</th><th>What it builds</th></tr></thead>
+<tbody>
+<tr><td><code>make</code> (default)</td><td>Library + examples.</td></tr>
+<tr><td><code>make lib</code></td><td>Library only (<code>build/libfrmath.a</code>).</td></tr>
+<tr><td><code>make examples</code></td><td>Example programs into <code>build/</code>.</td></tr>
+<tr><td><code>make test</code></td><td>Build every test binary and run the full suite.</td></tr>
+<tr><td><code>make coverage</code></td><td>Build with <code>-ftest-coverage -fprofile-arcs</code>, run tests, emit lcov report.</td></tr>
+<tr><td><code>make clean</code></td><td>Remove <code>build/</code>.</td></tr>
+<tr><td><code>make cleanall</code></td><td>Remove <code>build/</code> plus editor backups.</td></tr>
+</tbody>
+</table>
+
+<p>All builds land in <code>build/</code>. Nothing is written inside
+<code>src/</code>.</p>
+
+<hr>
+
+<h2>Convenience scripts</h2>
+
+<h3><code>scripts/build.sh</code></h3>
+
+<p>One-shot clean rebuild.</p>
+
+<pre><code class="language-bash">./scripts/build.sh              # wipe build/, build lib + examples + tests, run tests
+./scripts/build.sh --no-test    # skip running the test suite
+./scripts/build.sh --lib        # library only</code></pre>
+
+<p>Returns non-zero on any failure. Suitable for use from a watch
+script or a pre-commit hook.</p>
+
+<h3><code>scripts/coverage_report.sh</code></h3>
+
+<p>Full gcov/lcov pipeline.</p>
+
+<pre><code class="language-bash">./scripts/coverage_report.sh</code></pre>
+
+<p>Cleans <code>build/</code>, instruments every source, runs every
+test binary (including <code>test_tdd</code> for the characterization
+suite), and emits an HTML report under
+<code>build/coverage/index.html</code>. Also prints per-file line
+coverage to the console so you can copy the numbers into badge
+updates or release notes.</p>
+
+<h3><code>scripts/make_release.sh</code></h3>
+
+<p>The release-candidate validator. Run it before opening a merge
+request to <code>master</code>.</p>
+
+<pre><code class="language-bash">./scripts/make_release.sh</code></pre>
+
+<p>Nine steps, each gated: if any step fails, the script stops and
+tells you what to fix.</p>
+
+<ol>
+  <li>Clean <code>build/</code></li>
+  <li>Strict compile: <code>-Wall -Wextra -Werror -Wshadow
+      -Wformat=2</code></li>
+  <li>Build library + examples</li>
+  <li>Full test suite</li>
+  <li>Coverage report</li>
+  <li>Update README badges (coverage % and test count)</li>
+  <li>Size report (<code>size build/libfrmath.a</code>)</li>
+  <li>Cross-compile sanity check (if a cross compiler is on
+      <code>PATH</code>)</li>
+  <li>Working-tree status (warns if there are uncommitted files other
+      than the README badge update itself)</li>
+</ol>
+
+<p>At the end, the script prints a squash-merge checklist you can
+paste into a PR description. It does <em>not</em> push, tag, or merge
+on its own.</p>
+
+<hr>
+
+<h2>The test suite</h2>
+
+<p>Tests live under <code>tests/</code> and are split into six
+binaries to keep compile times low:</p>
+
+<table>
+<thead><tr><th>Binary</th><th>What it checks</th></tr></thead>
+<tbody>
+<tr><td><code>test_basic</code></td><td>Radix conversions, <code>FR_ADD</code>, <code>FR_MUL</code>, rounding.</td></tr>
+<tr><td><code>test_trig</code></td><td>Integer-degree trig (<code>FR_Sin</code> et al.).</td></tr>
+<tr><td><code>test_trig_radians</code></td><td>Radian / BAM trig and the v2 <code>fr_sin</code> API.</td></tr>
+<tr><td><code>test_log_exp</code></td><td>Log base 2 / ln / log10 and their inverses.</td></tr>
+<tr><td><code>test_2d</code></td><td>2D transforms, determinants, inverses.</td></tr>
+<tr><td><code>test_full_coverage</code></td><td>Dark-corner cases: overflow sentinels, edge radixes, round-trips.</td></tr>
+<tr><td><code>test_tdd</code></td><td>Characterisation tests pinned to bit-exact reference values.</td></tr>
+</tbody>
+</table>
+
+<p>As of v2.0.0 the suite contains <strong>40 tests</strong> across
+those binaries and covers <strong>97%</strong> of the library source.
+Every public symbol is exercised at least once.</p>
+
+<h3>Running a single binary</h3>
+
+<pre><code class="language-bash">make build/test_basic
+./build/test_basic
+
+# or all of them at once
+make test</code></pre>
+
+<h3>Running the TDD pins after a change</h3>
+
+<p><code>test_tdd.cpp</code> is a characterisation suite. It records
+exact bit patterns for a sample of inputs and fails loudly if those
+patterns drift. Any change that modifies the numerical behaviour of
+the library will break this suite &mdash; that&rsquo;s the point.</p>
+
+<p>If you <em>intended</em> to change the numerical behaviour (e.g.
+you improved a polynomial approximation), update the pinned values in
+<code>tests/test_tdd.cpp</code> and note the change in
+<code>release_notes.md</code> and
+<code>dev/fr_math_precision.md</code>.</p>
+
+<hr>
+
+<h2>Cross-compilation</h2>
+
+<p>The library has no CPU-specific code. It compiles and runs
+identically on all of the targets listed below. The only requirement
+is an integer pipeline and the standard <code>&lt;stdint.h&gt;</code>
+header. You do <em>not</em> need a floating-point unit, and you do
+<em>not</em> need <code>libm</code>.</p>
+
+<table>
+<thead><tr><th>Target</th><th>Toolchain</th><th>Tested?</th></tr></thead>
+<tbody>
+<tr><td>x86 / x86_64 Linux</td><td><code>gcc</code>, <code>clang</code></td><td>CI.</td></tr>
+<tr><td>macOS arm64 / x86_64</td><td>Apple <code>clang</code></td><td>CI.</td></tr>
+<tr><td>Windows x86_64</td><td>MSVC, <code>clang-cl</code>, MinGW</td><td>Manual.</td></tr>
+<tr><td>ARM Cortex-M0/M3/M4/M7</td><td><code>arm-none-eabi-gcc</code>, IAR, Keil</td><td>Manual.</td></tr>
+<tr><td>RISC-V rv32imc</td><td><code>riscv32-unknown-elf-gcc</code></td><td>Manual.</td></tr>
+<tr><td>AVR (ATmega328P, etc.)</td><td><code>avr-gcc</code></td><td>Manual.</td></tr>
+<tr><td>MSP430</td><td><code>msp430-elf-gcc</code></td><td>Manual.</td></tr>
+<tr><td>8051</td><td><code>sdcc</code></td><td>Manual.</td></tr>
+</tbody>
+</table>
+
+<h3>Example: RISC-V</h3>
+
+<pre><code class="language-bash">riscv32-unknown-elf-gcc -Os -ffunction-sections -fdata-sections \
+  -march=rv32imc -mabi=ilp32 \
+  -Isrc -c src/FR_math.c -o FR_math.o
+
+riscv32-unknown-elf-size FR_math.o</code></pre>
+
+<h3>Example: AVR</h3>
+
+<pre><code class="language-bash">avr-gcc -Os -mmcu=atmega328p \
+  -Isrc -c src/FR_math.c -o FR_math.avr.o
+
+avr-size FR_math.avr.o</code></pre>
+
+<p>Expect the whole integer-only library to land around a few
+kilobytes of flash. The wave, trig, and log modules can be compiled
+in independently if you want to strip further.</p>
+
+<hr>
+
+<h2>CI</h2>
+
+<p>GitHub Actions runs on every push and every PR. The workflow file
+is <code>.github/workflows/ci.yml</code>. It builds with strict
+warnings, runs <code>make test</code>, and caches nothing &mdash;
+each run starts from a clean checkout.</p>
+
+<p>The CI status badge on the README links directly to the latest
+run.</p>
+
+<hr>
+
+<h2>Release checklist</h2>
+
+<p>Before tagging a release:</p>
+
+<ol>
+  <li>Update <code>release_notes.md</code> with what changed.</li>
+  <li>Run <code>./scripts/make_release.sh</code> and fix any failures.</li>
+  <li>Commit the README badge update (if the script produced one).</li>
+  <li>Squash-merge the branch to <code>master</code> using the
+      message template the script prints.</li>
+  <li>Tag <code>master</code> with the version and push the tag.</li>
+  <li>Draft a GitHub release pointing at the tag, copy-pasting the
+      top section of <code>release_notes.md</code>.</li>
+</ol>
+
+<p>See <a href="../releases.html">Releases</a> for the list of tagged
+versions and their highlights.</p>
+
+  </div>
+</main>
+
+<footer id="site-footer"></footer>
+
+<script src="../assets/site.js"></script>
+</body>
+</html>

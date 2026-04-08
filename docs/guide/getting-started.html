@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Getting Started — FR_Math</title>
+  <meta name="description" content="Clone, build, and run your first FR_Math program in under five minutes.">
+  <link rel="stylesheet" href="../assets/main.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<main class="page-content">
+  <div class="wrapper">
+
+<h1>Getting Started</h1>
+
+<p>This page takes you from <code>git clone</code> to a running program
+in under five minutes. If you want to understand <em>why</em>
+fixed-point math works the way it does first, read the
+<a href="fixed-point-primer.html">Fixed-Point Primer</a> and come
+back.</p>
+
+<hr>
+
+<h2>Install</h2>
+
+<p>FR_Math is a handful of C and C++ files. There is no package
+manager integration and no install step. Either:</p>
+
+<ul>
+  <li>Copy <code>src/FR_math.c</code>, <code>src/FR_math.h</code>,
+      <code>src/FR_defs.h</code> (and optionally
+      <code>src/FR_math_2D.cpp</code>, <code>src/FR_math_2D.h</code>,
+      and <code>src/FR_trig_table.h</code>) into your project, <strong>or</strong></li>
+  <li>Add FR_Math as a git submodule and point your build system at
+      <code>src/</code>.</li>
+</ul>
+
+<p>There are no external dependencies beyond <code>&lt;stdint.h&gt;</code>,
+which every C99-or-newer toolchain ships.</p>
+
+<pre><code class="language-bash">git clone https://github.com/deftio/fr_math.git
+cd fr_math
+./scripts/build.sh</code></pre>
+
+<p><code>build.sh</code> wipes <code>build/</code>, rebuilds the
+library, examples, and tests, and runs the full test suite. On success
+you will see 40 tests pass across six test binaries.</p>
+
+<hr>
+
+<h2>Your first program</h2>
+
+<p>Save this as <code>hello_fr.c</code>:</p>
+
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include "FR_defs.h"
+#include "FR_math.h"
+
+int main(void)
+{
+    /* We want to represent 3.14159 in a signed 32-bit integer
+       with 16 fractional bits (s15.16 format). */
+    const int radix = 16;
+
+    /* I2FR(integer, radix) converts a whole-number int into its
+       fixed-point bit pattern at the requested radix. */
+    s32 pi_int  = I2FR(3, radix);                   /* = 3 &lt;&lt; 16 */
+    s32 pi_frac = (s32)(0.14159 * (1 &lt;&lt; radix));   /* build-time float */
+
+    s32 pi_fixed = pi_int + pi_frac;
+    printf("pi as s15.16 = 0x%08x = %d.%06d\n",
+           pi_fixed,
+           FR_FR2I(pi_fixed, radix),                /* integer part */
+           FR_FR2I((pi_fixed &amp; ((1 &lt;&lt; radix) - 1)) * 1000000, radix));
+
+    /* Multiply pi by 2 at the same radix using FR_FixMuls. */
+    s32 two_pi = FR_FixMuls(pi_fixed, I2FR(2, radix), radix);
+    printf("2*pi ~= %d.%06d\n",
+           FR_FR2I(two_pi, radix),
+           FR_FR2I((two_pi &amp; ((1 &lt;&lt; radix) - 1)) * 1000000, radix));
+
+    return 0;
+}</code></pre>
+
+<p>Compile and run:</p>
+
+<pre><code class="language-bash">cc -Isrc hello_fr.c src/FR_math.c -lm -o hello_fr
+./hello_fr</code></pre>
+
+<p>Expected output:</p>
+
+<pre><code>pi as s15.16 = 0x0003243f = 3.141586
+2*pi ~= 6.283172</code></pre>
+
+<p>The last decimal digit wobbles because we only kept 16 bits of
+fractional precision &mdash; that&rsquo;s roughly 5 significant decimal
+digits, which matches what we see. This is the core trade of
+fixed-point: <strong>you pick the precision at build time</strong>,
+and you live with it.</p>
+
+<hr>
+
+<h2>Using the 2D transform module</h2>
+
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include "FR_math.h"
+#include "FR_math_2D.h"
+
+int main(void)
+{
+    FR_Matrix2D_CP M;
+    M.setidentity();        /* identity at the default radix */
+    M.setrotate(45);        /* rotate 45 degrees */
+    M.settranslate(I2FR(100, 16), I2FR(50, 16));
+
+    FR_2DPoint p = { I2FR(10, 16), I2FR(0, 16) };
+    M.XformPt(&amp;p);          /* p becomes ~(107, 57) */
+
+    printf("x=%d y=%d\n",
+           FR_FR2I(p.x, 16),
+           FR_FR2I(p.y, 16));
+    return 0;
+}</code></pre>
+
+<p>See <a href="examples.html">Examples</a> for audio, wave,
+envelope, and log/exp walkthroughs.</p>
+
+<hr>
+
+<h2>Running the test suite</h2>
+
+<pre><code class="language-bash">make test           # build + run every test suite
+make coverage       # coverage report (requires gcov)</code></pre>
+
+<p>As of v2.0.0, FR_Math ships with 40 passing tests and 97% line
+coverage across the library sources.</p>
+
+<hr>
+
+<h2>Next steps</h2>
+
+<ul>
+  <li><strong><a href="fixed-point-primer.html">Fixed-Point Primer</a></strong>
+      &mdash; how the radix notation and the library&rsquo;s naming
+      conventions work.</li>
+  <li><strong><a href="api-reference.html">API Reference</a></strong>
+      &mdash; per-symbol inputs, outputs, precision, and saturation
+      behaviour.</li>
+  <li><strong><a href="examples.html">Examples</a></strong> &mdash;
+      runnable snippets for common tasks.</li>
+  <li><strong><a href="building.html">Building &amp; Testing</a></strong>
+      &mdash; build system, cross-compilation, coverage, release
+      validation.</li>
+</ul>
+
+  </div>
+</main>
+
+<footer id="site-footer"></footer>
+
+<script src="../assets/site.js"></script>
+</body>
+</html>

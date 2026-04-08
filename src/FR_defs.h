@@ -1,9 +1,8 @@
 /**
  *	@file FR_Defs.h - type definitions used in Fixed-Radix math lib
  *
- *	@copy Copyright (C) <2001-2012>  <M. A. Chatterjee>
+ *	@copy Copyright (C) <2001-2026>  <M. A. Chatterjee>
  *  @author M A Chatterjee <deftio [at] deftio [dot] com>
- *	@version 1.0.3 M. A. Chatterjee, cleaned up naming
  *
  *	This software is provided 'as-is', without any express or implied
  *	warranty. In no event will the authors be held liable for any damages
@@ -30,19 +29,12 @@
 #define __FR_Platform_Defs_H__
 
 /*
- * 64-bit-safe fixed-width typedefs.
+ * Fixed-width integer typedefs. C99 stdint.h is mandatory in v2.
  *
- * Historical note: pre-2.0 builds used `signed long` / `unsigned long` for
- * the 32-bit types, which silently became 64-bit on LP64 systems (Linux x64,
- * macOS, ARM64). Math that depended on 32-bit overflow / saturation produced
- * wrong answers on those hosts. v2 uses <stdint.h> which is exact-width on
- * every conforming C99+ toolchain, including embedded targets.
- *
- * If you are on a pre-C99 toolchain that lacks <stdint.h>, define
- * FR_NO_STDINT before including this header and provide the typedefs
- * yourself.
+ * Any C99-or-newer toolchain (gcc, clang, MSVC, IAR, Keil, sdcc, MSP430-gcc,
+ * AVR-gcc, RISC-V toolchains, ARM toolchains) supports <stdint.h>. If you
+ * are on a pre-C99 toolchain, FR_Math 1.0.x is the version for you.
  */
-#ifndef FR_NO_STDINT
 #include <stdint.h>
 typedef uint8_t  u8;
 typedef int8_t   s8;
@@ -50,46 +42,34 @@ typedef uint16_t u16;
 typedef int16_t  s16;
 typedef uint32_t u32;
 typedef int32_t  s32;
-#else
-typedef unsigned char  u8;
-typedef signed char    s8;
-typedef unsigned short u16;
-typedef signed short   s16;
-typedef unsigned long  u32;
-typedef signed long    s32;
-#endif
 
 typedef short FR_bool;
-typedef u16 FR_RESULT;
 
 #define FR_SWAP_BYTES(x) (((x >> 8) & 0xff) | ((x << 8) & 0xff00))
 
-// Return codes
+/*=======================================================
+ * Sentinel values for math errors.
+ *
+ * Functions that can hit a domain error (sqrt of negative, log of <=0, etc.)
+ * return one of these sentinels rather than raising an error code. Callers
+ * that care can check `result == FR_DOMAIN_ERROR` before using the value.
+ *
+ * FR_OVERFLOW_POS and FR_OVERFLOW_NEG are the saturating-overflow values
+ * returned by FR_FixMulSat / FR_FixAddSat etc. They are deliberately the
+ * extremes of s32 so that they compare correctly under signed comparison.
+ *
+ * Note: FR_DOMAIN_ERROR equals INT32_MIN (the same value as FR_OVERFLOW_NEG
+ * would naturally be), so a single check `result <= FR_OVERFLOW_NEG` cannot
+ * distinguish "saturating-negative-overflow" from "domain error". In
+ * practice the two never occur in the same call: saturating ops never go
+ * to a domain-error state, and domain-error ops never saturate. The names
+ * exist to make caller intent self-documenting.
+ */
+#define FR_DOMAIN_ERROR  ((s32)0x80000000) /* INT32_MIN: e.g. sqrt(<0)        */
+#define FR_OVERFLOW_POS  ((s32)0x7fffffff) /* INT32_MAX: e.g. FR_FixMulSat +  */
+#define FR_OVERFLOW_NEG  ((s32)0x80000000) /* INT32_MIN: e.g. FR_FixMulSat -  */
 
-#ifdef WIN32
-#pragma warning(disable : 4001 4514)
-#endif
-
-// generic error codes
-#define FR_S_OK (0x0000)
-
-#define FR_E_FAIL (0x8000)
-#define FR_E_BADARGUMENTS (0x8001)
-#define FR_E_NULLPOINTER (0x8002)
-#define FR_E_INDEXOUTOFRANGE (0x8003)
-#define FR_E_BUFFERFULL (0x8004)
-#define FR_E_NOTIMPLEMENTED (0x8005)
-#define FR_E_MEMALLOCFAILED (0x8006)
-#define FR_E_UNKNOWNOBJECT (0x8007)
-
-// math specific
-#define FR_E_UNABLE (0x8100)
-
-#define FR_FAILED(x) (x & 0x8000)
-#define FR_SUCCEEDED(x) (!(x & 0x8000))
-
-/*******************************/
 #define FR_FALSE (0)
 #define FR_TRUE (!FR_FALSE)
 
-#endif // __FR_Platform_Defs_H__
+#endif /* __FR_Platform_Defs_H__ */

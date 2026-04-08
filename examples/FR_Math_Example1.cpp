@@ -251,7 +251,7 @@ int putSingleChar(char x)
 // main program for testing the functions
 int main(int argc, char *argv[])
 {
-	int ret_val = FR_S_OK;
+	int ret_val = 0;
 	int i;
 	long index;
 	FR_TEST_ERR err;

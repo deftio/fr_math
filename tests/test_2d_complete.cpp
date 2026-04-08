@@ -199,19 +199,19 @@ int test_det_inv() {
     det = mat.det();
     
     // Test inverse
-    FR_RESULT res = mat.inv(&inv_mat);
-    
+    bool ok = mat.inv(&inv_mat);
+
     // Test in-place inverse
     mat.set(I2FR(4, 8), 0, I2FR(1, 8),
             0, I2FR(4, 8), I2FR(2, 8), 8);
-    res = mat.inv();
-    
+    ok = mat.inv();
+
     // Test singular matrix (should fail)
     mat.set(0, 0, 0, 0, 0, 0, 8);
-    res = mat.inv(&inv_mat);
-    
+    ok = mat.inv(&inv_mat);
+
     (void)det;
-    (void)res;
+    (void)ok;
     return TEST_PASS;
 }
 

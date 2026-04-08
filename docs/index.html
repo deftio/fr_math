@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FR_Math — fixed-point math library for embedded C</title>
+  <meta name="description" content="FR_Math is a C language fixed-point math library for embedded systems: trig, log, exp, 2D transforms, waves, ADSR, no floating point required.">
+  <link rel="stylesheet" href="assets/main.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<main class="page-content">
+  <div class="wrapper">
+
+<h1>FR_Math</h1>
+
+<p><strong>A C language fixed-point math library for embedded systems.</strong></p>
+
+<p>FR_Math gives you trig, log/exp, 2D transforms, square root, and a
+small DSP toolkit (wave generators, ADSR envelope) that all run on
+plain integer registers. No floating-point unit required, no
+floating-point library required, no runtime allocation. It has been
+shipped on processors that predate MMX and is still maintained today.</p>
+
+<ul>
+  <li>Works on any C99 toolchain — gcc, clang, MSVC, IAR, Keil, sdcc,
+      AVR-gcc, MSP430-gcc, RISC-V.</li>
+  <li>Zero dependencies beyond <code>&lt;stdint.h&gt;</code>.</li>
+  <li>Parameterised radix: every function takes the binary point as an
+      argument, so you choose how many fractional bits you need per
+      call.</li>
+  <li>Deterministic, bounded error — every public symbol has a
+      documented worst case in the
+      <a href="guide/api-reference.html">API reference</a>.</li>
+</ul>
+
+<hr>
+
+<h2>What&rsquo;s in the box</h2>
+
+<table>
+<thead><tr><th>Area</th><th>Functions</th></tr></thead>
+<tbody>
+<tr><td>Arithmetic</td><td><code>FR_ADD</code>, <code>FR_SUB</code>, <code>FR_MUL</code>, <code>FR_FixMuls</code>, <code>FR_FixMulSat</code>, <code>FR_CHRDX</code></td></tr>
+<tr><td>Trig (integer deg)</td><td><code>FR_Sin</code>, <code>FR_Cos</code>, <code>FR_Tan</code>, <code>FR_SinI</code>, <code>FR_CosI</code>, <code>FR_TanI</code></td></tr>
+<tr><td>Trig (radian/BAM)</td><td><code>fr_sin</code>, <code>fr_cos</code>, <code>fr_tan</code>, <code>fr_sin_bam</code>, <code>fr_cos_bam</code>, <code>fr_sin_deg</code>, <code>fr_cos_deg</code></td></tr>
+<tr><td>Inverse trig</td><td><code>FR_atan</code>, <code>FR_atan2</code>, <code>FR_asin</code>, <code>FR_acos</code></td></tr>
+<tr><td>Log / exp</td><td><code>FR_log2</code>, <code>FR_ln</code>, <code>FR_log10</code>, <code>FR_pow2</code>, <code>FR_exp</code>, <code>FR_pow10</code></td></tr>
+<tr><td>Roots</td><td><code>FR_sqrt</code>, <code>FR_hypot</code></td></tr>
+<tr><td>Wave generators</td><td><code>fr_wave_sqr</code>, <code>fr_wave_pwm</code>, <code>fr_wave_tri</code>, <code>fr_wave_saw</code>, <code>fr_wave_tri_morph</code>, <code>fr_wave_noise</code></td></tr>
+<tr><td>Envelope</td><td><code>fr_adsr_init</code>, <code>fr_adsr_trigger</code>, <code>fr_adsr_release</code>, <code>fr_adsr_step</code></td></tr>
+<tr><td>2D transforms</td><td><code>FR_Matrix2D_CP</code> (mul, add, sub, det, inv, setrotate, XformPt, XformPtI)</td></tr>
+<tr><td>Formatted output</td><td><code>FR_printNumD</code>, <code>FR_printNumF</code>, <code>FR_printNumH</code></td></tr>
+</tbody>
+</table>
+
+<p>Every function is covered by the
+<a href="https://github.com/deftio/fr_math/blob/master/tests/test_tdd.cpp">TDD
+characterization suite</a> in the repo.</p>
+
+<hr>
+
+<h2>Why fixed-point, in 2026?</h2>
+
+<p>Most application code today has an FPU and can use <code>float</code>
+freely. But there are still large, interesting corners where
+fixed-point pays off:</p>
+
+<ul>
+  <li><strong>8- and 16-bit MCUs</strong> (AVR, MSP430, 8051, sdcc) where the
+      FPU does not exist and even software float is too slow or too
+      large.</li>
+  <li><strong>Hot inner loops on any CPU</strong> where a
+      parameterised-radix integer multiply is faster and more
+      deterministic than a <code>float</code>. Think DSP taps, PID
+      loops, coordinate transforms inside a scanline renderer.</li>
+  <li><strong>Bit-exact reproducibility</strong> across compilers,
+      architectures, and hosts &mdash; something IEEE float does
+      <em>not</em> give you in the general case.</li>
+  <li><strong>ROM-tight builds</strong> where linking
+      <code>libm</code> or <code>libgcc_s</code> pulls in more code
+      than the whole application logic.</li>
+</ul>
+
+<p>FR_Math is engineered for these use cases. It does not try to be a
+generic <code>float</code> replacement.</p>
+
+<hr>
+
+<h2>Quick taste</h2>
+
+<pre><code class="language-c">#include "FR_defs.h"
+#include "FR_math.h"
+
+/* Compute 3.5 * 2.25 at radix 4 (s?.4 format). */
+s32 a = I2FR(3, 4) | (1 &lt;&lt; 3);   /* 3.5  = 0x38 */
+s32 b = I2FR(2, 4) | (1 &lt;&lt; 2);   /* 2.25 = 0x24 */
+s32 c = FR_MUL(a, 4, b, 4, 4);   /* c = 7.875, also at radix 4 */
+
+/* Rotate a point 30&deg; around the origin. */
+#include "FR_math_2D.h"
+FR_Matrix2D_CP R;
+R.setidentity();
+R.setrotate(30);                 /* 30 degrees */
+FR_2DPoint p = { I2FR(100, 8), I2FR(0, 8) };
+R.XformPt(&amp;p);                   /* p is now ~(86.6, 50.0) at radix 8 */</code></pre>
+
+<p>See <a href="guide/getting-started.html">Getting Started</a> for a
+complete walkthrough, or jump straight to the
+<a href="guide/fixed-point-primer.html">Fixed-Point Primer</a> if you
+want to understand <em>how</em> the radix notation works first.</p>
+
+<hr>
+
+<h2>History</h2>
+
+<p>FR_Math has been in service since <strong>2000</strong>, originally
+built for graphics transforms on 16&nbsp;MHz 68k Palm Pilots (it
+shipped inside Trumpetsoft&rsquo;s <em>Inkstorm</em>), then ported
+forward to ARM, x86, MIPS, RISC-V, and various 8/16-bit embedded
+targets. v2.0.0 is the first major revision with a full test suite,
+bit-exact numerical specification, and CI on every push.</p>
+
+<h2>License</h2>
+
+<p>BSD-2-Clause. Use it freely in open source or commercial projects.</p>
+
+  </div>
+</main>
+
+<footer id="site-footer"></footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>

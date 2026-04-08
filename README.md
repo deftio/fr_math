@@ -1,5 +1,9 @@
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-blue.svg)](https://opensource.org/licenses/BSD-2-Clause)
 [![CI](https://github.com/deftio/fr_math/actions/workflows/ci.yml/badge.svg)](https://github.com/deftio/fr_math/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/badge/coverage-97%25-brightgreen.svg)](#building-and-testing)
+[![Tests](https://img.shields.io/badge/tests-40%20passing-brightgreen.svg)](#building-and-testing)
+[![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://deftio.github.io/fr_math/)
+[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](release_notes.md)
 
 # FR_Math: A C Language Fixed-Point Math Library for Embedded Systems
  
@@ -23,6 +27,18 @@ A high-level list of operations includes:
 FR_Math allows the computation of fractional quantities with only integer registers but with an eye towards performance rather than just packing floating-point equivalents in integer registers. The implementations here were chosen to minimize the need for overflow tests and similar bounds checking.
 
 This library allows the programmer to choose the radix point (number of fractional bits) for all operations—so one can have 11.4 or 10.5 operations on the fly (where 11 and 10 are left of the radix point and 4 and 5 represent the number of fractional bits respectively). This is useful when using large quantities such as those that occur in frequency domain math operations like Fourier analysis.  All operations are performed in integer registers using pure C (with exports to C++).  Integer registers from 16 / 32 / 64 bit widths are supported but the focus is on 32 bit registers.
+
+## Documentation
+
+The full documentation site has a fixed-point primer, a getting-started
+walkthrough, the API reference, runnable examples, a build & test guide,
+and release notes.
+
+- **Online:** <https://deftio.github.io/fr_math/>
+- **Local:** [docs/index.html](docs/index.html) — plain static HTML/CSS/JS, no Jekyll, no Ruby, no build step. Open it directly in any browser.
+
+The primer below in this README is the short version; the docs site
+goes deeper.
 
 ## History
 I developed this several years ago for use in several embedded integer-only math projects, and this small, slightly cleaned-up version is made available for the public here. It worked very well on 16MHz 68k processors for Palm Pilots (and later ARM cores) where we needed many integer point transforms for graphics. This included things like font rendering where each letter's M-square needed to be computed and embedded graphics transforms. The Inkstorm application for PalmOS (originally by Trumpetsoft) used a version of this.
@@ -225,9 +241,12 @@ Feedback and bugs are welcome via GitHub issues.
 
 Licensed under BSD-2 License (see LICENSE.TXT included).
 This library can be used freely in open source or commercial projects.  
-(c) 2000-2025 Manjirnath (Manu) Chatterjee
+(c) 2000-2026 Manjirnath (Manu) Chatterjee
 
 ## Version
 
-Current version: 1.0.3
+Current version: 2.0.0 — see [release_notes.md](release_notes.md) for the
+v1 → v2 migration guide and the full list of numerical fixes and new
+functionality (radian-native trig, BAM macros, wave generators, ADSR,
+sqrt/hypot).
 

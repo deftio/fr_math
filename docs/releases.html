@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Releases — FR_Math</title>
+  <meta name="description" content="FR_Math release history: v2.0.0 precision rewrite and new waveforms, v1.0.3 test coverage, v1.02 initial public release.">
+  <link rel="stylesheet" href="assets/main.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<main class="page-content">
+  <div class="wrapper">
+
+<h1>Releases</h1>
+
+<p>Release highlights. For the full per-symbol change log, see
+<a href="https://github.com/deftio/fr_math/blob/master/release_notes.md">release_notes.md</a>
+in the repo.</p>
+
+<hr>
+
+<h2>v2.0.0 &mdash; 2026</h2>
+
+<p>The first major revision in more than twenty years. v2 is a
+bug-fix, precision, and feature release with a full test suite and
+97% line coverage.</p>
+
+<h3>64-bit safety</h3>
+
+<p>v1 defined <code>s32</code> as <code>signed long</code>, which is
+64 bits on LP64 platforms (Linux x64, macOS arm64). Every
+fixed-point path that assumed <code>s32</code> was exactly 32 bits
+silently produced wrong results on desktop hosts. v2 migrates all
+typedefs to <code>&lt;stdint.h&gt;</code>
+(<code>int8_t</code>&hellip;<code>int32_t</code>). C99 is now
+mandatory.</p>
+
+<h3>Numerical fixes</h3>
+
+<ul>
+  <li><code>FR_FixMulSat</code> / <code>FR_FixMuls</code>: rewritten
+      on an <code>int64_t</code> fast path with explicit saturation;
+      v1 had an algebraic bug in the sign-combination logic.</li>
+  <li><code>FR_log2</code> / <code>FR_ln</code> / <code>FR_log10</code>:
+      new leading-bit-position + 33-entry mantissa table with linear
+      interpolation. v1 returned wrong values for non-power-of-2
+      inputs.</li>
+  <li><code>FR_pow2</code> / <code>FR_exp</code> / <code>FR_pow10</code>:
+      corrected floor-toward-&minus;&infin; integer-part extraction.
+      v1 gave wrong answers for negative non-integer inputs.</li>
+  <li><code>FR_atan2</code>: v1 was a placeholder that returned
+      garbage. v2 is a correct octant-reduced arctan with max error
+      &le; 1&deg;. The vestigial <code>radix</code> argument was
+      dropped.</li>
+  <li><code>FR_atan</code>, <code>FR_Tan</code>, <code>FR_TanI</code>:
+      wiring and overflow fixes.</li>
+  <li><code>FR_printNumD/F/H</code>: fixed undefined behaviour on
+      <code>INT_MIN</code> and a broken fraction extraction in the
+      v1 code.</li>
+  <li><code>FR_DEG2RAD</code> / <code>FR_RAD2DEG</code>: macro bodies
+      were swapped in v1. v2 fixes them and adds missing parentheses.</li>
+</ul>
+
+<h3>New functionality</h3>
+
+<ul>
+  <li><strong>Radian-native trig</strong>: <code>fr_sin</code>,
+      <code>fr_cos</code>, <code>fr_tan</code>,
+      <code>fr_sin_bam</code>, <code>fr_cos_bam</code>,
+      <code>fr_sin_deg</code>, <code>fr_cos_deg</code>. Uses a new
+      129-entry quadrant cosine table with round-to-nearest linear
+      interpolation. Max error &le; 1 LSB of s0.15 (~3e&minus;5).</li>
+  <li><strong>BAM macros</strong>: <code>FR_DEG2BAM</code>,
+      <code>FR_BAM2DEG</code>, <code>FR_RAD2BAM</code>,
+      <code>FR_BAM2RAD</code>. BAM (16 bits per full circle) is the
+      natural integer representation for phase accumulators and
+      gives zero quantisation at the wraparound.</li>
+  <li><strong>Square root and hypot</strong>: <code>FR_sqrt</code>
+      uses a digit-by-digit integer isqrt on <code>int64_t</code>;
+      <code>FR_hypot</code> computes <code>sqrt(x&sup2; + y&sup2;)</code>
+      with no intermediate overflow across the full <code>s32</code>
+      range.</li>
+  <li><strong>Wave generator family</strong>: <code>fr_wave_sqr</code>,
+      <code>fr_wave_pwm</code>, <code>fr_wave_tri</code>,
+      <code>fr_wave_saw</code>, <code>fr_wave_tri_morph</code>,
+      <code>fr_wave_noise</code>. All are stateless and take a
+      <code>u16</code> BAM phase. Suitable for embedded audio, LFOs,
+      and control signals.</li>
+  <li><strong>ADSR envelope generator</strong>: linear-segment
+      attack/decay/sustain/release with s1.30 internal state so very
+      long durations at high sample rates still have non-zero
+      per-sample increments.</li>
+  <li><strong>Compile-time table size</strong>:
+      <code>-DFR_TRIG_TABLE_BITS=8</code> doubles table precision at
+      the cost of a larger (257-entry) table. Default is 7 / 129
+      entries.</li>
+</ul>
+
+<h3>New documentation</h3>
+
+<ul>
+  <li><code>dev/fr_math_precision.md</code> &mdash; comprehensive
+      per-symbol precision reference (inputs, outputs, worst-case
+      error, saturation).</li>
+  <li><code>CONTRIBUTING.md</code> &mdash; PR expectations,
+      portability rules, commit format.</li>
+  <li><code>tools/interp_analysis.html</code> &mdash; interactive
+      Chart.js comparison of seven interpolation methods on the trig
+      table.</li>
+  <li>This documentation site (the one you&rsquo;re reading).</li>
+</ul>
+
+<h3>Breaking changes</h3>
+
+<ul>
+  <li><code>FR_NUM(i, f, r)</code> &rarr; <code>FR_NUM(i, f, d,
+      r)</code>. The v1 form was broken (it ignored <code>f</code>
+      entirely), so any caller was already getting wrong results.</li>
+  <li><code>FR_atan2(y, x, radix)</code> &rarr; <code>FR_atan2(y,
+      x)</code>. The <code>radix</code> parameter was vestigial.</li>
+  <li><code>FR_RESULT</code> and the <code>FR_E_*</code> codes are
+      gone. <code>inv()</code> returns <code>bool</code>;
+      <code>add()</code> / <code>sub()</code> /
+      <code>setrotate()</code> return <code>void</code>. Math
+      functions use named sentinels <code>FR_DOMAIN_ERROR</code>,
+      <code>FR_OVERFLOW_POS</code>, <code>FR_OVERFLOW_NEG</code>.</li>
+  <li><code>FR_SQUARE</code> and <code>FR_FIXMUL32u</code> removed
+      &mdash; use <code>FR_FixMuls</code> / <code>FR_FixMulSat</code>,
+      which now have an <code>int64_t</code> fast path and work at any
+      radix.</li>
+  <li><code>FR_NO_INT64</code> and <code>FR_NO_STDINT</code> build
+      flags removed. Every modern C99 toolchain ships
+      <code>&lt;stdint.h&gt;</code> and 64-bit arithmetic.</li>
+</ul>
+
+<h3>Test suite</h3>
+
+<p>v2 ships with <strong>40 tests</strong> across six test binaries
+and a characterisation suite (<code>test_tdd.cpp</code>) that pins
+numerical behaviour to bit-exact reference values. Overall line
+coverage is <strong>97%</strong> on the library sources.</p>
+
+<hr>
+
+<h2>v1.0.3 &mdash; 2025</h2>
+
+<p>Test-coverage release. Overall line coverage went from 4% to 72%
+with four new test files
+(<code>test_comprehensive.c</code>,
+<code>test_overflow_saturation.c</code>,
+<code>test_full_coverage.c</code>,
+<code>test_2d_complete.cpp</code>). Added a GitHub Actions CI with
+multi-platform (Linux, macOS) and multi-compiler (gcc, clang)
+matrices, cross-compilation for ARM and RISC-V, and 32-bit
+compatibility testing.</p>
+
+<p>Also fixed a broken <code>FR_atan</code> implementation, corrected
+<code>FR_PI</code> / <code>FR_2PI</code> / <code>FR_E</code>
+declarations to use <code>const</code>, and fixed
+<code>XFormPtI</code> test assumptions.</p>
+
+<hr>
+
+<h2>v1.02 &mdash; first public release</h2>
+
+<p>Basic fixed-point operations, 2D transforms, and integer-degree
+trigonometry. This is the version that shipped inside the original
+Palm Pilot Inkstorm application.</p>
+
+<hr>
+
+<h2>v1.01 &mdash; internal development</h2>
+
+<p>Naming conventions cleanup and an initial test framework. Never
+released publicly.</p>
+
+<hr>
+
+<h2>Timeline</h2>
+
+<p>FR_Math has been in continuous service since <strong>2000</strong>,
+when it was written to run 2D graphics transforms on 16&nbsp;MHz 68k
+Palm Pilots for Trumpetsoft&rsquo;s <em>Inkstorm</em>. It has since
+been ported to ARM, x86, MIPS, RISC-V, and a menagerie of 8- and
+16-bit embedded targets. v2.0.0 is the first major revision with a
+full test suite, a bit-exact numerical specification, and CI on
+every push.</p>
+
+  </div>
+</main>
+
+<footer id="site-footer"></footer>
+
+<script src="assets/site.js"></script>
+</body>
+</html>

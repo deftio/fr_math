@@ -1,14 +1,11 @@
 /**
  *	@FR_math.h - header definition file for fixed radix math routines
  *
- *	@copy Copyright (C) <2001-2012>  <M. A. Chatterjee>
+ *	@copy Copyright (C) <2001-2026>  <M. A. Chatterjee>
  *  @author M A Chatterjee <deftio [at] deftio [dot] com>
- *	@version 1.0.3 M. A. Chatterjee, cleaned up naming
  *
  *  This file contains integer math settable fixed point radix math routines for
  *  use on systems in which floating point is not desired or unavailable.
- *  naming cleaned up in 2012, but otherwise collected from random progs I've
- *  written in the last 15 or so years.
  *
  *  @license:
  *	This software is provided 'as-is', without any express or implied
@@ -86,10 +83,6 @@ extern "C"
  * The fraction is rounded toward zero. For round-to-nearest, add half an LSB
  * before scaling at the call site. Sign of the fractional part follows the
  * sign of i (for i==0 the result is positive, matching "+0.5" intuition).
- *
- * Compatibility: the v1 macro had signature `FR_NUM(i, f, r)` and a body
- * that ignored f entirely. v2 adds the explicit `d` digit count and honors
- * both f and r. Callers of the broken v1 form must be updated.
  */
 #define FR_NUM_POW10(d) (                                              \
     ((d) == 0) ? 1L :                                                  \
@@ -120,9 +113,7 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 
 /* return only the fractional part of x */
 #define FR_FRAC(x, r) ((FR_ABS(x)) & (((1 << (r)) - 1)))
-/*
-#define FR_FRAC(x,r)	((x)&(((1<<(r))-1)))
-*/
+
 /* return the fractional part of number x with radix xr scaled to radix nr bits */
 #define FR_FRACS(x, xr, nr) (FR_CHRDX(FR_FRAC((x), (xr)), (xr), (nr)))
 
@@ -205,25 +196,6 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 #define FR_kSQRT10 (207243) /* 3.162277660168 */
 #define FR_krSQRT10 (20724) /* 0.316227766016 */
 
-/* ===============================================
- * Fixed Point Math Operations
- * Note: FR_FIXMUL32u is for positive (unsigned) 32-bit numbers only and
- * assumes both inputs are at radix 16. For signed and signed-saturated
- * arithmetic use FR_FixMuls / FR_FixMulSat below — those use int64_t
- * internally on modern toolchains and avoid the cross-term subtleties of
- * the split-multiply form.
- *
- * Side-effect note: x and y are referenced 4 times each, so do not pass
- * an expression with side effects.
- */
-#define FR_FIXMUL32u(x, y) (                            \
-    ((((x) >> 16) * ((y) >> 16)) << 16) +               \
-    (((x) >> 16) * ((y) & 0xffff)) +                    \
-    (((y) >> 16) * ((x) & 0xffff)) +                    \
-    ((((x) & 0xffff) * ((y) & 0xffff)) >> 16))
-
-#define FR_SQUARE(x) (FR_FIXMUL32u((x), (x)))
-
   /*===============================================
    * Arithmetic operations
    */
@@ -288,10 +260,6 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
  * need better precision, multiply by FR_kDEG2RAD and shift down by FR_kPREC).
  * Side-effect note: x is referenced 3 times, so do not pass an expression
  * with side effects.
- *
- * v1 bug: the body of FR_DEG2RAD and FR_RAD2DEG were swapped relative to
- * their names, and FR_DEG2RAD was missing parens around `x` in one
- * subexpression. v2 fixes both.
  */
 #define FR_DEG2RAD(x) (((x) >> 6) + ((x) >> 9) - ((x) >> 13))
 
@@ -308,7 +276,7 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 #define FR_Q2DEG(x) (((x) << 6) + ((x) << 4) + ((x) << 3) + ((x) << 1))
 
 /*===============================================
- * BAM (Binary Angular Measure) — v2 internal angle representation
+ * BAM (Binary Angular Measure) — internal angle representation
  *
  * One full circle = 2^16 BAM units. So:
  *   0       = 0 deg     = 0 rad
@@ -356,12 +324,8 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 /* Convert BAM -> radians at the requested output radix. */
 #define FR_BAM2RAD(bam, radix)  (((s32)(u16)(bam) * 6434L) >> (16 - (radix)))
 
-/* sin, cos with integer input (degrees), s.15 result                  */
-  s16 FR_CosI(s16 deg);
-  s16 FR_SinI(s16 deg);
-
 /*===============================================
- * v2 radian-native trig (recommended for new code)
+ * Radian-native and BAM-native trig (recommended)
  *
  *   fr_cos_bam(bam)         — cos of an angle in BAM units, s0.15 result
  *   fr_sin_bam(bam)         — sin of an angle in BAM units, s0.15 result
@@ -386,21 +350,33 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 #define fr_cos_deg(deg)  fr_cos_bam(FR_DEG2BAM(deg))
 #define fr_sin_deg(deg)  fr_sin_bam(FR_DEG2BAM(deg))
 
-  /* tan with integer input precision in degrees, returns, s15.16 result */
-  s32 FR_TanI(s16 deg);
+/*===============================================
+ * Integer-degree trig API (thin wrappers over the BAM-native path)
+ *
+ *   FR_CosI(deg)            — cos of integer degrees, s0.15 result
+ *   FR_SinI(deg)            — sin of integer degrees, s0.15 result
+ *   FR_TanI(deg)            — tan of integer degrees, s15.16 result
+ *   FR_Cos(deg, radix)      — cos of fixed-radix degrees, s0.15 result
+ *   FR_Sin(deg, radix)      — sin of fixed-radix degrees, s0.15 result
+ *   FR_Tan(deg, radix)      — tan of fixed-radix degrees, s15.16 result
+ *
+ * The integer-degree variants are zero-cost macros over fr_cos_bam.
+ * The fixed-radix variants use multiply-by-reciprocal to convert s.r
+ * degrees to BAM with no division (8051-friendly).
+ */
+#define FR_CosI(deg)  fr_cos_bam(FR_DEG2BAM(deg))
+#define FR_SinI(deg)  fr_sin_bam(FR_DEG2BAM(deg))
 
-  /* Fixed radix (interpolated) input (in degrees), s.15 result */
   s16 FR_Cos(s16 deg, u16 radix);
   s16 FR_Sin(s16 deg, u16 radix);
-
-  /* Fixed radix tan returns fixed  s15.16 result result (interpolated) */
+  s32 FR_TanI(s16 deg);
   s32 FR_Tan(s16 deg, u16 radix);
 
   /* Inverse trig (output in degrees, range [-180, 180] for atan2 / [-90, 90] for atan / [0, 180] for acos / [-90, 90] for asin) */
   s16 FR_acos(s32 input, u16 radix);
   s16 FR_asin(s32 input, u16 radix);
   s16 FR_atan(s32 input, u16 radix);
-  s16 FR_atan2(s32 y, s32 x, u16 radix); /* full-circle arctan, returns degrees */
+  s16 FR_atan2(s32 y, s32 x); /* full-circle arctan, returns degrees */
 
 /* Logarithms */
 #define FR_LOG2MIN (-(32767 << 16)) /* returned instead of "negative infinity" */
@@ -413,15 +389,104 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
   s32 FR_pow2(s32 input, u16 radix);
 #define FR_EXP(input, radix) (FR_pow2(FR_SLOG2E(input), radix))
 #define FR_POW10(input, radix) (FR_pow2(FR_SLOG2_10(input), radix))
-  /*
-  s32 FR_exp(  s32 input, u16 radix);
-  s32 FR_pow10(s32 input, u16 radix);
-  */
 
   /* printing family of functions */
   int FR_printNumF(int (*f)(char), s32 n, int radix, int pad, int prec); /* print fixed radix num as floating point e.g.  -12.34" */
   int FR_printNumD(int (*f)(char), int n, int pad);                      /* print decimal number with optional padding e.g. " 12" */
   int FR_printNumH(int (*f)(char), int n, int showPrefix);               /* print num as a hexidecimal e.g. "0x12ab"              */
+
+/*===============================================
+ * Square root and hypot
+ *
+ * Both take fixed-radix inputs and return a result at the same radix.
+ * Algorithm: digit-by-digit isqrt on a 64-bit accumulator (no division,
+ * deterministic 32-iteration cost).
+ *
+ * Domain error sentinel: input < 0 (sqrt) returns FR_DOMAIN_ERROR. Caller
+ * can check `result == FR_DOMAIN_ERROR` to detect domain errors.
+ */
+  s32 FR_sqrt(s32 input, u16 radix);
+  s32 FR_hypot(s32 x, s32 y, u16 radix);
+
+/*===============================================
+ * Wave generators — synth-style fixed-shape waveforms.
+ *
+ * All take a u16 BAM phase in [0, 65535] (a full cycle) and return s16
+ * in s0.15 in [-32767, +32767]. Use FR_HZ2BAM_INC below to compute a
+ * phase increment for a target frequency.
+ *
+ *   fr_wave_sqr(phase)              50% square
+ *   fr_wave_pwm(phase, duty)        variable-duty pulse
+ *   fr_wave_tri(phase)              symmetric triangle
+ *   fr_wave_saw(phase)              rising sawtooth
+ *   fr_wave_tri_morph(phase, brk)   variable-symmetry triangle (morphs to saw)
+ *   fr_wave_noise(state*)           LFSR pseudorandom noise
+ *
+ * fr_wave_tri_morph returns [0, 32767] (unipolar) — caller can re-bias
+ * if a bipolar form is desired. The other waves are bipolar [-32767, +32767].
+ */
+  s16 fr_wave_sqr(u16 phase);
+  s16 fr_wave_pwm(u16 phase, u16 duty);
+  s16 fr_wave_tri(u16 phase);
+  s16 fr_wave_saw(u16 phase);
+  s16 fr_wave_tri_morph(u16 phase, u16 break_point);
+  s16 fr_wave_noise(u32 *state);
+
+/* FR_HZ2BAM_INC(hz, sample_rate)
+ * Compute the per-sample BAM phase increment for a target frequency in Hz
+ * given a sample rate in Hz. Result is a u16 to add to the running phase
+ * each sample (the running phase wraps mod 2^16 naturally because it's u16).
+ *
+ *   u16 phase = 0;
+ *   u16 inc   = FR_HZ2BAM_INC(440, 48000);
+ *   for (...) { sample = fr_sin_bam(phase); phase += inc; }
+ *
+ * Range: hz must be < sample_rate / 2 (Nyquist) for a meaningful tone;
+ * higher hz aliases. The macro does not enforce this.
+ *
+ * Side-effect note: hz and sample_rate are evaluated once each.
+ */
+#define FR_HZ2BAM_INC(hz, sample_rate)  ((u16)(((u32)(hz) * 65536UL) / (u32)(sample_rate)))
+
+/*===============================================
+ * ADSR envelope generator
+ *
+ * Linear-segment Attack-Decay-Sustain-Release envelope. Caller-allocated
+ * struct, no malloc, no global state. Internal level is held in s1.30 so
+ * very long envelopes (e.g. 48000-sample attack at 48 kHz) still get a
+ * non-zero per-sample increment. Output is s0.15 in [0, 32767].
+ *
+ * Lifecycle:
+ *   fr_adsr_t env;
+ *   fr_adsr_init(&env, atk_samples, dec_samples, sustain_s015, rel_samples);
+ *   fr_adsr_trigger(&env);                 // note-on
+ *   for (...) sample = fr_adsr_step(&env); // per-audio-sample
+ *   fr_adsr_release(&env);                 // note-off
+ *   for (...) sample = fr_adsr_step(&env); // until env.state == FR_ADSR_IDLE
+ */
+#define FR_ADSR_IDLE     (0)
+#define FR_ADSR_ATTACK   (1)
+#define FR_ADSR_DECAY    (2)
+#define FR_ADSR_SUSTAIN  (3)
+#define FR_ADSR_RELEASE  (4)
+
+typedef struct fr_adsr_s {
+    u8  state;        /* FR_ADSR_* */
+    s32 level;        /* current envelope value, s1.30 */
+    s32 sustain;      /* sustain target, s1.30 */
+    s32 attack_inc;   /* per-sample increment during attack */
+    s32 decay_dec;    /* per-sample decrement during decay */
+    s32 release_dec;  /* per-sample decrement during release */
+} fr_adsr_t;
+
+  void fr_adsr_init(fr_adsr_t *env,
+                    u32 attack_samples,
+                    u32 decay_samples,
+                    s16 sustain_level_s015,
+                    u32 release_samples);
+  void fr_adsr_trigger(fr_adsr_t *env);
+  void fr_adsr_release(fr_adsr_t *env);
+  s16  fr_adsr_step(fr_adsr_t *env);
 
 #ifdef __cplusplus
 

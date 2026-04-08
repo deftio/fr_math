@@ -61,10 +61,10 @@ fixed-width types:
 | `s32` | `int32_t`  | −2147483648 … 2147483647 |
 | `u32` | `uint32_t` | 0 … 4294967295 |
 
-To opt out of `<stdint.h>` on an old compiler, build with
-`-DFR_NO_STDINT`. The fallback uses `signed char`, `short`, and `long`,
-which is safe on ILP32/LP64 but NOT safe on LP64 if you expect `s32` to
-be 32 bits (LP64 has 8-byte `long`). Prefer the default.
+`<stdint.h>` is mandatory in v2. Any C99-or-newer toolchain (gcc, clang,
+MSVC, IAR, Keil, sdcc, MSP430-gcc, AVR-gcc, RISC-V toolchains, ARM
+toolchains) supports it. If your toolchain predates C99, FR_Math 1.0.x
+is the version for you.
 
 v1→v2 change: in v1, `s32` was `signed long` and therefore 64 bits on
 LP64 platforms, which silently broke every fixed-point computation that
@@ -175,37 +175,18 @@ to leave enough headroom.
 
 ## 4. Arithmetic macros and functions
 
-### `FR_FIXMUL32u(x, y)` — unsigned fixed-point multiply, s16.16 only
-- **Input**: two `u32` values at s16.16
-- **Output**: `x * y` at s16.16
-- **Precision**: exact to within 1 LSB of s16.16
-- **Saturation**: none; wraps on overflow
-- **Side-effect note**: references `x` and `y` four times each
-- **Notes**: unsigned only; for signed use `FR_FixMuls`. The split-multiply
-  form was chosen for platforms without a 64-bit multiply instruction.
-
-### `FR_SQUARE(x)` — `x * x` at s16.16
-- Wrapper for `FR_FIXMUL32u(x, x)`.
-- **v1→v2 change**: v1 was missing a closing parenthesis. Fixed.
-
 ### `FR_FixMuls(s32 x, s32 y)` — signed fixed-point multiply
 - **Input**: two `s32` values at s16.16 (or any radix, as long as the
   result fits)
 - **Output**: `(x * y) >> 16` as `s32`
-- **Precision**: exact (`int64_t` intermediate on toolchains with
-  `<stdint.h>`), ~1 LSB error on the `FR_NO_INT64` fallback
+- **Precision**: exact (`int64_t` intermediate)
 - **Saturation**: **none**; wraps on overflow
-- **v1→v2 change**: v1 used a cross-term split formula that produced
-  incorrect results for some sign combinations. v2 uses `int64_t`
-  directly.
 
 ### `FR_FixMulSat(s32 x, s32 y)` — signed saturating multiply
 - **Input**: two `s32` values at s16.16
-- **Output**: `clip((x*y)>>16, INT32_MIN, INT32_MAX)`
-- **Precision**: exact with `int64_t`, ~1 LSB on fallback
+- **Output**: `clip((x*y)>>16, FR_OVERFLOW_NEG, FR_OVERFLOW_POS)`
+- **Precision**: exact (`int64_t` intermediate)
 - **Saturation**: **yes**, to `s32` extremes
-- **v1→v2 change**: v1 formula was arithmetically wrong (ignored the
-  low-word cross-term). v2 uses `int64_t` and explicit clamps.
 
 ### `FR_FixAddSat(s32 x, s32 y)` — saturating add
 - **Input**: two `s32` at any common radix
@@ -511,7 +492,147 @@ the number of bytes written, or −1 on a null `f` pointer.
 
 ---
 
-## 12. 2D matrix (`FR_math_2D.h`)
+## 12. Square root, hypot, waves, and ADSR (v2 new)
+
+All symbols in this section are new in v2.0. None existed in v1.
+
+### `s32 FR_sqrt(s32 input, u16 radix)`
+- **Input**: `input` at `radix`. Any non-negative value fits up to s32; for
+  negative input the function returns `INT32_MIN` as a domain-error sentinel.
+- **Output**: `floor(sqrt(input))` at `radix`
+- **Algorithm**: digit-by-digit ("shift-and-subtract") integer square root
+  on a `uint64_t` accumulator. No division. Deterministic 32-iteration
+  cost. Computes `isqrt(input << radix)`, which gives an `r`-radix result.
+- **Precision**: bit-exact floor; worst-case absolute error < 1 LSB at
+  the requested `radix` (the floor truncation). Always non-negative,
+  monotone in `input`.
+- **Saturation**: `input < 0` returns `FR_DOMAIN_ERROR` (`INT32_MIN`).
+  No other saturation paths because `(u32 input) << radix` always fits
+  in u64 for radix ≤ 30.
+
+### `s32 FR_hypot(s32 x, s32 y, u16 radix)`
+- **Input**: `x`, `y` at `radix`. Both can be negative; sign is squared away.
+- **Output**: `floor(sqrt(x*x + y*y))` at `radix`
+- **Algorithm**: direct sum-of-squares on `int64_t`, then `isqrt64`. The
+  squared sum is at radix `2*radix`, and `isqrt` of a `2r`-radix value
+  yields an `r`-radix result, so no extra shifting is needed.
+- **Precision**: bit-exact floor; worst-case < 1 LSB at `radix`.
+- **Saturation**: cannot overflow because
+  `(INT32_MAX^2) * 2 ≈ 2^63 < 2^64`.
+
+### Wave generators
+
+All wave generators take a `u16` BAM phase (a full cycle is `[0, 65535]`)
+and return `s16` in s0.15 format `[-32767, +32767]`, matching the trig
+amplitude convention used by `fr_cos_bam` / `fr_sin_bam`.
+
+Use `FR_HZ2BAM_INC(hz, sample_rate)` to get a per-sample phase
+increment for a target frequency.
+
+### `s16 fr_wave_sqr(u16 phase)`
+- 50%-duty square wave. `phase < 0x8000 → +32767`, else `-32767`.
+- **Precision**: exact (single comparison).
+- **Saturation**: not applicable.
+
+### `s16 fr_wave_pwm(u16 phase, u16 duty)`
+- Variable-duty pulse. `phase < duty → +32767`, else `-32767`.
+- `duty=0` → always low; `duty=0x8000` → 50% (same as `fr_wave_sqr`);
+  `duty=0xffff` → high almost everywhere.
+- **Precision**: exact.
+
+### `s16 fr_wave_tri(u16 phase)`
+- Symmetric triangle. Four linear segments:
+  - `[0, 0x4000)`: rising 0 → +peak
+  - `[0x4000, 0x8000)`: falling +peak → 0
+  - `[0x8000, 0xc000)`: descending 0 → −peak
+  - `[0xc000, 0x10000)`: rising −peak → 0
+- Peaks are clamped to ±32767 (the natural unclamped formula gives
+  ±32768 at the exact peak BAM values 0x4000 and 0xc000).
+- **Precision**: < 1 LSB s0.15 vs ideal triangle (~3e−5 absolute,
+  measured over a full 65536-point sweep).
+- **Saturation**: peak clamp at ±32767.
+
+### `s16 fr_wave_saw(u16 phase)`
+- Rising sawtooth. Linear ramp from −32767 (at `phase=0`) to +32767
+  (at `phase=0xffff`), passing through 0 at `phase=0x8000`.
+- The single boundary case `phase=0` (which would naturally produce
+  −32768) is clamped to −32767.
+- **Precision**: exact (single subtract + clamp).
+- **Saturation**: lower-edge clamp.
+
+### `s16 fr_wave_tri_morph(u16 phase, u16 break_point)`
+- Variable-symmetry triangle. Returns `[0, 32767]` (unipolar — caller
+  can re-bias for a bipolar form).
+- `break_point` is the BAM phase at which the peak occurs:
+  - `0x8000` → symmetric triangle (50/50)
+  - `→ 0xffff` → rising sawtooth (instant fall)
+  - `→ 0x0001` → falling sawtooth (instant rise)
+  - `0` is treated as `1` to avoid divide-by-zero
+- **Precision**: < 1 LSB s0.15 from the integer division.
+- **Cost**: one 32-bit divide per sample. Cheap on Cortex-M3+; slow on
+  8051 / MSP430. Pre-compute slopes if those targets matter.
+- **Saturation**: peak clamp at +32767.
+
+### `s16 fr_wave_noise(u32 *state)`
+- LFSR-based pseudorandom noise. Caller maintains a `u32` state; pass
+  its address. **Initial state must be non-zero** (zero is a fixed
+  point). A common seed is `0xACE1u`.
+- **Algorithm**: 32-bit Galois LFSR with maximal-period polynomial
+  `0xD0000001`. Period = 2^32 − 1 samples.
+- **Output**: full-range `s16` in `[-32767, +32767]`.
+- **Quality**: white-ish; suitable for synth use. **Not** crypto secure;
+  for FFT-flat noise consider layering two LFSRs.
+- **Side effects**: advances `*state`. Returns 0 if `state` is `NULL`.
+
+### `FR_HZ2BAM_INC(hz, sample_rate)` — macro
+- Computes the per-sample BAM phase increment for a target frequency.
+- Expands to `(u16)(((u32)(hz) * 65536UL) / (u32)(sample_rate))`.
+- **Range**: meaningful for `hz < sample_rate / 2` (Nyquist). The macro
+  does not enforce this — out-of-range frequencies alias.
+- **Side-effect note**: `hz` and `sample_rate` are evaluated once each.
+- **Example**: `FR_HZ2BAM_INC(440, 48000)` = 600 (implies 439.45 Hz; the
+  ~0.55 Hz error is the standard quantization of a 16-bit phase
+  accumulator at 48 kHz — for higher precision, use a 32-bit phase).
+
+### ADSR envelope generator
+
+Linear-segment Attack-Decay-Sustain-Release envelope. Caller-allocated
+struct, no malloc, no global state. Internal level is held in s1.30 so
+even very long durations have a non-zero per-sample increment.
+
+#### `fr_adsr_t` struct
+| Field | Type | Meaning |
+|---|---|---|
+| `state` | `u8` | One of `FR_ADSR_IDLE/ATTACK/DECAY/SUSTAIN/RELEASE` |
+| `level` | `s32` | Current envelope value, s1.30 (peak = `1<<30`) |
+| `sustain` | `s32` | Sustain target, s1.30 |
+| `attack_inc` | `s32` | Per-sample increment during attack |
+| `decay_dec` | `s32` | Per-sample decrement during decay |
+| `release_dec` | `s32` | Per-sample decrement during release |
+
+#### State constants
+- `FR_ADSR_IDLE` = 0
+- `FR_ADSR_ATTACK` = 1
+- `FR_ADSR_DECAY` = 2
+- `FR_ADSR_SUSTAIN` = 3
+- `FR_ADSR_RELEASE` = 4
+
+#### Functions
+
+| Function | Inputs | Effect | Notes |
+|---|---|---|---|
+| `fr_adsr_init(env, atk, dec, sus, rel)` | u32 atk samples, u32 dec samples, s16 sus_s015, u32 rel samples | sets all rates, clears state to IDLE | sus is clamped to [0, 32767]; zero durations collapse to 1-step transitions |
+| `fr_adsr_trigger(env)` | env | sets state = ATTACK, level = 0 | call on note-on |
+| `fr_adsr_release(env)` | env | sets state = RELEASE | call on note-off |
+| `fr_adsr_step(env)` | env | advances one sample, returns s0.15 in [0, 32767] | call once per audio sample |
+
+- **Saturation**: self-clamping. `level` cannot escape `[0, 1<<30]`.
+- **Null safety**: all entry points check `env == NULL` and no-op (or
+  return 0 for `fr_adsr_step`).
+
+---
+
+## 13. 2D matrix (`FR_math_2D.h`)
 
 ### `struct FR_Matrix2D_CPT`
 A 2×3 affine transformation matrix for 2D point transforms. The bottom
@@ -533,10 +654,10 @@ row is always `[0 0 1]` and is not stored.
 |---|---|---|---|---|
 | `ID()` | — | identity matrix at current `radix` | exact | — |
 | `det()` | — | s32 determinant at `radix` (not `2*radix`) | ≤ 1 LSB | no |
-| `inv()` / `inv(pInv)` | — / target matrix | FR_RESULT | depends on det; warns if det ≈ 0 | no |
-| `add(pAdd)` / `sub(pSub)` | matrix pointer | in-place | exact if no overflow | no |
-| `setrotate(deg)` | integer deg | in-place | uses `FR_CosI`/`FR_SinI`, ≤ 1 LSB | — |
-| `setrotate(deg, radix)` | fixed-radix deg | in-place | ≤ 1 LSB | — |
+| `inv()` / `inv(pInv)` | — / target matrix | bool: true on success, false if singular | depends on det | no |
+| `add(pAdd)` / `sub(pSub)` | matrix pointer | void, in-place | exact if no overflow | no |
+| `setrotate(deg)` | integer deg | void, in-place | uses `FR_CosI`/`FR_SinI`, ≤ 1 LSB | — |
+| `setrotate(deg, radix)` | fixed-radix deg | void, in-place | ≤ 1 LSB | — |
 | `XlateI(x, y [, r])` | integer translation | in-place | exact | no |
 | `XlateRelativeI(x, y [, r])` | integer delta translation | in-place | exact | no |
 | `XFormPtI(x, y, *xp, *yp [, r])` | s32 point, optional radix | s32 point | ≤ 1 LSB | no |

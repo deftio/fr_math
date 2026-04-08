@@ -3,9 +3,8 @@
  *	@file FR_math.c - c implementation file for basic fixed
  *                              radix math routines
  *
- *	@copy Copyright (C) <2001-2014>  <M. A. Chatterjee>
+ *	@copy Copyright (C) <2001-2026>  <M. A. Chatterjee>
  *  @author M A Chatterjee <deftio [at] deftio [dot] com>
- *	@version 1.0.3 M. A. Chatterjee, cleaned up naming
  *
  *  This file contains integer math settable fixed point radix math routines for
  *  use on systems in which floating point is not desired or unavailable.
@@ -33,12 +32,10 @@
 #include "FR_math.h"
 #include "FR_trig_table.h"
 
-#ifndef FR_NO_INT64
 #include <stdint.h>
-#endif
 
 /*=======================================================
- * v2 radian-native trig: fr_cos_bam, fr_sin_bam, fr_cos, fr_sin, fr_tan
+ * BAM-native trig: fr_cos_bam, fr_sin_bam, fr_cos, fr_sin, fr_tan
  *
  * Internal model: every angle is reduced to a u16 BAM value. The top 2 bits
  * select the quadrant, the bottom 14 bits are the in-quadrant position. Odd
@@ -92,20 +89,15 @@ s16 fr_sin_bam(u16 bam)
 
 /* Convert radians at given radix to BAM with rounding.
  * One radian = 65536 / (2*pi) ≈ 10430.378 BAM units.
- * We compute (rad * 10430) >> radix, plus a small correction for the
- * fractional 0.378 part to keep error bounded.
+ * We use the more precise scaled constant 10430378 / 1000 to keep error
+ * bounded across a wide range of radians.
  */
 static u16 fr_rad_to_bam(s32 rad, u16 radix)
 {
-#ifndef FR_NO_INT64
-	int64_t scaled = ((int64_t)rad * 10430378LL) / 1000;  /* better precision */
+	int64_t scaled = ((int64_t)rad * 10430378LL) / 1000;
 	if (radix > 0)
 		scaled >>= radix;
 	return (u16)((u32)scaled & 0xffff);
-#else
-	s32 v = (rad * 10430) >> radix;
-	return (u16)((u32)v & 0xffff);
-#endif
 }
 
 s16 fr_cos(s32 rad, u16 radix)
@@ -131,29 +123,71 @@ s32 fr_tan(s32 rad, u16 radix)
 }
 
 /*=======================================================
+ * Integer-degree and fixed-radix-degree trig wrappers
+ *
+ * FR_CosI / FR_SinI are macros in the header (zero cost). The fixed-radix
+ * variants here convert s.r degrees to BAM in one shot using a precomputed
+ * reciprocal of 360 to avoid division on multiply-poor cores like 8051.
+ *
+ * Math: bam = deg * (65536 / 360) = deg * 182.0444...
+ * In s.16 fixed point: 65536 / 360 = 0xB60B (rounded). So
+ *   bam_u16 = (deg_s.r * 0xB60B) >> r
+ * gives bam in u16 BAM units. The constant 0xB60B contains the divide by
+ * 360 baked in; the shift `>> r` strips the input radix.
+ */
+static u16 fr_deg_radix_to_bam(s16 deg, u16 radix)
+{
+	/* (s32)deg * 0xB60B keeps everything in 32-bit math (8051-friendly).
+	 * For radix 0, 0xB60B = 65536/360 ≈ 182.0444. The shift strips the
+	 * input radix to land in u16 BAM space.
+	 */
+	s32 v = (s32)deg * 0xB60BL;
+	return (u16)((u32)(v >> radix) & 0xffff);
+}
+
+s16 FR_Cos(s16 deg, u16 radix)
+{
+	return fr_cos_bam(fr_deg_radix_to_bam(deg, radix));
+}
+
+s16 FR_Sin(s16 deg, u16 radix)
+{
+	return fr_sin_bam(fr_deg_radix_to_bam(deg, radix));
+}
+
+s32 FR_TanI(s16 deg)
+{
+	u16 bam = FR_DEG2BAM(deg);
+	s32 s   = fr_sin_bam(bam);
+	s32 c   = fr_cos_bam(bam);
+	if (c == 0)
+		return (s >= 0) ? (FR_TRIG_MAXVAL << FR_TRIG_PREC)
+		                : -(FR_TRIG_MAXVAL << FR_TRIG_PREC);
+	return (s << FR_TRIG_PREC) / c;
+}
+
+s32 FR_Tan(s16 deg, u16 radix)
+{
+	u16 bam = fr_deg_radix_to_bam(deg, radix);
+	s32 s   = fr_sin_bam(bam);
+	s32 c   = fr_cos_bam(bam);
+	if (c == 0)
+		return (s >= 0) ? (FR_TRIG_MAXVAL << FR_TRIG_PREC)
+		                : -(FR_TRIG_MAXVAL << FR_TRIG_PREC);
+	return (s << FR_TRIG_PREC) / c;
+}
+
+/*=======================================================
  * FR_FixMuls (x*y signed, NOT saturated)
  *
  * Treats x and y as fixed-point values at the same radix r and returns
  * (x*y) >> r at radix r. The user is responsible for tracking the radix
  * point and for guaranteeing the product fits in 32 bits.
- *
- * v2 implementation uses int64_t directly. The original split-multiply
- * macro path (FR_FIXMUL32u) had subtle correctness issues for cross-term
- * carries; modern toolchains all support 64-bit ints. If you need a
- * pre-C99 / strictly-32-bit-only build, define FR_NO_INT64.
  */
 s32 FR_FixMuls(s32 x, s32 y)
 {
-#ifndef FR_NO_INT64
 	int64_t v = (int64_t)x * (int64_t)y;
 	return (s32)(v >> 16);
-#else
-	s32 z, sign = (x < 0) ? (y > 0) : (y < 0);
-	x = FR_ABS(x);
-	y = FR_ABS(y);
-	z = FR_FIXMUL32u(x, y);
-	return sign ? -z : z;
-#endif
 }
 
 /*=======================================================
@@ -162,40 +196,13 @@ s32 FR_FixMuls(s32 x, s32 y)
  * Same semantics as FR_FixMuls but clamps to [INT32_MIN, INT32_MAX] on
  * overflow instead of wrapping. The fixed-point radix is fixed at 16 bits
  * (sM.16 inputs and output).
- *
- * v1 bug: the original implementation summed the cross-terms incorrectly
- * (`(h<<16)+m1+m2+l` instead of `(h<<16)+m1+m2+(l>>16)`), so small inputs
- * returned values shifted 16 bits too high. v2 uses int64_t directly and
- * checks the saturation bound on the int64_t accumulator.
  */
 s32 FR_FixMulSat(s32 x, s32 y)
 {
-#ifndef FR_NO_INT64
 	int64_t v = ((int64_t)x * (int64_t)y) >> 16;
-	if (v >  (int64_t)0x7fffffff) return  (s32)0x7fffffff;
-	if (v < -(int64_t)0x80000000) return (s32)0x80000000;
+	if (v >  (int64_t)0x7fffffff) return  FR_OVERFLOW_POS;
+	if (v < -(int64_t)0x80000000) return  FR_OVERFLOW_NEG;
 	return (s32)v;
-#else
-	/* 32-bit-only fallback: split-multiply with corrected cross-term shift. */
-	s32 z, h, m1, m2;
-	u32 l;
-	int sign = (((x < 0) && (y > 0)) || ((x > 0) && (y < 0))) ? 1 : 0;
-
-	x = FR_ABS(x);
-	y = FR_ABS(y);
-	h  = (s32)(((u32)x >> 16) * ((u32)y >> 16));
-	m1 = (s32)(((u32)x >> 16) * ((u32)y & 0xffff));
-	m2 = (s32)(((u32)y >> 16) * ((u32)x & 0xffff));
-	l  =       ((u32)x & 0xffff) * ((u32)y & 0xffff);
-
-	if (h & 0xffff8000)
-		return sign ? (s32)0x80000000 : (s32)0x7fffffff;
-
-	z = (h << 16) + m1 + m2 + (s32)(l >> 16);
-	if (z < 0)
-		return sign ? (s32)0x80000000 : (s32)0x7fffffff;
-	return sign ? -z : z;
-#endif
 }
 
 /*=======================================================
@@ -208,161 +215,78 @@ s32 FR_FixAddSat(s32 x, s32 y)
 	if (x < 0)
 	{
 		if (y < 0)
-			return (sum >= 0) ? 0x80000000 : sum;
+			return (sum >= 0) ? FR_OVERFLOW_NEG : sum;
 	}
 	else
 	{
 		if (y >= 0)
-			return (sum <= 0) ? 0x7fffffff : sum;
+			return (sum <= 0) ? FR_OVERFLOW_POS : sum;
 	}
 	return sum;
 }
 
-/* Cosine table in s0.15 format, 1 entry per degree
- * used in all trig functions (sin,cos,tan, atan2 etc)
- */
-s16 const static gFR_COS_TAB_S0d15[] = {
-	32767, 32762, 32747, 32722, 32687, 32642, 32587, 32522, 32448, 32363,
-	32269, 32164, 32050, 31927, 31793, 31650, 31497, 31335, 31163, 30981,
-	30790, 30590, 30381, 30162, 29934, 29696, 29450, 29195, 28931, 28658,
-	28377, 28086, 27787, 27480, 27165, 26841, 26509, 26168, 25820, 25464,
-	25100, 24729, 24350, 23964, 23570, 23169, 22761, 22347, 21925, 21497,
-	21062, 20620, 20173, 19719, 19259, 18794, 18323, 17846, 17363, 16876,
-	16383, 15885, 15383, 14875, 14364, 13847, 13327, 12803, 12274, 11742,
-	11207, 10668, 10125, 9580, 9032, 8481, 7927, 7371, 6813, 6252,
-	5690, 5126, 4560, 3993, 3425, 2856, 2286, 1715, 1144, 572,
-	0};
-
-/* cosine with integer input precision in degrees, returns s0.15 result
- */
-
-s16 FR_CosI(s16 deg)
-{
-	deg = deg % 360; /* this is an expensive operation*/
-	if (deg > 180)
-	{
-		deg -= 360;
-	}
-	else if (deg < -180)
-	{
-		deg += 360;
-	}
-
-	if (deg >= 0)
-		return deg <= (90) ? gFR_COS_TAB_S0d15[deg] : -gFR_COS_TAB_S0d15[180 - deg];
-	else
-		return deg >= (-90) ? gFR_COS_TAB_S0d15[-deg] : -gFR_COS_TAB_S0d15[180 + deg];
-}
-/* sin with integer input precision in degrees, returns s0.15 result
- */
-s16 FR_SinI(s16 deg)
-{
-	return FR_CosI(deg - 90);
-}
-
-/* cos() with fixed radix precision, returns interpolated s0.15 result
- */
-s16 FR_Cos(s16 deg, u16 radix)
-{
-	s16 i, j;
-	i = FR_CosI(deg >> radix);
-	j = FR_CosI((deg >> radix) + 1);
-	return i + (((j - i) * (deg & ((1 << radix) - 1))) >> radix);
-}
-
-/* sin() with fixed radix precision,  returns interpolated s0.15 result
- * could be a macro..
- */
-s16 FR_Sin(s16 deg, u16 radix)
-{
-	return FR_Cos(deg - (90 << radix), radix);
-}
-
-s16 const static gFR_TAND_TAB[] = {
-	1, 572, 1144, 1717, 2291, 2867, 3444, 4023, 4605, 5189,
-	5777, 6369, 6964, 7564, 8169, 8779, 9395, 10017, 10646, 11282,
-	11926, 12578, 13238, 13908, 14588, 15279, 15981, 16695, 17422, 18163,
-	18918, 19688, 20475, 21279, 22101, 22943, 23806, 24691, 25600, 26534,
-	27494, 28483, 29503, 30555, 31642, 32767};
-
-/* tan with s15.16 result
- * tan without table.
- * note: tan(90)  returns   32767
- * and   tan(270) returns (-32768) (e.g. no div by zero)
- */
-/*
-s32 FR_TanI (s16 deg)
-{
-	s32 c = FR_CosI(deg);
-	s32 s = FR_SinI(deg);
-	return (c!=0)?(s<<FR_TRIG_PREC)/c : (s>=0)?(FR_TRIG_MAXVAL<<FR_TRIG_PREC):(FR_TRIG_MINVAL<<FR_TRIG_PREC);
-}
-*/
-#define FR_TN(a) (((a) <= 45) ? gFR_TAND_TAB[(a)] : (FR_TRIG_MAXVAL << FR_TRIG_PREC) / (gFR_TAND_TAB[90 - (a)]))
-s32 FR_TanI(s16 deg)
-{
-	deg = deg % 360; /* this is an expensive operation */
-	if (deg > 180)
-	{
-		deg -= 360;
-	}
-	else if (deg < -180)
-	{
-		deg += 360;
-	}
-
-	if (90 == deg)
-		return (FR_TRIG_MAXVAL << FR_TRIG_PREC);
-	/* v1 had `if (270 == deg)` here; that branch is unreachable because the
-	 * `% 360` above followed by the `[-180, 180]` reduction guarantees deg
-	 * is never 270. Removed in v2 (gcov 0 hits for ~10 years confirms it). */
-
-	if (deg >= 0)
-		return deg <= (90) ? FR_TN(deg) : -FR_TN(180 - deg);
-	else
-		return deg >= (-90) ? -FR_TN(-deg) : FR_TN(180 + deg);
-}
-/* Tan with s15.16 result with fixed radix input precision, returns interpolated s15.16 result.
- *
- * v1 bug: locals `i, j` were declared `s16`, but `FR_TanI` returns `s32`,
- * so steep angles (|tan| > 0.5) silently truncated. Fixed in v2 by widening
- * to `s32`.
- */
-s32 FR_Tan(s16 deg, u16 radix)
-{
-	s32 i, j;
-	i = FR_TanI(deg >> radix);
-	j = FR_TanI((deg >> radix) + 1);
-	return FR_INTERPI(i, j, deg, radix); /*i+(((j-i)*(deg&((1<<radix)-1)))>>radix);*/
-}
-
 /* Inverse Trig
- * Ugly looking acos with bin search (working):
+ * acos with binary search of the BAM-native quadrant table.
+ *
+ * Algorithm: bring `input` into s0.15, then binary-search the first-quadrant
+ * cos table for the table entry closest to |input|. Apply quadrant mirror
+ * if input was negative.
  */
 s16 FR_acos(s32 input, u16 radix)
 {
-	s16 r = 45, s = input, x = 46, y, z;
+	s32 v;
+	s16 sign;
+	s32 lo, hi, mid;
+	s32 best_idx, best_err;
+	s32 left, right;
 
-	input = FR_CHRDX(input, radix, FR_TRIG_PREC); /* chg radix to s0.15 */
+	v = FR_CHRDX(input, radix, FR_TRIG_PREC); /* to s0.15 */
 
-	// +or- 1.0000 is special case as it doesn't fit in table search
-	if ((input & 0xffff) == 0x8000) //? shouldn't it be: (input&7fff)!=0
-		return (input < 0) ? 180 : 0;
-	input = (FR_ABS(input)) & ((1 << radix) - 1);
-	while (x >>= 1)
-		r += (input < gFR_COS_TAB_S0d15[r]) ? x : -x;
+	/* Clamp range. */
+	if (v >=  32767) return 0;
+	if (v <= -32767) return 180;
 
-	r += (input < gFR_COS_TAB_S0d15[r]) ? 1 : -1;
-	r += (input < gFR_COS_TAB_S0d15[r]) ? 1 : -1;
+	sign = (v < 0) ? 1 : 0;
+	if (v < 0) v = -v;
 
-	x = FR_ABS(input - gFR_COS_TAB_S0d15[r]);
-	y = FR_ABS(input - gFR_COS_TAB_S0d15[r + 1]);
-	z = FR_ABS(input - gFR_COS_TAB_S0d15[r - 1]);
-	r = (x < y) ? r : r + 1;
-	r = (x < z) ? r : r - 1;
+	/* Binary search on the BAM quadrant table. The table is monotonically
+	 * decreasing across [0, FR_TRIG_TABLE_SIZE]. We want the index `i`
+	 * such that gFR_COS_TAB_Q[i] is closest to v.
+	 */
+	lo = 0;
+	hi = FR_TRIG_TABLE_SIZE;
+	while (lo < hi)
+	{
+		mid = (lo + hi) >> 1;
+		if (gFR_COS_TAB_Q[mid] > v)
+			lo = mid + 1;
+		else
+			hi = mid;
+	}
+	best_idx = lo;
+	best_err = (gFR_COS_TAB_Q[best_idx] > v) ? (gFR_COS_TAB_Q[best_idx] - v)
+	                                         : (v - gFR_COS_TAB_Q[best_idx]);
+	if (best_idx > 0)
+	{
+		left = gFR_COS_TAB_Q[best_idx - 1] - v;
+		if (left < 0) left = -left;
+		if (left < best_err) { best_err = left; best_idx = best_idx - 1; }
+	}
+	if (best_idx < FR_TRIG_TABLE_SIZE)
+	{
+		right = gFR_COS_TAB_Q[best_idx + 1] - v;
+		if (right < 0) right = -right;
+		if (right < best_err) { best_err = right; best_idx = best_idx + 1; }
+	}
 
-	return (s > 0) ? r : 180 - r;
-	;
+	/* best_idx is in [0, FR_TRIG_TABLE_SIZE]. Convert to degrees:
+	 * the table covers [0, 90] degrees in FR_TRIG_TABLE_SIZE steps.
+	 * deg = best_idx * 90 / FR_TRIG_TABLE_SIZE.
+	 */
+	{
+		s16 deg = (s16)((best_idx * 90 + (FR_TRIG_TABLE_SIZE >> 1)) / FR_TRIG_TABLE_SIZE);
+		return sign ? (s16)(180 - deg) : deg;
+	}
 }
 
 s16 FR_asin(s32 input, u16 radix)
@@ -409,27 +333,23 @@ static s16 fr_atan_unit_q1_deg(s32 t_s16)
 	return (s16)((deg64 + 32) >> 6);
 }
 
-/* FR_atan2(y, x, radix) — full-circle arctangent, returns degrees as s16.
+/* FR_atan2(y, x) — full-circle arctangent, returns degrees as s16.
  *
- * v1 bug: the original body just returned a quadrant index 0..3, not an
- * angle. v2 implements the standard octant-reduction algorithm:
+ * Computes a ratio y/x so the result is independent of the input radix.
+ *
+ * Algorithm:
  *   1. Special-case the four axis directions.
  *   2. Reduce |y|/|x| to [0,1] (swap so the smaller magnitude is on top).
  *   3. Look up arctan in the table with linear interpolation.
  *   4. Apply quadrant / swap corrections to get the final angle.
  *
- * `radix` is currently ignored at the input side because the function
- * computes a *ratio* y/x, which is radix-independent. It is kept in the
- * signature for source-compatibility with v1.
- *
  * Range: [-180, 180] degrees. Returns 0 for atan2(0,0) (consistent with
  * IEEE 754 atan2 even though that case is mathematically undefined).
  */
-s16 FR_atan2(s32 y, s32 x, u16 radix)
+s16 FR_atan2(s32 y, s32 x)
 {
 	s32 ay, ax, ratio;
 	s16 a;
-	(void)radix;
 
 	/* Axis cases first — these also avoid the divide. */
 	if (x == 0)
@@ -447,20 +367,12 @@ s16 FR_atan2(s32 y, s32 x, u16 radix)
 	/* Compute ratio of smaller / larger in s.16 so it stays in [0,1]. */
 	if (ay <= ax)
 	{
-#ifndef FR_NO_INT64
 		ratio = (s32)(((int64_t)ay << 16) / ax);
-#else
-		ratio = (s32)((((u32)ay) << 16) / (u32)ax);
-#endif
 		a = fr_atan_unit_q1_deg(ratio);          /* [0..45] */
 	}
 	else
 	{
-#ifndef FR_NO_INT64
 		ratio = (s32)(((int64_t)ax << 16) / ay);
-#else
-		ratio = (s32)((((u32)ax) << 16) / (u32)ay);
-#endif
 		a = (s16)(90 - fr_atan_unit_q1_deg(ratio)); /* [45..90] */
 	}
 
@@ -473,15 +385,12 @@ s16 FR_atan2(s32 y, s32 x, u16 radix)
 
 /* FR_atan(input, radix) — arctangent of a single argument.
  *
- * v1 bug: declared in FR_math.h but never defined — calling it was a link
- * error. v2 implements as a thin wrapper over FR_atan2(input, 1.0).
- *
  * `input` is at the given radix. Returns degrees as s16, range [-90, 90].
  */
 s16 FR_atan(s32 input, u16 radix)
 {
 	s32 one = (s32)1 << radix;
-	return FR_atan2(input, one, radix);
+	return FR_atan2(input, one);
 }
 
 /* 2^f table for f in [0, 1] in 17 entries, output in s.16 fixed point.
@@ -516,10 +425,6 @@ static const u32 gFR_POW2_FRAC_TAB[17] = {
  *   2^(int + frac) = 2^int * 2^frac
  * where 2^frac is looked up from a 17-entry table at radix 16, and 2^int
  * is a shift.
- *
- * v1 bug: the original implementation didn't compute mathematical floor for
- * negative inputs, so 2^(-0.5) returned ~1.41 instead of 0.71. v2 uses an
- * explicit Euclidean floor.
  *
  * Worst-case absolute error: ~1.5e-4 over [-8, 8]. Linear interpolation
  * leaves a small concavity error in each table interval.
@@ -576,7 +481,7 @@ s32 FR_pow2(s32 input, u16 radix)
 	{
 		/* result = mant << flr, then re-radix to caller's radix. */
 		if (flr >= 30)
-			return (s32)0x7fffffff;        /* overflow */
+			return FR_OVERFLOW_POS;
 		result = mant << flr;
 		return FR_CHRDX(result, 16, radix);
 	}
@@ -590,30 +495,6 @@ s32 FR_pow2(s32 input, u16 radix)
 		return FR_CHRDX(result, 16, radix);
 	}
 }
-/*
-s32 FR_exp(s32 input, u16 radix)
-{
-	return FR_pow2(FR_SLOG2E(input),radix);
-}
-
-s32 FR_pow10(s32 input, u16 radix)
-{
-	if (FR_FRAC(input,radix))
-		return FR_pow2(FR_SLOG2_10(input),radix);
-	else
-	{
-		input = FR_INT(input,radix);
-		if (input >=0)
-		{
-			s32 x=10;
-			while (input--)
-				x = FR_SMUL10(x);
-			return x<<radix;
-		}
-		return FR_pow2(FR_SLOG2_10(input),radix);
-	}
-}
-*/
 
 /* log2 mantissa table for m in [1, 2), m = 1 + i/32, returning log2(m)
  * in s.16 fixed point. 33 entries (last is log2(2) = 1.0 = 65536) so the
@@ -647,11 +528,6 @@ static const u32 gFR_LOG2_MANT_TAB[33] = {
  *   4. integer_part = (p - radix), then result = (integer_part << 16) +
  *      mantissa_log2.
  *   5. Re-radix to the requested output_radix via FR_CHRDX.
- *
- * v1 bug: the original implementation used a bit-position counter `h` as
- * a *shift width* for the binary search but never accumulated it into the
- * result, so the function returned the reduced input, not log2 of the input.
- * v2 uses an explicit leading-bit + mantissa-table approach.
  *
  * Worst-case absolute error: ~5e-4 in log2 units.
  */
@@ -691,16 +567,7 @@ s32 FR_log2(s32 input, u16 radix, u16 output_radix)
 	frac = (s32)(m & ((1u << 25) - 1));       /* 25 bits */
 	lo = (s32)gFR_LOG2_MANT_TAB[idx];
 	hi = (s32)gFR_LOG2_MANT_TAB[idx + 1];
-	/* mant_log2 is in s.16. Linear interp across 25-bit frac.
-	 * (hi-lo) is at most ~3000, frac is up to 2^25, so the product fits in
-	 * int64 comfortably. On platforms without int64, drop interpolation
-	 * precision by shifting frac down first.
-	 */
-#ifndef FR_NO_INT64
 	mant_log2 = lo + (s32)(((int64_t)(hi - lo) * frac) >> 25);
-#else
-	mant_log2 = lo + (((hi - lo) * (frac >> 10)) >> 15);
-#endif
 
 	/* Step 3: assemble. integer_part = p - radix. */
 	integer_part = p - (s32)radix;
@@ -723,21 +590,6 @@ s32 FR_log10(s32 input, u16 radix, u16 output_radix)
 }
 
 /***************************************
- FR_printNum write out fixed radix number with space padding
-  equiavlent ot %f in printf family
-  myNum = 12.34 // in fixed num
-  e.g. printf("%4.2f",myNum ) ==> "  12"
-
-
-	printf("test fr math rad \n");
-
-	FR_printNumF (putchar,  123456   , 0, 3, 0);    printf("\n");
-	FR_printNumF (putchar,  123456<<13 , 13, 3, 4);    printf(":\n");
-	FR_printNumF (putchar,  D2FR(1234.5678,13)   , 13, 3, 6);    printf(":\n");
-	FR_printNumF (putchar,  D2FR(-1234.5678,13)   , 13, 3, 6);    printf(":\n");
- */
-
-/***************************************
  * FR_printNumD - write a decimal integer with space padding.
  *
  * Equivalent to "%*d" in printf, modulo the return convention.
@@ -747,13 +599,6 @@ s32 FR_log10(s32 input, u16 radix, u16 output_radix)
  *   pad     : minimum field width; spaces are prepended to reach this width.
  *
  * Returns the number of characters written on success, or -1 if `f` is NULL.
- *
- * v1 bugs fixed in v2:
- *   - `n = -n` overflowed for INT_MIN (mangled output). v2 takes the
- *     unsigned magnitude up front: `mag = (n < 0) ? -(unsigned)n : n;`
- *     which handles INT_MIN correctly because unsigned negation is defined.
- *   - The function returned FR_S_OK (== 0) instead of the byte count. v2
- *     tracks and returns the count.
  */
 int FR_printNumD(int (*f)(char), int n, int pad)
 {
@@ -828,16 +673,6 @@ int FR_printNumD(int (*f)(char), int n, int pad)
  *   prec   : number of fractional digits to print.
  *
  * Returns the number of characters written on success, -1 if `f` is NULL.
- *
- * v1 bugs fixed in v2:
- *   - INT_MIN-style negation overflow (same fix as FR_printNumD).
- *   - Fraction extraction was producing garbage (0.0001 -> "0.9000",
- *     1.05 -> "1.4998") because the original "scale to 10^k then >>radix"
- *     loop terminated on the wrong condition. v2 uses an explicit
- *     digit-extraction loop: at each step multiply the fractional part
- *     by 10, the new top bits give the next decimal digit, the bottom
- *     bits become the new fraction.
- *   - Returned FR_S_OK (0) instead of byte count.
  *
  * Rounding policy: truncates fractional digits beyond `prec` (no rounding).
  */
@@ -921,14 +756,7 @@ int FR_printNumF(int (*f)(char), s32 n, int radix, int pad, int prec)
 		{
 			u32 scaled;
 			int digit;
-			/* Use 64-bit accumulator to keep precision; (mag_frac * 10)
-			 * can be up to ~2^4 * 2^radix which fits comfortably in u64.
-			 */
-#ifndef FR_NO_INT64
 			scaled = (u32)(((uint64_t)mag_frac * 10));
-#else
-			scaled = mag_frac * 10;
-#endif
 			digit = (int)(scaled >> radix);
 			mag_frac = scaled & frac_mask;
 			f((char)('0' + (digit % 10)));
@@ -947,10 +775,6 @@ int FR_printNumF(int (*f)(char), s32 n, int radix, int pad, int prec)
  *   showPrefix : if non-zero, prepend "0x".
  *
  * Returns the number of characters written on success, -1 if f is NULL.
- *
- * v1 bug fixed in v2: the original right-shifted a *signed* int, which is
- * implementation-defined for negative values. v2 casts to unsigned first.
- * Also returned FR_S_OK (0) instead of byte count.
  */
 int FR_printNumH(int (*f)(char), int n, int showPrefix)
 {
@@ -978,4 +802,366 @@ int FR_printNumH(int (*f)(char), int n, int showPrefix)
 	} while (x--);
 
 	return written;
+}
+
+/*=======================================================
+ * Square root and hypot
+ *
+ * fr_isqrt64 is a private helper implementing the digit-by-digit
+ * ("shift-and-subtract") integer square root. The algorithm is bit-exact
+ * (returns floor(sqrt(n))) and uses no division. Iteration count is fixed:
+ * 32 iterations.
+ */
+static u32 fr_isqrt64(uint64_t n)
+{
+	uint64_t root = 0;
+	uint64_t bit  = (uint64_t)1 << 62;
+	while (bit > n) bit >>= 2;
+	while (bit != 0)
+	{
+		uint64_t trial = root + bit;
+		if (n >= trial)
+		{
+			n -= trial;
+			root = (root >> 1) + bit;
+		}
+		else
+		{
+			root >>= 1;
+		}
+		bit >>= 2;
+	}
+	return (u32)root;
+}
+
+/*=======================================================
+ * FR_sqrt - fixed-radix square root.
+ *
+ *   input  : value at radix `radix`. Must be >= 0.
+ *   radix  : fractional bits of input AND result.
+ *   return : sqrt(input) at radix `radix`, or FR_DOMAIN_ERROR if input < 0.
+ *
+ * Math: sqrt(input_fp / 2^r) at radix r is
+ *   result_fp = sqrt(input_fp / 2^r) * 2^r = sqrt(input_fp * 2^r)
+ * so we compute isqrt(input_fp << radix) on a 64-bit accumulator. This
+ * works for any input that fits in s32 and any radix in [0, 30].
+ *
+ * Precision: bit-exact floor(sqrt). Worst-case absolute error is < 1
+ * LSB at the requested radix (the truncation of the floor operation).
+ * Always non-negative for non-negative input. Result is monotone in
+ * input.
+ *
+ * Saturation: input < 0 returns FR_DOMAIN_ERROR (= INT32_MIN). Caller
+ * can test `result == FR_DOMAIN_ERROR` to detect domain errors.
+ *
+ * Side effects: none. Pure function.
+ */
+s32 FR_sqrt(s32 input, u16 radix)
+{
+	uint64_t n;
+
+	if (input < 0)
+		return FR_DOMAIN_ERROR;
+	if (input == 0)
+		return 0;
+
+	n = (uint64_t)(u32)input << radix;
+	return (s32)fr_isqrt64(n);
+}
+
+/*=======================================================
+ * FR_hypot - sqrt(x*x + y*y) without intermediate overflow.
+ *
+ *   x, y   : values at radix `radix`
+ *   radix  : fractional bits of inputs AND result
+ *   return : sqrt(x*x + y*y) at radix `radix`.
+ *
+ * Math: x*x + y*y is naturally at radix 2*radix; isqrt of a 2r-radix
+ * value yields an r-radix result, so no extra shifting is needed. The
+ * u64 accumulator can hold (INT32_MAX^2)*2 = ~2^63, so (x*x + y*y) never
+ * overflows for any s32 inputs.
+ *
+ * Precision: bit-exact floor(hypot). Worst-case absolute error < 1 LSB
+ * at the requested radix.
+ *
+ * Side effects: none. Pure function.
+ */
+s32 FR_hypot(s32 x, s32 y, u16 radix)
+{
+	uint64_t xx = (uint64_t)((int64_t)x * (int64_t)x);
+	uint64_t yy = (uint64_t)((int64_t)y * (int64_t)y);
+	(void)radix; /* the 2*radix in xx+yy cancels with isqrt's halving */
+	return (s32)fr_isqrt64(xx + yy);
+}
+
+/*=======================================================
+ * Wave generators — synth-style fixed-shape waveforms.
+ *
+ * All wave functions take a u16 BAM phase in [0, 65535] (a full cycle)
+ * and return s16 in s0.15 format, clamped to [-32767, +32767] to match
+ * the trig amplitude convention used by fr_cos_bam / fr_sin_bam.
+ *
+ * Use FR_HZ2BAM_INC(hz, sample_rate) to compute a phase increment for
+ * a given output frequency, then accumulate it (mod 2^16) per sample.
+ *
+ * Side effects: pure functions (except fr_wave_noise which advances a
+ * caller-provided LFSR state pointer).
+ */
+
+/* fr_wave_sqr - 50%-duty square wave.
+ * phase < pi (BAM<0x8000) → +full; phase >= pi → -full.
+ */
+s16 fr_wave_sqr(u16 phase)
+{
+	return (phase < 0x8000) ? (s16)32767 : (s16)-32767;
+}
+
+/* fr_wave_pwm - variable-duty pulse.
+ * `duty` is the BAM threshold: phase < duty → high, else low.
+ *   duty = 0      → always low
+ *   duty = 0x8000 → 50% duty (same as fr_wave_sqr)
+ *   duty = 0xffff → high almost everywhere (one BAM step low)
+ */
+s16 fr_wave_pwm(u16 phase, u16 duty)
+{
+	return (phase < duty) ? (s16)32767 : (s16)-32767;
+}
+
+/* fr_wave_saw - rising sawtooth.
+ * Linear ramp from -32767 (just after phase=0) to +32767 (at phase=0xffff),
+ * passing through 0 at phase=0x8000. The single boundary case phase=0
+ * (which would naturally produce -32768) is clamped to -32767 to keep the
+ * amplitude symmetric.
+ */
+s16 fr_wave_saw(u16 phase)
+{
+	s32 v = (s32)phase - (s32)0x8000;
+	if (v < -32767) v = -32767;
+	return (s16)v;
+}
+
+/* fr_wave_tri - symmetric triangle.
+ * Four linear segments:
+ *   Q1 [0, 0x4000)  : rising  0 → +peak
+ *   Q2 [0x4000, 0x8000): falling +peak → 0
+ *   Q3 [0x8000, 0xc000): falling 0 → -peak
+ *   Q4 [0xc000, 0x10000): rising  -peak → 0
+ * Peaks are clamped to +/-32767 (the natural unclamped formula gives
+ * +/-32768 at the exact peak BAM).
+ */
+s16 fr_wave_tri(u16 phase)
+{
+	s32 t;
+	if (phase < 0x8000)
+	{
+		/* First half: 0 -> +peak -> 0 */
+		if (phase < 0x4000)
+			t = (s32)phase << 1;          /* 0 .. 0x7ffe */
+		else
+			t = (s32)(0x8000 - phase) << 1; /* 0x8000 .. 2 */
+		if (t > 32767) t = 32767;
+		return (s16)t;
+	}
+	else
+	{
+		/* Second half: 0 -> -peak -> 0 */
+		if (phase < 0xc000)
+			t = (s32)(phase - 0x8000) << 1; /* 0 .. 0x7ffe */
+		else
+			t = (s32)(0x10000 - phase) << 1;/* 0x8000 .. 2 */
+		if (t > 32767) t = 32767;
+		return (s16)-t;
+	}
+}
+
+/* fr_wave_tri_morph - variable-symmetry triangle.
+ *
+ *   phase       : u16 BAM
+ *   break_point : u16 BAM where the wave reaches its positive peak.
+ *
+ * Going from 0 to +peak in [0, break_point), then from +peak back to 0
+ * in [break_point, 0xffff]. The result is a triangle whose rising and
+ * falling slopes can differ.
+ *
+ *   break_point = 0x8000  → symmetric triangle
+ *   break_point = 0xffff  → rising sawtooth (instant fall)
+ *   break_point = 0x0001  → falling sawtooth (instant rise)
+ *   break_point = 0       → degenerate; treated as 1 to avoid div-by-zero
+ *
+ * Note that this version returns values in [0, 32767] only (not bipolar).
+ * Caller can subtract 16384 and double if a bipolar version is desired.
+ *
+ * Costs: one 32-bit divide per sample. On Cortex-M3+ this is ~10-20
+ * cycles. On 8051 / MSP430 this is much slower; pre-compute slopes if
+ * those targets matter to you.
+ */
+s16 fr_wave_tri_morph(u16 phase, u16 break_point)
+{
+	u32 t;
+	if (break_point == 0)
+		break_point = 1;
+	if (phase < break_point)
+	{
+		/* rising: 0 at phase=0, 32767 at phase=break_point */
+		t = ((u32)phase * 32767UL) / (u32)break_point;
+	}
+	else
+	{
+		/* falling: 32767 at phase=break_point, 0 at phase=0xffff */
+		u32 span = (u32)0xffff - (u32)break_point;
+		if (span == 0)
+			return 32767;
+		t = ((u32)((u32)0xffff - (u32)phase) * 32767UL) / span;
+	}
+	if (t > 32767) t = 32767;
+	return (s16)t;
+}
+
+/* fr_wave_noise - LFSR-based pseudorandom noise.
+ *
+ *   state : pointer to a u32 the caller maintains. Initial value must
+ *           be non-zero (zero is a fixed point of the LFSR). A common
+ *           seed is 0xACE1u or any other non-zero constant.
+ *
+ * Returns the next s16 sample in s0.15 (full ±32767 range, white-ish).
+ * Implementation: 32-bit Galois LFSR with the standard maximal-period
+ * tap polynomial 0xD0000001 (period 2^32 - 1 samples).
+ *
+ * Quality: this is "fast white noise" suitable for synth use. It is NOT
+ * cryptographically secure. For better statistical properties (FFT
+ * flatness etc.) layer a longer LFSR or use a separate PRNG.
+ */
+s16 fr_wave_noise(u32 *state)
+{
+	u32 lsb;
+	if (!state)
+		return 0;
+	lsb = *state & 1u;
+	*state >>= 1;
+	if (lsb)
+		*state ^= 0xD0000001u;
+	/* Take the top 16 bits and re-bias to s16 range, clamp to ±32767. */
+	{
+		s32 v = (s32)((*state >> 16) & 0xffffu) - 32768;
+		if (v < -32767) v = -32767;
+		return (s16)v;
+	}
+}
+
+/*=======================================================
+ * ADSR envelope generator
+ *
+ * Linear-segment Attack-Decay-Sustain-Release envelope. State is held
+ * in caller-allocated fr_adsr_t struct (no global state, no malloc).
+ *
+ * Lifecycle:
+ *   1. Caller allocates an fr_adsr_t (stack or static).
+ *   2. fr_adsr_init() once per patch with attack/decay/release durations
+ *      in samples and a sustain level in s0.15.
+ *   3. fr_adsr_trigger() on note-on. Output rises 0 -> peak over `atk`
+ *      samples, falls peak -> sustain over `dec` samples, then holds.
+ *   4. fr_adsr_release() on note-off. Output falls current -> 0 over a
+ *      time controlled by the release rate (rate, not duration: the
+ *      time depends on where in the envelope we are).
+ *   5. fr_adsr_step() once per audio sample to read the current value.
+ *
+ * Internal precision: levels are stored as s32 in s1.30 format so even
+ * very long envelopes (e.g. 48000-sample attack at 48 kHz = 1 second)
+ * have a non-zero per-sample increment. Output is converted to s0.15.
+ *
+ * Saturation: the envelope state machine is self-clamping; level cannot
+ * escape [0, 1<<30]. Output is in [0, 32767].
+ */
+
+#define FR_ADSR_PEAK_S130 ((s32)1 << 30)
+
+void fr_adsr_init(fr_adsr_t *env,
+                  u32 attack_samples,
+                  u32 decay_samples,
+                  s16 sustain_level_s015,
+                  u32 release_samples)
+{
+	if (!env)
+		return;
+	env->state   = FR_ADSR_IDLE;
+	env->level   = 0;
+
+	if (sustain_level_s015 < 0)
+		sustain_level_s015 = 0;
+	if (sustain_level_s015 > 32767)
+		sustain_level_s015 = 32767;
+	/* Convert s0.15 -> s1.30 by shifting left 15. */
+	env->sustain = (s32)sustain_level_s015 << 15;
+
+	env->attack_inc  = (attack_samples  > 0)
+	    ? (s32)(FR_ADSR_PEAK_S130 / attack_samples)
+	    : FR_ADSR_PEAK_S130;
+	env->decay_dec   = (decay_samples   > 0)
+	    ? (s32)((FR_ADSR_PEAK_S130 - env->sustain) / decay_samples)
+	    : (FR_ADSR_PEAK_S130 - env->sustain);
+	env->release_dec = (release_samples > 0)
+	    ? (s32)(FR_ADSR_PEAK_S130 / release_samples)
+	    : FR_ADSR_PEAK_S130;
+}
+
+void fr_adsr_trigger(fr_adsr_t *env)
+{
+	if (!env)
+		return;
+	env->state = FR_ADSR_ATTACK;
+	env->level = 0;
+}
+
+void fr_adsr_release(fr_adsr_t *env)
+{
+	if (!env)
+		return;
+	env->state = FR_ADSR_RELEASE;
+}
+
+s16 fr_adsr_step(fr_adsr_t *env)
+{
+	if (!env)
+		return 0;
+	switch (env->state)
+	{
+	case FR_ADSR_ATTACK:
+		env->level += env->attack_inc;
+		if (env->level >= FR_ADSR_PEAK_S130)
+		{
+			env->level = FR_ADSR_PEAK_S130;
+			env->state = FR_ADSR_DECAY;
+		}
+		break;
+	case FR_ADSR_DECAY:
+		env->level -= env->decay_dec;
+		if (env->level <= env->sustain)
+		{
+			env->level = env->sustain;
+			env->state = FR_ADSR_SUSTAIN;
+		}
+		break;
+	case FR_ADSR_SUSTAIN:
+		env->level = env->sustain;
+		break;
+	case FR_ADSR_RELEASE:
+		env->level -= env->release_dec;
+		if (env->level <= 0)
+		{
+			env->level = 0;
+			env->state = FR_ADSR_IDLE;
+		}
+		break;
+	case FR_ADSR_IDLE:
+	default:
+		env->level = 0;
+		break;
+	}
+	/* s1.30 -> s0.15: shift right 15. Clamp for safety. */
+	{
+		s32 out = env->level >> 15;
+		if (out < 0) out = 0;
+		if (out > 32767) out = 32767;
+		return (s16)out;
+	}
 }

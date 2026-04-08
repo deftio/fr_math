@@ -265,6 +265,244 @@ int test_print_complete() {
     return TEST_PASS;
 }
 
+/* Test FR_sqrt and FR_hypot (v2 new) */
+int test_sqrt_hypot() {
+    s32 result;
+
+    /* Sqrt of perfect squares */
+    result = FR_sqrt(I2FR(0,   16), 16);
+    if (result != 0) return TEST_FAIL;
+    result = FR_sqrt(I2FR(1,   16), 16);
+    if (result != I2FR(1, 16)) return TEST_FAIL;
+    result = FR_sqrt(I2FR(4,   16), 16);
+    if (result != I2FR(2, 16)) return TEST_FAIL;
+    result = FR_sqrt(I2FR(100, 16), 16);
+    if (result != I2FR(10, 16)) return TEST_FAIL;
+
+    /* Sqrt of 2 ≈ 1.41421 */
+    result = FR_sqrt(I2FR(2, 16), 16);
+    /* Allow ±2 LSB */
+    if (result < 92680 || result > 92684) return TEST_FAIL;
+
+    /* Negative input → INT32_MIN sentinel */
+    result = FR_sqrt(-1, 16);
+    if (result != (s32)0x80000000) return TEST_FAIL;
+
+    /* Hypot 3,4 → 5 */
+    result = FR_hypot(I2FR(3, 16), I2FR(4, 16), 16);
+    if (result < I2FR(5, 16) - 2 || result > I2FR(5, 16) + 2) return TEST_FAIL;
+
+    /* Hypot 0,0 → 0 */
+    result = FR_hypot(0, 0, 16);
+    if (result != 0) return TEST_FAIL;
+
+    /* Hypot of -3,-4 → 5 (signs don't matter) */
+    result = FR_hypot(I2FR(-3, 16), I2FR(-4, 16), 16);
+    if (result < I2FR(5, 16) - 2 || result > I2FR(5, 16) + 2) return TEST_FAIL;
+
+    /* Hypot 5,12 → 13 */
+    result = FR_hypot(I2FR(5, 16), I2FR(12, 16), 16);
+    if (result < I2FR(13, 16) - 2 || result > I2FR(13, 16) + 2) return TEST_FAIL;
+
+    return TEST_PASS;
+}
+
+/* Radian-native trig (fr_cos / fr_sin / fr_tan) and FR_atan.
+ * These wrap fr_*_bam after a rad->BAM conversion. We don't need to
+ * re-verify the BAM table here — just exercise every line so coverage
+ * tools see the radian path. */
+int test_radian_trig() {
+    /* Use radix 13 so a full revolution (2π) ≈ 51472 fits in s32
+     * and the rad->bam reciprocal multiply is well within range. */
+    s16 c, s;
+    s32 t;
+
+    /* angle = 0: cos≈32767, sin≈0, tan≈0 */
+    c = fr_cos(0, 13);
+    s = fr_sin(0, 13);
+    t = fr_tan(0, 13);
+    if (c < 32700 || c > 32767) return TEST_FAIL;
+    if (s < -32 || s > 32)      return TEST_FAIL;
+    if (t < -16 || t > 16)      return TEST_FAIL;
+
+    /* angle = π/2 ≈ 12868 at radix 13: cos≈0, sin≈32767, tan saturates */
+    c = fr_cos(12868, 13);
+    s = fr_sin(12868, 13);
+    t = fr_tan(12868, 13);
+    if (c < -64  || c > 64)     return TEST_FAIL;
+    if (s < 32700)              return TEST_FAIL;
+    /* tan(π/2) hits the c==0 saturation branch — accept any large positive */
+    (void)t;
+
+    /* angle = π ≈ 25736: cos≈-32767, sin≈0 */
+    c = fr_cos(25736, 13);
+    s = fr_sin(25736, 13);
+    if (c > -32700)             return TEST_FAIL;
+    if (s < -64 || s > 64)      return TEST_FAIL;
+
+    /* radix=0 path (rad as integer radians, not very meaningful but covers
+     * the `if (radix > 0)` branch's else side) */
+    c = fr_cos(0, 0);
+    if (c < 32700)              return TEST_FAIL;
+
+    /* FR_atan uses FR_atan2(input, 1<<radix) */
+    s16 deg;
+    deg = FR_atan(I2FR(1, 16), 16);   /* atan(1) = 45° */
+    if (deg < 44 || deg > 46)   return TEST_FAIL;
+    deg = FR_atan(I2FR(0, 16), 16);   /* atan(0) = 0° */
+    if (deg < -1 || deg > 1)    return TEST_FAIL;
+    deg = FR_atan(I2FR(-1, 16), 16);  /* atan(-1) = -45° */
+    if (deg < -46 || deg > -44) return TEST_FAIL;
+
+    /* FR_atan2(0,0) - undefined-but-defined branch */
+    deg = FR_atan2(0, 0);
+    (void)deg;
+
+    return TEST_PASS;
+}
+
+/* Test all wave generators (v2 new) */
+int test_waves() {
+    s16 v;
+
+    /* Square: top half +, bottom half - */
+    if (fr_wave_sqr(0)      != 32767)  return TEST_FAIL;
+    if (fr_wave_sqr(0x7fff) != 32767)  return TEST_FAIL;
+    if (fr_wave_sqr(0x8000) != -32767) return TEST_FAIL;
+    if (fr_wave_sqr(0xffff) != -32767) return TEST_FAIL;
+
+    /* PWM: 25% duty */
+    if (fr_wave_pwm(0,      0x4000) != 32767)  return TEST_FAIL;
+    if (fr_wave_pwm(0x3fff, 0x4000) != 32767)  return TEST_FAIL;
+    if (fr_wave_pwm(0x4000, 0x4000) != -32767) return TEST_FAIL;
+    if (fr_wave_pwm(0xffff, 0x4000) != -32767) return TEST_FAIL;
+    /* Edge: 0% duty → always low */
+    if (fr_wave_pwm(0, 0) != -32767) return TEST_FAIL;
+
+    /* Triangle: peak at 0x4000 (+), trough at 0xc000 (-), zero crossings at 0 and 0x8000 */
+    v = fr_wave_tri(0);
+    if (v != 0) return TEST_FAIL;
+    v = fr_wave_tri(0x4000);
+    if (v != 32767) return TEST_FAIL;       /* clamped peak */
+    v = fr_wave_tri(0x8000);
+    if (v != 0) return TEST_FAIL;
+    v = fr_wave_tri(0xc000);
+    if (v != -32767) return TEST_FAIL;      /* clamped trough */
+    /* Mid-rising at p=0x2000 should be ~16384 */
+    v = fr_wave_tri(0x2000);
+    if (v < 16380 || v > 16388) return TEST_FAIL;
+
+    /* Saw: clamps -32767 at p=0, passes through 0 at 0x8000, +32767 at 0xffff */
+    if (fr_wave_saw(0)      != -32767) return TEST_FAIL;
+    if (fr_wave_saw(0x8000) != 0)      return TEST_FAIL;
+    if (fr_wave_saw(0xffff) != 32767)  return TEST_FAIL;
+
+    /* tri_morph: at break_point=0x8000 should match a unipolar triangle (0..32767..0) */
+    v = fr_wave_tri_morph(0,      0x8000);
+    if (v != 0) return TEST_FAIL;
+    v = fr_wave_tri_morph(0x8000, 0x8000);
+    if (v < 32760) return TEST_FAIL;        /* near peak */
+    v = fr_wave_tri_morph(0xffff, 0x8000);
+    if (v != 0) return TEST_FAIL;
+    /* Saw-mode: break at 0xffff → ramp 0..32767 across the cycle */
+    v = fr_wave_tri_morph(0,      0xffff);
+    if (v != 0) return TEST_FAIL;
+    v = fr_wave_tri_morph(0xffff, 0xffff);
+    if (v < 32760) return TEST_FAIL;
+    /* Edge: break_point=0 should be treated as 1, no crash */
+    v = fr_wave_tri_morph(0x8000, 0);
+    (void)v;
+
+    /* Noise: produces non-zero, advances state */
+    {
+        u32 state = 0xACE1u;
+        u32 prev_state;
+        s16 sample;
+        int i, nonzero_count = 0;
+
+        for (i = 0; i < 16; i++) {
+            prev_state = state;
+            sample = fr_wave_noise(&state);
+            if (state == prev_state) return TEST_FAIL;  /* must advance */
+            if (sample != 0) nonzero_count++;
+        }
+        /* At least most samples should be non-zero (very high probability) */
+        if (nonzero_count < 14) return TEST_FAIL;
+
+        /* Null state pointer must not crash */
+        sample = fr_wave_noise((u32 *)0);
+        if (sample != 0) return TEST_FAIL;
+    }
+
+    /* FR_HZ2BAM_INC macro: 1Hz at 65536 sample rate → 1 BAM/sample */
+    if (FR_HZ2BAM_INC(1, 65536) != 1) return TEST_FAIL;
+    /* 440Hz at 48000 → 440*65536/48000 = 600.something */
+    {
+        u16 inc = FR_HZ2BAM_INC(440, 48000);
+        if (inc < 595 || inc > 605) return TEST_FAIL;
+    }
+
+    return TEST_PASS;
+}
+
+/* Test ADSR envelope generator (v2 new) */
+int test_adsr() {
+    fr_adsr_t env;
+    s16 v;
+    int i;
+
+    /* Init: attack 100, decay 50, sustain 16384 (0.5), release 200 */
+    fr_adsr_init(&env, 100, 50, 16384, 200);
+    if (env.state != FR_ADSR_IDLE) return TEST_FAIL;
+
+    /* Idle: stepping returns 0 */
+    v = fr_adsr_step(&env);
+    if (v != 0) return TEST_FAIL;
+
+    /* Trigger: rises from 0 to peak */
+    fr_adsr_trigger(&env);
+    if (env.state != FR_ADSR_ATTACK) return TEST_FAIL;
+    /* Step until past attack */
+    for (i = 0; i < 200 && env.state == FR_ADSR_ATTACK; i++)
+        fr_adsr_step(&env);
+    if (env.state != FR_ADSR_DECAY) return TEST_FAIL;
+
+    /* Step until past decay */
+    for (i = 0; i < 200 && env.state == FR_ADSR_DECAY; i++)
+        fr_adsr_step(&env);
+    if (env.state != FR_ADSR_SUSTAIN) return TEST_FAIL;
+
+    /* Sustain holds */
+    v = fr_adsr_step(&env);
+    if (v < 16380 || v > 16388) return TEST_FAIL;
+
+    /* Release: drops to 0 */
+    fr_adsr_release(&env);
+    if (env.state != FR_ADSR_RELEASE) return TEST_FAIL;
+    for (i = 0; i < 1000 && env.state == FR_ADSR_RELEASE; i++)
+        fr_adsr_step(&env);
+    if (env.state != FR_ADSR_IDLE) return TEST_FAIL;
+    v = fr_adsr_step(&env);
+    if (v != 0) return TEST_FAIL;
+
+    /* Init with all-zero durations should not crash and should
+     * effectively be a one-step envelope */
+    fr_adsr_init(&env, 0, 0, 32767, 0);
+    fr_adsr_trigger(&env);
+    fr_adsr_step(&env);     /* attack: jump to peak */
+    fr_adsr_step(&env);     /* decay: jump to sustain */
+    fr_adsr_step(&env);     /* sustain hold */
+
+    /* Null pointer safety */
+    fr_adsr_init((fr_adsr_t *)0, 1, 1, 1, 1);
+    fr_adsr_trigger((fr_adsr_t *)0);
+    fr_adsr_release((fr_adsr_t *)0);
+    v = fr_adsr_step((fr_adsr_t *)0);
+    if (v != 0) return TEST_FAIL;
+
+    return TEST_PASS;
+}
+
 /* Test all macros and edge cases */
 int test_macros_complete() {
     s32 val, result;
@@ -383,7 +621,19 @@ int main() {
     
     printf("\nPrint Functions:\n");
     RUN_TEST(test_print_complete);
-    
+
+    printf("\nSqrt and Hypot (v2):\n");
+    RUN_TEST(test_sqrt_hypot);
+
+    printf("\nRadian-native trig (v2):\n");
+    RUN_TEST(test_radian_trig);
+
+    printf("\nWave Generators (v2):\n");
+    RUN_TEST(test_waves);
+
+    printf("\nADSR Envelope (v2):\n");
+    RUN_TEST(test_adsr);
+
     printf("\n=== Test Summary ===\n");
     printf("Total: %d, Passed: %d, Failed: %d\n", 
            test_count, test_count - fail_count, fail_count);

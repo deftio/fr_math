@@ -18,16 +18,18 @@ for the implementation plan this release executed.
   `s32` → `int32_t`, etc.). v1 defined `s32` as `signed long`, which is
   64 bits on LP64 platforms (Linux and macOS on x64 / ARM64), so every
   fixed-point computation that relied on `s32` being exactly 32 bits
-  silently produced wrong answers on desktop Linux and macOS. To opt
-  out on ancient toolchains without `<stdint.h>`, build with
-  `-DFR_NO_STDINT`.
+  silently produced wrong answers on desktop Linux and macOS. C99
+  `<stdint.h>` is now mandatory in v2 (every modern toolchain — gcc,
+  clang, MSVC, IAR, Keil C51, sdcc, MSP430-gcc, AVR-gcc, RISC-V/ARM —
+  ships it). If you are stuck on a pre-C99 compiler, FR_Math 1.0.x
+  remains the version for you.
 
 ### Numerical fixes
 
 - **`FR_FixMulSat` / `FR_FixMuls`**: v1 used a split-multiply formula
   with an algebraic bug that returned wrong values for certain sign
-  combinations. v2 uses an `int64_t` fast path (with a corrected
-  fallback for `FR_NO_INT64` builds) and explicit saturation.
+  combinations. v2 uses an `int64_t` fast path with explicit
+  saturation.
 - **`FR_log2`**: v1 was missing the accumulator in the mantissa-table
   step and returned wrong values for non-power-of-2 inputs. v2 rewrites
   the algorithm: leading-bit-position → normalize to s1.30 → 33-entry
@@ -41,8 +43,10 @@ for the implementation plan this release executed.
   linear interp.
 - **`FR_atan2`**: v1 was a placeholder that returned garbage. v2 is a
   correct octant-reduced arctan with a 33-entry table. Max error ≤ 1°.
+  v2 also drops the vestigial `radix` parameter — new signature is
+  `FR_atan2(s32 y, s32 x)`.
 - **`FR_atan`**: v1 was wired up incorrectly. v2 implements as
-  `FR_atan2(input, 1<<radix, radix)`.
+  `FR_atan2(input, 1<<radix)`.
 - **`FR_Tan`**: v1 used `s16` loop variables that overflowed for angles
   near 90°. v2 uses `s32`.
 - **`FR_TanI`**: removed dead unreachable code (`if (270 == deg)`).
@@ -64,9 +68,6 @@ for the implementation plan this release executed.
   the `f` argument entirely. v2 adds an explicit `d` digit-count
   argument — new signature is `FR_NUM(i, f, d, r)`. Any caller of the
   v1 form must be updated.
-- **`FR_SQUARE`**: v1 was missing a closing parenthesis. Fixed.
-- **`FR_FIXMUL32u`**: wrapped `x` and `y` in parentheses to fix macro
-  hygiene.
 
 ### New functionality
 
@@ -83,6 +84,41 @@ for the implementation plan this release executed.
 - **Table size is a compile-time knob**: `-DFR_TRIG_TABLE_BITS=8` gives
   a 257-entry table for halved worst-case error (default is 7 / 129
   entries).
+- **Square root and hypot** (`FR_sqrt`, `FR_hypot`): radix-aware fixed
+  point square root and 2D vector magnitude. `FR_sqrt` uses a
+  digit-by-digit (shift-and-subtract) integer isqrt on `int64_t`.
+  Negative input returns `FR_DOMAIN_ERROR` (`INT32_MIN`). `FR_hypot`
+  computes `sqrt(x^2 + y^2)` with no intermediate overflow up to the
+  full s32 range. Bit-exact for perfect squares; max error ~1 LSB at
+  the requested radix.
+- **Wave function family** for embedded audio / LFOs / control
+  signals. All take a `u16` BAM phase and return s0.15 (s16, ±32767):
+  - `fr_wave_sqr(phase)` — symmetric square wave.
+  - `fr_wave_pwm(phase, duty)` — variable-duty pulse wave; `duty` is
+    a `u16` threshold in BAM units.
+  - `fr_wave_tri(phase)` — symmetric triangle, peaks clamped to
+    ±32767. Max error vs ideal triangle ~3e−5 (1 LSB s0.15).
+  - `fr_wave_saw(phase)` — sawtooth, `(s16)(phase - 0x8000)` with
+    boundary clamp.
+  - `fr_wave_tri_morph(phase, break_point)` — variable-symmetry
+    triangle that morphs into a sawtooth as `break_point` approaches
+    `0` or `0xffff`. Returns unipolar [0, 32767]. Uses one division
+    per sample.
+  - `fr_wave_noise(state)` — 32-bit Galois LFSR (poly `0xD0000001`,
+    period 2^32 − 1) returning a full-range s16. Caller owns the
+    `u32` state; seed with any non-zero value.
+- **`FR_HZ2BAM_INC(hz, sample_rate)`**: phase increment helper.
+  Computes `hz * 65536 / sample_rate` so a u16 phase accumulator
+  driven by this increment produces the requested frequency. Example:
+  `FR_HZ2BAM_INC(440, 48000) = 600` (≈ 439.45 Hz).
+- **ADSR envelope generator** (`fr_adsr_t`, `fr_adsr_init`,
+  `fr_adsr_trigger`, `fr_adsr_release`, `fr_adsr_step`): linear-segment
+  attack/decay/sustain/release envelope. Internal levels are stored as
+  s1.30 so very long durations (e.g. 48000-sample attack at 48 kHz)
+  still get a non-zero per-sample increment; `fr_adsr_step` returns
+  s0.15 for direct multiplication into a wave sample. State machine
+  exposes constants `FR_ADSR_IDLE` / `_ATTACK` / `_DECAY` / `_SUSTAIN`
+  / `_RELEASE`.
 
 ### New documentation
 
@@ -109,6 +145,24 @@ for the implementation plan this release executed.
   code that called the 3-argument form will fail to compile. The old
   form was broken (it ignored `f` entirely), so any caller was already
   getting wrong results.
+- **`FR_atan2` signature**: `FR_atan2(y, x, radix)` → `FR_atan2(y, x)`.
+  The radix parameter was vestigial (ignored by the v1 placeholder and
+  unnecessary in v2).
+- **`FR_RESULT` and `FR_E_*` codes removed**: v1's HRESULT-style return
+  codes are gone. The matrix `inv()` methods now return `bool`
+  (`true` on success, `false` if singular). `add()`, `sub()`, and
+  `setrotate()` return `void`. Math functions that can hit a domain
+  error return the named sentinel `FR_DOMAIN_ERROR`; saturating
+  arithmetic returns `FR_OVERFLOW_POS` / `FR_OVERFLOW_NEG`.
+- **`FR_SQUARE` and `FR_FIXMUL32u` removed**: these s16.16-only macros
+  were narrow specializations of `FR_FixMuls`/`FR_FixMulSat`. Use the
+  generic versions, which now have an `int64_t` fast path and work at
+  any radix.
+- **`FR_NO_INT64` and `FR_NO_STDINT` build flags removed**: every
+  C99-or-newer toolchain on every architecture (including 8-bit
+  targets like sdcc, AVR-gcc, MSP430-gcc) provides `<stdint.h>` and
+  64-bit integer arithmetic, so the conditional fallbacks were
+  carrying their weight in maintenance and ROM for no benefit.
 - **Wider intermediate types**: if you had code that poked at `s32` as
   if it were `long` (e.g. printing with `%ld`), that will now warn.
   Use `%d` with `s32` / `int32_t`, or cast.

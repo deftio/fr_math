@@ -78,6 +78,14 @@ if [ -f "$TEST_DIR/test_2d_complete.cpp" ]; then
     fi
 fi
 
+# TDD characterization test - exercises every public function
+if [ -f "$TEST_DIR/test_tdd.cpp" ]; then
+    g++ -Isrc -Wall -Os -fprofile-arcs -ftest-coverage $TEST_DIR/test_tdd.cpp $BUILD_DIR/FR_math.o $BUILD_DIR/FR_math_2D.o -lm -o $BUILD_DIR/test_tdd 2>/dev/null || true
+    if [ -f "$BUILD_DIR/test_tdd" ]; then
+        $BUILD_DIR/test_tdd > /dev/null 2>&1 || true
+    fi
+fi
+
 echo ""
 echo "Generating coverage analysis..."
 echo ""
