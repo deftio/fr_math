@@ -249,6 +249,36 @@ int test_fast_mode() {
     return TEST_PASS;
 }
 
+/* Dark-corner branches in FR_math_2D.cpp::inv() that the main tests
+ * don't hit. Two distinct lines:
+ *   1. inv(&this) self-alias guard → returns false
+ *   2. in-place inv() success path → `*this = n; return true;`
+ *
+ * Both require a matrix with a non-zero det(). Note that det() uses
+ * FR_FixMulSat internally, which assumes a hard-wired radix 16, so
+ * the `m*m` product underflows to zero unless the diagonal values
+ * are large enough — at radix 8 that means m >= I2FR(16, 8). */
+int test_inv_edge_branches() {
+    FR_Matrix2D_CPT mat(8);
+
+    /* Diagonal matrix with large enough values that det() != 0. */
+    mat.set(I2FR(16, 8), 0, I2FR(1, 8),
+            0, I2FR(16, 8), I2FR(2, 8), 8);
+    if (mat.det() == 0) return TEST_FAIL;
+
+    /* Self-alias check: inv(&mat) on an invertible mat → returns false. */
+    bool ok = mat.inv(&mat);
+    if (ok) return TEST_FAIL;
+
+    /* In-place inv() on an invertible mat → hits `*this = n; return true`. */
+    mat.set(I2FR(16, 8), 0, I2FR(1, 8),
+            0, I2FR(16, 8), I2FR(2, 8), 8);
+    ok = mat.inv();
+    if (!ok) return TEST_FAIL;
+
+    return TEST_PASS;
+}
+
 /* Test edge cases */
 int test_edge_cases() {
     FR_Matrix2D_CPT mat(8);
@@ -292,7 +322,8 @@ int main() {
     printf("\nMatrix Operations:\n");
     RUN_TEST(test_matrix_ops);
     RUN_TEST(test_det_inv);
-    
+    RUN_TEST(test_inv_edge_branches);
+
     printf("\nOptimizations:\n");
     RUN_TEST(test_fast_mode);
     

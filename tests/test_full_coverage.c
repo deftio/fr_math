@@ -562,6 +562,78 @@ int test_macros_complete() {
     return TEST_PASS;
 }
 
+/* Dark-corner edge branches — each block targets a specific uncovered
+ * line in FR_math.c that the main tests don't hit. These are mostly
+ * saturation/overflow/domain-error paths and the "other arm" of
+ * internal conditionals. */
+int test_edge_branches() {
+    s32 r32;
+    s16 r16;
+    fr_adsr_t env;
+
+    /* FR_Tan(deg, radix) c==0 branch. At radix 0, deg=-16384 and
+     * deg=16384 both drive the internal BAM to exactly 90°/270°, so
+     * cos==0 and we hit the saturation return. */
+    r32 = FR_Tan(-16384, 0);                 /* bam=16384 (sin>0) */
+    if (r32 != ((s32)FR_TRIG_MAXVAL << FR_TRIG_PREC)) return TEST_FAIL;
+    r32 = FR_Tan(16384, 0);                  /* bam=49152 (sin<0) */
+    if (r32 != -((s32)FR_TRIG_MAXVAL << FR_TRIG_PREC)) return TEST_FAIL;
+
+    /* FR_atan2 with |y| > |x| — hits the ay>ax branch (ratio=ax/ay,
+     * a = 90 - atan_q1). All four quadrant-sign combinations. */
+    r16 = FR_atan2(I2FR(5, 16), I2FR(1, 16));    /* near +90° */
+    if (r16 < 75 || r16 > 85)   return TEST_FAIL;
+    r16 = FR_atan2(I2FR(-5, 16), I2FR(1, 16));   /* near -90° */
+    if (r16 < -85 || r16 > -75) return TEST_FAIL;
+    r16 = FR_atan2(I2FR(5, 16), I2FR(-1, 16));   /* near +(180-90)=101° */
+    if (r16 < 95 || r16 > 105)  return TEST_FAIL;
+    r16 = FR_atan2(I2FR(-5, 16), I2FR(-1, 16));  /* near -101° */
+    if (r16 < -105 || r16 > -95) return TEST_FAIL;
+
+    /* FR_pow2 with radix > 16 — hits `frac_full >>= (radix - 16)`. */
+    r32 = FR_pow2(I2FR(2, 20), 20);              /* 2^2 = 4 */
+    if (r32 != I2FR(4, 20))     return TEST_FAIL;
+    /* 2^2.5 ≈ 5.6568; verify within ±1% */
+    r32 = FR_pow2(I2FR(2, 20) + (1L << 19), 20);
+    {
+        s32 lo = (s32)(5.6 * (1L << 20));
+        s32 hi = (s32)(5.72 * (1L << 20));
+        if (r32 < lo || r32 > hi) return TEST_FAIL;
+    }
+
+    /* FR_pow2 overflow — flr >= 30 returns FR_OVERFLOW_POS. */
+    r32 = FR_pow2(I2FR(30, 16), 16);
+    if (r32 != FR_OVERFLOW_POS) return TEST_FAIL;
+    r32 = FR_pow2(I2FR(100, 16), 16);
+    if (r32 != FR_OVERFLOW_POS) return TEST_FAIL;
+
+    /* FR_pow2 underflow — sh >= 30 returns 0. */
+    r32 = FR_pow2(-I2FR(30, 16), 16);
+    if (r32 != 0) return TEST_FAIL;
+    r32 = FR_pow2(-I2FR(100, 16), 16);
+    if (r32 != 0) return TEST_FAIL;
+
+    /* FR_log2 with leading 1 at bit >=30 — hits `if (p >= 30)` branch
+     * that right-shifts the mantissa instead of left-shifting. */
+    r32 = FR_log2(0x40000000, 0, 16);            /* log2(2^30) = 30 */
+    if (r32 < I2FR(30, 16) - 4 || r32 > I2FR(30, 16) + 4) return TEST_FAIL;
+    r32 = FR_log2(0x7FFFFFFF, 0, 16);            /* log2(2^31-1) ≈ 31 */
+    if (r32 < I2FR(30, 16) || r32 > I2FR(32, 16)) return TEST_FAIL;
+
+    /* fr_adsr_init with sustain < 0 — must clamp to 0. There is no
+     * upper clamp because the s16 parameter type already bounds the
+     * value at 32767. */
+    fr_adsr_init(&env, 10, 10, (s16)-5,     10);
+    if (env.sustain != 0) return TEST_FAIL;
+    fr_adsr_init(&env, 10, 10, (s16)-32768, 10);
+    if (env.sustain != 0) return TEST_FAIL;
+    /* Confirm the boundary value (exactly 32767) passes through unmodified. */
+    fr_adsr_init(&env, 10, 10, (s16)32767,  10);
+    if (env.sustain != ((s32)32767 << 15)) return TEST_FAIL;
+
+    return TEST_PASS;
+}
+
 /* Test all constants */
 int test_constants_complete() {
     s32 val;
@@ -633,6 +705,9 @@ int main() {
 
     printf("\nADSR Envelope (v2):\n");
     RUN_TEST(test_adsr);
+
+    printf("\nDark-Corner Edge Branches:\n");
+    RUN_TEST(test_edge_branches);
 
     printf("\n=== Test Summary ===\n");
     printf("Total: %d, Passed: %d, Failed: %d\n", 

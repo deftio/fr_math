@@ -56,9 +56,17 @@ x86_32_size=$(build_and_size "x86-32" "gcc" "-m32")
 x86_64_size=$(build_and_size "x86-64" "gcc" "-m64")
 arm32_size=$(build_and_size "arm32" "arm-linux-gnueabihf-gcc" "")
 arm64_size=$(build_and_size "arm64" "aarch64-linux-gnu-gcc" "")
+# Bare-metal Cortex-M (Thumb) targets — toolchain is arm-none-eabi-gcc.
+# Cortex-M0 = Thumb-1 (very dense, no DSP), Cortex-M4 = Thumb-2 (DSP, MAC).
+cm0_size=$(build_and_size "cortex-m0" "arm-none-eabi-gcc" "-mcpu=cortex-m0 -mthumb --specs=nosys.specs")
+cm4_size=$(build_and_size "cortex-m4" "arm-none-eabi-gcc" "-mcpu=cortex-m4 -mthumb --specs=nosys.specs")
 m68k_size=$(build_and_size "m68k" "m68k-elf-gcc" "")
-riscv32_size=$(build_and_size "riscv32" "riscv32-unknown-elf-gcc" "")
-riscv64_size=$(build_and_size "riscv64" "riscv64-unknown-elf-gcc" "")
+# RISC-V: try the bare-metal newlib toolchain first, fall back to elf names.
+riscv32_size=$(build_and_size "riscv32" "riscv64-unknown-elf-gcc" "-march=rv32imc -mabi=ilp32")
+if [ "$riscv32_size" = "n/a" ]; then
+    riscv32_size=$(build_and_size "riscv32" "riscv32-unknown-elf-gcc" "")
+fi
+riscv64_size=$(build_and_size "riscv64" "riscv64-unknown-elf-gcc" "-march=rv64imac -mabi=lp64")
 
 # Native build
 native_arch=$(uname -m)
@@ -91,6 +99,8 @@ print_row "x86-32" "gcc -m32" "$x86_32_size"
 print_row "x86-64" "gcc -m64" "$x86_64_size"
 print_row "ARM32" "arm-gcc" "$arm32_size"
 print_row "ARM64" "aarch64-gcc" "$arm64_size"
+print_row "Cortex-M0" "arm-eabi-gcc" "$cm0_size"
+print_row "Cortex-M4" "arm-eabi-gcc" "$cm4_size"
 print_row "68k" "m68k-gcc" "$m68k_size"
 print_row "RISC-V 32" "riscv32-gcc" "$riscv32_size"
 print_row "RISC-V 64" "riscv64-gcc" "$riscv64_size"
@@ -121,9 +131,12 @@ echo "  Ubuntu/Debian:"
 echo "    sudo apt-get install gcc-multilib g++-multilib"
 echo "    sudo apt-get install gcc-arm-linux-gnueabihf"
 echo "    sudo apt-get install gcc-aarch64-linux-gnu"
+echo "    sudo apt-get install gcc-arm-none-eabi      # Cortex-M (Thumb)"
+echo "    sudo apt-get install gcc-riscv64-unknown-elf"
 echo "    sudo apt-get install gcc-m68k-linux-gnu"
 echo ""
 echo "  macOS (via brew):"
+echo "    brew install --cask gcc-arm-embedded         # Cortex-M (Thumb)"
 echo "    brew install arm-gnu-toolchain"
 echo "    brew install riscv-gnu-toolchain"
 echo ""

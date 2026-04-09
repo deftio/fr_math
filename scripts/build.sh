@@ -62,16 +62,38 @@ echo -e "${YELLOW}[1/3] Cleaning build artifacts...${NC}"
 bash "${SCRIPT_DIR}/clean_build.sh" >/dev/null
 echo -e "${GREEN}  ok${NC}"
 
+# Version drift check: warn (but don't fail) if VERSION has drifted from
+# the files sync_version.sh maintains. Non-blocking during casual dev builds.
+if ! bash "${SCRIPT_DIR}/sync_version.sh" --check >/dev/null 2>&1; then
+    echo -e "${YELLOW}  warning: version files out of sync; run ./scripts/sync_version.sh${NC}"
+fi
+
 # Step 2: build library + examples.
 echo -e "${YELLOW}[2/3] Building library and examples...${NC}"
 make lib examples >/dev/null
 echo -e "${GREEN}  ok${NC}"
 
+# Print host-compiled library sizes so the developer can see how the
+# objects came out without having to dig in build/. This is host-only;
+# for a multi-arch comparison run scripts/size_report.sh.
+print_host_size() {
+    local host_arch
+    host_arch="$(uname -m 2>/dev/null || echo unknown)"
+    echo ""
+    echo -e "${BOLD}Host library size ($(uname -s 2>/dev/null || echo host)/${host_arch}):${NC}"
+    if command -v size >/dev/null 2>&1; then
+        size build/FR_math.o build/FR_math_2D.o 2>/dev/null || \
+            ls -lh build/FR_math.o build/FR_math_2D.o 2>/dev/null || true
+    else
+        ls -lh build/FR_math.o build/FR_math_2D.o 2>/dev/null || true
+    fi
+}
+
+print_host_size
+
 if [[ "${MODE}" == "lib-only" ]]; then
     echo ""
     echo -e "${GREEN}Library + examples built successfully.${NC}"
-    echo ""
-    ls -lh build/*.o build/fr_example 2>/dev/null || true
     echo ""
     exit 0
 fi

@@ -30,15 +30,28 @@ This library allows the programmer to choose the radix point (number of fraction
 
 ## Documentation
 
-The full documentation site has a fixed-point primer, a getting-started
-walkthrough, the API reference, runnable examples, a build & test guide,
-and release notes.
+The full documentation has a fixed-point primer, a getting-started
+walkthrough, the API reference, runnable examples, a build & test
+guide, and release notes. It ships in two forms &mdash; pick whichever
+fits how you prefer to read.
+
+**Browser (rendered HTML):**
 
 - **Online:** <https://deftio.github.io/fr_math/>
-- **Local:** [docs/index.html](docs/index.html) — plain static HTML/CSS/JS, no Jekyll, no Ruby, no build step. Open it directly in any browser.
+- **Local:** [pages/index.html](pages/index.html) &mdash; plain static HTML/CSS/JS, no Jekyll, no Ruby, no build step. Open it directly in any browser.
 
-The primer below in this README is the short version; the docs site
-goes deeper.
+**Terminal / editor (plain markdown):**
+
+- [docs/README.md](docs/README.md) &mdash; the same content mirrored as plain markdown so you can read it without a browser. Useful on build servers, headless boxes, or when you just prefer `less`.
+  - [docs/getting-started.md](docs/getting-started.md)
+  - [docs/fixed-point-primer.md](docs/fixed-point-primer.md)
+  - [docs/api-reference.md](docs/api-reference.md)
+  - [docs/examples.md](docs/examples.md)
+  - [docs/building.md](docs/building.md)
+  - [docs/releases.md](docs/releases.md)
+
+The primer below in this README is the short version; the docs go
+deeper and include worked examples for every public symbol.
 
 ## History
 I developed this several years ago for use in several embedded integer-only math projects, and this small, slightly cleaned-up version is made available for the public here. It worked very well on 16MHz 68k processors for Palm Pilots (and later ARM cores) where we needed many integer point transforms for graphics. This included things like font rendering where each letter's M-square needed to be computed and embedded graphics transforms. The Inkstorm application for PalmOS (originally by Trumpetsoft) used a version of this.

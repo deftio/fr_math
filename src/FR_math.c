@@ -1086,10 +1086,10 @@ void fr_adsr_init(fr_adsr_t *env,
 	env->state   = FR_ADSR_IDLE;
 	env->level   = 0;
 
+	/* sustain_level_s015 is s16 so its upper bound (32767) is already the
+	 * type's max; only the lower bound needs an explicit clamp. */
 	if (sustain_level_s015 < 0)
 		sustain_level_s015 = 0;
-	if (sustain_level_s015 > 32767)
-		sustain_level_s015 = 32767;
 	/* Convert s0.15 -> s1.30 by shifting left 15. */
 	env->sustain = (s32)sustain_level_s015 << 15;
 

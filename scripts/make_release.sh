@@ -54,7 +54,7 @@ for arg in "$@"; do
 done
 
 STEP=0
-TOTAL_STEPS=9
+TOTAL_STEPS=10
 step_header() {
     STEP=$((STEP + 1))
     echo ""
@@ -97,7 +97,23 @@ bash "${SCRIPT_DIR}/clean_build.sh" >/dev/null
 echo -e "${GREEN}  ok${NC}"
 
 # ---------------------------------------------------------------------------
-# Step 2: strict compile (warnings as errors).
+# Step 2: version sync check. Fail the release if any file that carries a
+# version string has drifted from VERSION — we don't want to tag a release
+# with mismatched version numbers across README, site.js, and the sources.
+# ---------------------------------------------------------------------------
+step_header "Version sync check"
+SYNC_LOG="/tmp/fr_math_sync_$$.log"
+if ! bash "${SCRIPT_DIR}/sync_version.sh" --check >"${SYNC_LOG}" 2>&1; then
+    cat "${SYNC_LOG}"
+    rm -f "${SYNC_LOG}"
+    fail "version sync" "version files have drifted; run ./scripts/sync_version.sh and re-run"
+fi
+rm -f "${SYNC_LOG}"
+VERSION_STR=$(head -1 "${PROJECT_ROOT}/VERSION" | tr -d '[:space:]')
+echo -e "${GREEN}  all version strings match VERSION=${VERSION_STR}${NC}"
+
+# ---------------------------------------------------------------------------
+# Step 3: strict compile (warnings as errors).
 # ---------------------------------------------------------------------------
 step_header "Strict compile (-Wall -Wextra -Werror -Wshadow)"
 STRICT_FLAGS="-Isrc -Wall -Wextra -Werror -Wshadow -Os"
@@ -116,7 +132,7 @@ fi
 echo -e "${GREEN}  lib compiles clean with -Wall -Wextra -Werror -Wshadow${NC}"
 
 # ---------------------------------------------------------------------------
-# Step 3: standard build + full test suite.
+# Step 4: standard build + full test suite.
 # ---------------------------------------------------------------------------
 step_header "Build library, examples, tests"
 if ! make lib examples >build/make_lib.log 2>&1; then
@@ -139,7 +155,7 @@ TOTAL_PASSED=$(grep -Eo "Passed: [0-9]+" build/make_test.log | awk -F: '{sum+=$2
 echo -e "${GREEN}  ${TOTAL_PASSED} tests passed across all suites${NC}"
 
 # ---------------------------------------------------------------------------
-# Step 4: coverage report.
+# Step 6: coverage report.
 # ---------------------------------------------------------------------------
 step_header "Coverage report"
 # coverage_report.sh wipes build/ at start, so log to /tmp.
@@ -164,7 +180,7 @@ if [[ -n "${OVERALL_NUM}" ]] && [[ "${OVERALL_NUM}" =~ ^[0-9]+$ ]] && [[ "${OVER
 fi
 
 # ---------------------------------------------------------------------------
-# Step 6: update README badges from actual numbers.
+# Step 7: update README badges from actual numbers.
 # ---------------------------------------------------------------------------
 step_header "Update README badges"
 README="${PROJECT_ROOT}/README.md"
@@ -204,7 +220,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 7: size report.
+# Step 8: size report.
 # ---------------------------------------------------------------------------
 step_header "Size report (current platform)"
 if command -v size >/dev/null 2>&1; then
@@ -215,7 +231,7 @@ fi
 echo -e "${GREEN}  ok${NC}"
 
 # ---------------------------------------------------------------------------
-# Step 8: cross-compile sanity (optional, requires toolchains).
+# Step 9: cross-compile sanity (optional, requires toolchains).
 # ---------------------------------------------------------------------------
 step_header "Cross-compile sanity check"
 if [[ "${SKIP_CROSS}" == "1" ]]; then
@@ -243,7 +259,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Step 9: uncommitted changes check. Re-run git status because the badge
+# Step 10: uncommitted changes check. Re-run git status because the badge
 # step above may have modified README.md.
 # ---------------------------------------------------------------------------
 step_header "Working tree status"

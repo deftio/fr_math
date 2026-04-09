@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Fixed-Point Primer — FR_Math</title>
+  <meta name="description" content="Learn fixed-point math from scratch: why it exists, sM.N notation, operations, overflow, and how to choose a radix.">
+  <link rel="stylesheet" href="../assets/main.css">
+</head>
+<body>
+
+<header id="site-header"></header>
+
+<main class="page-content">
+  <div class="wrapper">
+
+<h1>Fixed-Point Primer</h1>
+
+<p>This page walks through everything you need to use FR_Math well.
+We&rsquo;ll start with the obvious question &mdash; <em>why would I
+bother with fixed-point in 2026?</em> &mdash; and work our way up to
+radix choice, overflow, and the little gotchas that catch everyone
+the first time. No prior exposure to fixed-point is assumed. If you
+<em>do</em> have prior exposure, the notation and worked examples
+should still be useful, because FR_Math has its own conventions and
+it&rsquo;s better to see them spelled out than to guess.</p>
+
+<p>One promise up front: each abstract rule in this page is followed
+by a concrete example you can type into a compiler.</p>
+
+<h2>Why fixed-point is still a good idea</h2>
+
+<p>Every CPU arithmetic unit (ALU) speaks integers as its native
+tongue. Add two 32-bit integers, you get a 33-bit result. Multiply
+them, you get a 64-bit result. This silicon is fast, deterministic,
+and has existed on every chip since the 1970s. An 8051 can add two
+16-bit integers in a couple of cycles. A modern ARM or RISC-V can
+do the same in a single cycle and pipeline dozens in parallel.</p>
+
+<p>Fractional numbers don&rsquo;t exist natively in that ALU. If you
+want to represent <code>3.14</code>, you have two paths:</p>
+
+<ol>
+  <li><strong>Floating point.</strong> Either a hardware IEEE-754
+      FPU or a software library that emulates one. The FPU gives
+      you enormous dynamic range (roughly 10<sup>&minus;38</sup> to
+      10<sup>38</sup>) at the cost of extra silicon and an error
+      model most programmers never actually read. The software
+      library gives you the same semantics at 10&times; to
+      100&times; the speed cost of hardware float, and pulls in
+      tens of kilobytes of code. On small MCUs that&rsquo;s more
+      than your whole application.</li>
+  <li><strong>Fixed point.</strong> You agree with yourself that
+      some of your integer bits represent fractional quantities, and
+      you do the bookkeeping by hand. In return: integer speed, tiny
+      code, and bit-exact reproducibility across any compiler and
+      architecture.</li>
+</ol>
+
+<p>FR_Math takes option 2 &mdash; but tries to make the bookkeeping
+as painless as a float would be, by giving you macros and functions
+that know about the radix and do the shifts for you. You still get
+to <em>choose</em> the radix per call, which is where the real
+performance wins come from. More on that shortly.</p>
+
+
+<h2>The core trick, with a thermometer</h2>
+
+<p>The easiest way to see fixed-point is to build a toy example. Say
+you&rsquo;re writing firmware for a cheap digital thermometer. The
+spec is:</p>
+
+<ul>
+  <li>Range: &minus;64 &deg;C to +64 &deg;C (good enough for a
+      kitchen probe).</li>
+  <li>Resolution: 0.5 &deg;C.</li>
+  <li>Storage per reading: 8 bits (you&rsquo;re logging a whole day
+      and RAM is tight).</li>
+</ul>
+
+<p>An 8-bit signed integer has a range of &minus;128&hellip;+127
+&mdash; 256 distinct values. And you need
+(64 &minus; (&minus;64)) / 0.5 = <strong>256 distinct readings</strong>.
+What a pleasant coincidence. Every reading can be stored in one
+byte, as long as you agree with yourself that <em>the stored integer
+is the real temperature times 2</em>. Let&rsquo;s write that
+agreement out:</p>
+
+<pre><code>Real temperature     Stored byte
+     25.0  &deg;C      &rarr;  50
+     25.5  &deg;C      &rarr;  51
+    -13.5  &deg;C      &rarr; -27
+     -0.5  &deg;C      &rarr;  -1
+      0.0  &deg;C      &rarr;   0
+</code></pre>
+
+<p>Now let&rsquo;s see that the arithmetic still works. Add 25.0 &deg;C
+and -13.5 &deg;C, which should give 11.5 &deg;C:</p>
+
+<pre><code>   50 + (-27) = 23        &larr; stored integers, plain int math
+25.0 + (-13.5) = 11.5     &larr; what they mean
+</code></pre>
+
+<p>And indeed <code>23 / 2 = 11.5</code>. The CPU never saw a
+fraction; it did a perfectly ordinary 8-bit add. You just had to
+<em>remember</em> to divide by 2 when you wanted to display or
+reason about the value. That &ldquo;divide by 2&rdquo; is the scale
+factor. If you pick a scale factor that&rsquo;s a power of two, that
+division collapses into a single shift instruction, which on every
+CPU ever made is either free or close to it.</p>
+
+<p>Congratulations: that&rsquo;s fixed-point math. The rest of this
+page is about conventions, arithmetic between different scales, and
+how to avoid overflow &mdash; but the foundation is just &ldquo;agree
+on a scale, and do integer math&rdquo;.</p>
+
+
+<h2>Notation: sM.N and the radix</h2>
+
+<p>We need a short way to say &ldquo;this integer represents a
+fractional value with N bits below the binary point&rdquo;. Borrowing
+from the DSP world, FR_Math writes it as <strong>sM.N</strong>:</p>
+
+<table>
+<thead><tr><th>Letter</th><th>Meaning</th></tr></thead>
+<tbody>
+<tr><td><code>s</code></td><td>signed (2&rsquo;s complement). Use <code>u</code> instead for unsigned.</td></tr>
+<tr><td><code>M</code></td><td>integer bits in use (not counting the sign bit).</td></tr>
+<tr><td><code>N</code></td><td>fractional bits in use. <strong>This is the radix.</strong></td></tr>
+</tbody>
+</table>
+
+<p>So <code>s11.4</code> is a signed number with 11 bits of integer
+precision and 4 bits of fractional precision. Total bits in use:
+1 (sign) + 11 + 4 = 16. It happens to fit in a 16-bit register
+exactly, with zero headroom. You could also drop the same bit
+pattern into a 32-bit register &mdash; then you&rsquo;d have
+16 bits of headroom to soak up intermediate results. Same value,
+same meaning; only the available headroom changes.</p>
+
+<p>The scale factor for a radix-<code>r</code> number is
+<code>2<sup>r</sup></code>, so the two conversions you&rsquo;ll do
+constantly are:</p>
+
+<pre><code>real_value     = integer_value / (2^radix)
+integer_value  = real_value     * (2^radix)
+</code></pre>
+
+<p>Let&rsquo;s try a couple on <code>3.5</code>:</p>
+
+<ul>
+  <li>At radix 4: <code>3.5 &times; 16 = 56</code>, which is
+      <code>0x38</code>.</li>
+  <li>At radix 8: <code>3.5 &times; 256 = 896</code>, which is
+      <code>0x380</code>.</li>
+  <li>At radix 16: <code>3.5 &times; 65536 = 229376</code>, which is
+      <code>0x00038000</code>.</li>
+</ul>
+
+<p>Same real-world value, different bit pattern, different amounts
+of fractional resolution available to downstream operations. That
+trade-off &mdash; range vs. precision inside a fixed register width
+&mdash; is the thing you really want to get comfortable making.
+We&rsquo;ll come back to it in &ldquo;Choosing a radix&rdquo; below.</p>
+
+<p>One convention worth calling out: FR_Math does not store the
+radix next to the value. A fixed-point number in this library is
+just an <code>s16</code> or an <code>s32</code>; the radix lives in
+your head (or a <code>#define</code>) and gets passed as a parameter
+when you call one of the library functions. This is a deliberate
+choice, not laziness: it&rsquo;s what keeps the generated code tight
+enough to run inside a scanline renderer or an audio inner loop. If
+you want to think of an FR_Math value as a &ldquo;number with a
+radix&rdquo;, think of the radix as a <em>type annotation that lives
+in your source code</em>, not a runtime field.</p>
+
+
+<h2>Arithmetic: what the operations actually do</h2>
+
+<p>Once you&rsquo;ve chosen a radix, the everyday operations behave
+almost like integer math &mdash; with one or two twists per
+operation that you just have to internalise. Let&rsquo;s walk
+through them.</p>
+
+<h3>Addition and subtraction</h3>
+
+<pre><code>a (s11.4) + b (s11.4)  &rarr;  c (s12.4)</code></pre>
+
+<p>Rule: the fractional portion doesn&rsquo;t grow on addition,
+but the integer portion grows by one bit. If you add two
+<code>s11.4</code> values, the worst-case result needs an extra
+integer bit &mdash; so it&rsquo;s <code>s12.4</code>. Add a million
+of them and you need <code>log<sub>2</sub>(1e6) &asymp; 20</code>
+extra integer bits &mdash; now you&rsquo;re an <code>s31.4</code>
+number and you&rsquo;re one addition away from overflowing a 32-bit
+register.</p>
+
+<p>The other rule: both operands must have the same radix before
+you add them. If they don&rsquo;t, one of them has to move:</p>
+
+<pre><code class="language-c">s32 a = /* some s11.4 value */;
+s32 b = /* some s9.6  value */;
+
+/* Option 1: align b down to radix 4 (loses 2 fractional bits of b). */
+s32 b_as_r4 = b &gt;&gt; (6 - 4);
+s32 sum_r4  = a + b_as_r4;   /* still at radix 4 */
+
+/* Option 2: align a up to radix 6 (keeps all the precision, but
+ *           uses 2 more integer bits in the register).            */
+s32 a_as_r6 = a &lt;&lt; (6 - 4);
+s32 sum_r6  = a_as_r6 + b;   /* now at radix 6 */
+</code></pre>
+
+<p>Neither option is wrong &mdash; the right call depends on what
+the next operation in your pipeline needs. FR_Math hands you
+<code>FR_ADD(x, xr, y, yr, r)</code> which does the alignment for
+you and produces a result at whatever radix <code>r</code> you
+request. The macro picks the shift direction; you just say what
+radix you want out.</p>
+
+<h3>Multiplication</h3>
+
+<pre><code>a (sM1.N1) &times; b (sM2.N2)  &rarr;  c (s(M1+M2).(N1+N2))</code></pre>
+
+<p>Multiplying is where the fractional bits <em>do</em> grow.
+Multiply two <code>s15.16</code> values and the raw product is an
+<code>s31.32</code> &mdash; 64 bits wide. If you want the answer to
+live in a 32-bit register, you have to shift off some of the
+precision at the end. How much you drop is a design decision, and
+like addition the right answer depends on your pipeline. A
+concrete worked example:</p>
+
+<pre><code class="language-c">/* 3.5 at radix 4 is 56.  2.25 at radix 4 is 36. */
+s32 a = I2FR(3, 4) | (1 &lt;&lt; 3);   /* 3.5  */
+s32 b = I2FR(2, 4) | (1 &lt;&lt; 2);   /* 2.25 */
+
+/* Raw 64-bit product: 56 * 36 = 2016, which has 4+4 = 8 fractional bits.
+ * 2016 / 256 = 7.875 — the right answer, at radix 8.               */
+s64 raw = (s64)a * (s64)b;
+
+/* If we want the answer back at radix 4: shift off 4 fractional bits. */
+s32 c = (s32)(raw &gt;&gt; 4);           /* 7.875 at radix 4 = 126 = 0x7E */
+</code></pre>
+
+<p>You almost never want to write those shifts by hand. FR_Math
+gives you two spellings of the same idea:</p>
+
+<ul>
+  <li><code>FR_FixMuls(a, b, r)</code> &mdash; multiply two
+      same-radix-<code>r</code> values and return the product at
+      radix <code>r</code>. Uses an <code>int64_t</code>
+      intermediate so the 32-bit intermediate overflow trap
+      doesn&rsquo;t fire. <strong>Truncates</strong> on the way
+      down &mdash; no clamp, no rounding.</li>
+  <li><code>FR_FixMulSat(a, b, r)</code> &mdash; same shape, but
+      saturates to <code>FR_OVERFLOW_POS</code> /
+      <code>FR_OVERFLOW_NEG</code> if the result wouldn&rsquo;t
+      fit. Prefer this one by default unless you&rsquo;ve proven
+      the product stays in range.</li>
+</ul>
+
+<p>There&rsquo;s also a macro form <code>FR_MUL(a, ar, b, br, r)</code>
+that handles the mixed-radix case &mdash; you can multiply an
+<code>s11.4</code> by an <code>s9.6</code> and ask for the answer at
+radix 8 without doing any manual shifts.</p>
+
+<h3>Changing radix</h3>
+
+<p>Sooner or later you&rsquo;ll have a value at one radix and need
+it at another &mdash; maybe because the next function in the
+pipeline wants a different convention, or because you&rsquo;re
+committing the answer to a log buffer that uses <code>s7.8</code>.
+<code>FR_CHRDX(value, from_r, to_r)</code> does exactly that shift
+for you:</p>
+
+<ul>
+  <li>Going to a <em>larger</em> radix &mdash; the new low bits are
+      zeroed in. No precision is lost, but the integer headroom
+      shrinks.</li>
+  <li>Going to a <em>smaller</em> radix &mdash; the low bits are
+      dropped. Precision is lost; headroom grows. This is a good
+      place to add <code>&plusmn; (1 &lt;&lt; (from_r - to_r - 1))</code>
+      before the shift if you want round-to-nearest behaviour.</li>
+</ul>
+
+<p>The value is conserved as closely as the destination radix can
+represent it. Nothing more, nothing less.</p>
+
+
+<h2>Overflow, saturation, and the sentinels</h2>
+
+<p>The single biggest trap in any fixed-point code is <em>silent
+integer overflow</em>. If you multiply two <code>s15.16</code> values
+and store the result back into a 32-bit register without thinking
+about it, you will eventually pass a pair of inputs whose product
+doesn&rsquo;t fit, and plain C will hand you wrap-around garbage
+with no warning. A signed 32-bit multiply that overflows is not a
+runtime error in C &mdash; it&rsquo;s undefined behaviour that
+happens to look like data most of the time.</p>
+
+<p>FR_Math defends against this in three layers, and it&rsquo;s
+worth knowing all three so you can decide which level of paranoia
+to engage for a given piece of code.</p>
+
+<ol>
+  <li><strong>Int64 intermediates everywhere it matters.</strong>
+      Every multiply macro that could plausibly overflow a 32-bit
+      intermediate promotes to <code>int64_t</code> first, does the
+      multiply there, shifts, and then lands in the destination.
+      This is free on any 32-bit or larger CPU and cheap on 16-bit
+      chips &mdash; even sdcc on an 8051 handles it, slowly but
+      correctly.</li>
+  <li><strong>Saturating variants for the common operations.</strong>
+      <code>FR_FixMulSat</code> and <code>FR_FixAddSat</code> clamp
+      the result to <code>FR_OVERFLOW_POS</code> (aliases
+      <code>INT32_MAX</code>) or <code>FR_OVERFLOW_NEG</code>
+      (aliases <code>INT32_MIN + 1</code>) instead of wrapping.
+      Think of saturation as the DSP convention: if the answer
+      won&rsquo;t fit, return the nearest value that will. Better to
+      lose precision at the extremes than to wrap a big positive
+      number into a big negative one.</li>
+  <li><strong>Sentinel returns from functions that can fail.</strong>
+      A handful of functions have inputs that are simply not in
+      their domain: <code>FR_sqrt(-1)</code>, <code>FR_log2(0)</code>,
+      <code>FR_asin(x)</code> with <code>|x| &gt; 1</code>, and so
+      on. These return <code>FR_DOMAIN_ERROR</code>
+      (<code>INT32_MIN</code>), which is a value that can never
+      occur as a valid result because it sits one step below the
+      saturation range. You check for it with a plain
+      <code>if</code>.</li>
+</ol>
+
+<p>In practice: call the saturating variants by default, check for
+<code>FR_DOMAIN_ERROR</code> after any function whose input you
+don&rsquo;t fully control, and in release builds on well-bounded
+inputs the defensive paths never trigger. They&rsquo;re there for
+the one time you feed <code>-0.0000001</code> into a square root at
+3 AM.</p>
+
+
+<h2>Choosing a radix</h2>
+
+<p>This is the decision most beginners rush and most experienced
+fixed-point programmers spend most of their design time on. Picking
+the right radix for a variable is what separates a clean pipeline
+from one that&rsquo;s constantly overflowing or quantising away
+signal. Three inputs drive the decision:</p>
+
+<ol>
+  <li><strong>Maximum absolute value</strong> the variable will ever
+      need to hold. Take <code>ceil(log<sub>2</sub>(max))</code>
+      &mdash; that&rsquo;s how many integer bits you need.</li>
+  <li><strong>Required precision</strong> &mdash; the smallest step
+      that matters to your application. Take
+      <code>ceil(&minus;log<sub>2</sub>(step))</code> &mdash;
+      that&rsquo;s how many fractional bits you need.</li>
+  <li><strong>Register width</strong> available on your target CPU,
+      and how much <strong>headroom</strong> you want inside that
+      register for intermediate products.</li>
+</ol>
+
+<p>Let&rsquo;s do one. Suppose you&rsquo;re writing a PID loop for a
+motor controller. The error signal has a worst case of
+&plusmn;512 ticks, and you need to resolve &plusmn;0.01 ticks or the
+loop will limit-cycle.</p>
+
+<ul>
+  <li>Integer bits: <code>ceil(log<sub>2</sub>(512)) = 9</code>.</li>
+  <li>Fractional bits: <code>ceil(&minus;log<sub>2</sub>(0.01)) = 7</code>.</li>
+  <li>Sign bit: 1.</li>
+</ul>
+
+<p>Total: 9 + 7 + 1 = 17 bits in use. That doesn&rsquo;t fit in a
+16-bit register, so you need an <code>s32</code>. You now have a
+choice:</p>
+
+<ul>
+  <li><code>s9.7</code> &mdash; 17 bits used, 15 bits of headroom.
+      That&rsquo;s a lot of room for intermediate products before
+      saturation kicks in.</li>
+  <li><code>s9.22</code> &mdash; the integer bits stay at 9 but you
+      promote every fractional bit you can spare. Same range, way
+      more precision, but no headroom at all for an unwary
+      multiply.</li>
+  <li>Something in between, chosen by how much the intermediate
+      products grow.</li>
+</ul>
+
+<p>FR_Math encourages the &ldquo;use just enough&rdquo; mindset
+over &ldquo;always pick <code>s15.16</code> out of habit&rdquo;. A
+narrower radix leaves more headroom, packs tighter in RAM, and
+shifts faster on small cores. If you find yourself wanting
+<code>s15.16</code> on every single variable, stop and ask whether
+you actually need 15 integer bits on that particular signal.</p>
+
+
+<h2>FR_Math&rsquo;s naming conventions</h2>
+
+<p>A tour of the casing, because it tells you something about the
+generation of each symbol:</p>
+
+<table>
+<thead><tr><th>Prefix</th><th>What it is</th><th>Example</th></tr></thead>
+<tbody>
+<tr><td><code>FR_XXX()</code></td><td><code>UPPERCASE</code> macro &mdash; inline, zero call overhead.</td><td><code>FR_ADD</code>, <code>FR_MUL</code>, <code>FR_FR2I</code></td></tr>
+<tr><td><code>FR_Xxx()</code></td><td>Mixed-case C function &mdash; the classic v1 API. Integer-degree trig and related.</td><td><code>FR_Sin</code>, <code>FR_log2</code>, <code>FR_sqrt</code></td></tr>
+<tr><td><code>fr_xxx()</code></td><td>Lowercase C function &mdash; v2 additions (radian / BAM trig, wave generators, ADSR).</td><td><code>fr_sin</code>, <code>fr_wave_tri</code>, <code>fr_adsr_step</code></td></tr>
+<tr><td><code>s8, s16, s32</code></td><td>Signed integer typedefs (aliases for <code>int8_t</code>, <code>int16_t</code>, <code>int32_t</code>).</td><td>&mdash;</td></tr>
+<tr><td><code>u8, u16, u32</code></td><td>Unsigned integer typedefs.</td><td>&mdash;</td></tr>
+</tbody>
+</table>
+
+<p>The <code>I2FR</code> / <code>FR2I</code> macros are the bridge
+between plain integers and fixed-point bit patterns. They&rsquo;re
+one-liners, but you&rsquo;ll type them constantly so it&rsquo;s
+worth knowing what they actually do:</p>
+
+<ul>
+  <li><code>I2FR(i, r)</code> expands to <code>(i) &lt;&lt; (r)</code>
+      &mdash; take an integer, shift it up by <code>r</code> bits,
+      and now it&rsquo;s a radix-<code>r</code> fixed-point value.
+      <code>I2FR(3, 4)</code> is 48, i.e. 3.0 at s.4.</li>
+  <li><code>FR_FR2I(x, r)</code> expands to
+      <code>(x) &gt;&gt; (r)</code> &mdash; the reverse. Careful:
+      C&rsquo;s right shift on signed values truncates toward
+      &minus;&infin;, so <code>FR_FR2I(-1, 4)</code> is
+      <code>-1</code>, not <code>0</code>. If you want
+      round-to-nearest (which is usually what you want for display),
+      use <code>FR_FR2Iround(x, r)</code>.</li>
+</ul>
+
+
+<h2>Angle representations</h2>
+
+<p>Angles deserve their own section because FR_Math gives you
+<em>three</em> ways to represent one, and each has a specific job:</p>
+
+<ol>
+  <li><strong>Integer degrees</strong> &mdash; plain <code>s16</code>,
+      usually in <code>[0, 360)</code> but negative values wrap
+      correctly. Used by the classic <code>FR_SinI</code> /
+      <code>FR_CosI</code> API (the <em>I</em> denotes integer).
+      Friendliest if you&rsquo;re coming from a calculator or a
+      Protractor.</li>
+  <li><strong>Radians at a programmer-chosen radix</strong> &mdash;
+      an <code>s32</code> fixed-point value. Used by the lowercase
+      <code>fr_sin</code> / <code>fr_cos</code> /
+      <code>fr_tan</code> family. Use this one when your upstream
+      math is already in radians or when you want fractional angles
+      with more than 360 steps of resolution.</li>
+  <li><strong>BAM</strong> (Binary Angular Measure) &mdash; a
+      <code>u16</code> where the full circle maps to
+      <code>[0, 65536)</code>. BAM is the native representation of
+      the internal trig table: the top 2 bits select the quadrant,
+      the next 7 bits index the table, and the bottom 7 bits drive
+      linear interpolation. The big reason to care is that BAM
+      <em>wraps for free</em> &mdash; every time you add to a
+      <code>u16</code> phase accumulator, the overflow is exactly
+      2&pi;. No modulo, no branch, no glitch at the boundary. This
+      is what makes BAM the right choice for audio oscillators,
+      LFOs, and scanning phase accumulators.</li>
+</ol>
+
+<p><strong>Why is BAM a <code>u16</code> and not an <code>s32</code>
+you could pass any signed angle into?</strong> Because the
+<code>u16</code> wraparound <em>is</em> the angular modulus &mdash;
+that&rsquo;s the whole feature. Adding two <code>u16</code> BAM
+values automatically gives you the right answer modulo a full
+revolution, with zero quantisation error at the boundary and no
+<code>% 65536</code> in sight. If BAM were <code>s32</code>, every
+read of the table would have to explicitly mask off the top bits
+(and handle negative values) before the quadrant extraction
+(<code>bam &gt;&gt; 14</code>) made any sense. You would have traded
+one free operation for two slow ones on every sample, just to get
+back the same behaviour. So instead, the public trig entry points
+(<code>FR_CosI</code>, <code>FR_Cos</code>, <code>fr_cos</code>, and
+friends) <em>all</em> take signed angles &mdash; in degrees,
+fixed-radix degrees, or radians &mdash; and only the internal
+<code>fr_cos_bam</code> / <code>fr_sin_bam</code> primitives see
+the <code>u16</code>. In practice you will never construct a BAM by
+hand unless you are specifically building a phase accumulator, in
+which case the wraparound is exactly what you want anyway.</p>
+
+<p>FR_Math gives you the conversion macros <code>FR_DEG2BAM</code>,
+<code>FR_BAM2DEG</code>, <code>FR_RAD2BAM</code>, and
+<code>FR_BAM2RAD</code>, all chosen so that the compiler can drop
+back to shift-and-add on chips without a hardware multiplier. The
+<a href="api-reference.html">API reference</a> walks through the
+constants and has a worked example showing how <code>FR_BAM2DEG</code>
+turns into four shifts and three adds, if you&rsquo;re curious why
+the numbers look the way they do.</p>
+
+
+<h2>Going deeper</h2>
+
+<p>That&rsquo;s the whole mental model. When you hit something in
+the code that feels surprising, come back to this page &mdash; the
+answer is almost always &ldquo;track the radix more carefully&rdquo;
+or &ldquo;watch for the intermediate product&rdquo;. For everything
+else:</p>
+
+<ul>
+  <li><strong><a href="api-reference.html">API Reference</a></strong>
+      &mdash; every public symbol with its radix, inputs, outputs,
+      error sentinels, and worst-case error.</li>
+  <li><strong><a href="examples.html">Examples</a></strong> &mdash;
+      runnable snippets for every module, including a phase
+      accumulator, a 2D rotation, and a PID loop.</li>
+  <li><strong><a href="getting-started.html">Getting Started</a></strong>
+      &mdash; if you haven&rsquo;t built the library yet, start
+      here.</li>
+</ul>
+
+<p>If something here is wrong or unclear, the fastest fix is a
+GitHub issue or a PR on the <code>pages/</code> directory. This
+primer is part of the repo, so it can and should get better as
+people run into edge cases worth writing down.</p>
+
+  </div>
+</main>
+
+<footer id="site-footer"></footer>
+
+<script src="../assets/site.js"></script>
+</body>
+</html>
