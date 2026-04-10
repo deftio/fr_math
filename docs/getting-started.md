@@ -35,7 +35,12 @@ you will see 40 tests pass across six test binaries.
 
 ---
 
-## Your first program
+## A first program
+
+The example below converts a decimal constant to fixed-point, multiplies
+it, and prints the result — all in a handful of lines. It uses a
+desktop `printf` for output; the next section shows the embedded
+equivalent.
 
 Save this as `hello_fr.c`:
 
