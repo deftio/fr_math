@@ -225,18 +225,44 @@ static void section_macros_basic(void) {
     printf("| FR_NUM(1, 0, 0, 8) | %d | 1.0 << 8 = 256 |\n", FR_NUM(1, 0, 0, 8));
     printf("\n> Signature: `FR_NUM(int, frac_digits, num_digits, radix)`.\n\n");
 
-    md_h3("2.4b FR_num (convenience wrapper)");
-    printf("| FR_num | FR_NUM | Match |\n|---|---:|---:|\n");
-    printf("| FR_num(12, 34, 10) | FR_NUM(12, 34, 2, 10) | %s |\n",
-           FR_num(12, 34, 10) == FR_NUM(12, 34, 2, 10) ? "yes" : "NO");
-    printf("| FR_num(-3, 5, 16) | FR_NUM(-3, 5, 1, 16) | %s |\n",
-           FR_num(-3, 5, 16) == FR_NUM(-3, 5, 1, 16) ? "yes" : "NO");
-    printf("| FR_num(0, 25, 16) | FR_NUM(0, 25, 2, 16) | %s |\n",
-           FR_num(0, 25, 16) == FR_NUM(0, 25, 2, 16) ? "yes" : "NO");
-    printf("| FR_num(1, 0, 8) | FR_NUM(1, 0, 0, 8) | %s |\n",
-           FR_num(1, 0, 8) == FR_NUM(1, 0, 0, 8) ? "yes" : "NO");
-    printf("| FR_num(3, 14159, 16) | FR_NUM(3, 14159, 5, 16) | %s |\n",
-           FR_num(3, 14159, 16) == FR_NUM(3, 14159, 5, 16) ? "yes" : "NO");
+    md_h3("2.4b FR_numstr (string parser)");
+    printf("| Input | Radix | FR_numstr | FR_NUM | Match |\n|---|---:|---:|---:|---:|\n");
+    printf("| \"12.34\" | 10 | %d | %d | %s |\n",
+           FR_numstr("12.34", 10), FR_NUM(12, 34, 2, 10),
+           FR_numstr("12.34", 10) == FR_NUM(12, 34, 2, 10) ? "yes" : "NO");
+    printf("| \"-3.5\" | 16 | %d | %d | %s |\n",
+           FR_numstr("-3.5", 16), FR_NUM(-3, 5, 1, 16),
+           FR_numstr("-3.5", 16) == FR_NUM(-3, 5, 1, 16) ? "yes" : "NO");
+    printf("| \"0.25\" | 16 | %d | %d | %s |\n",
+           FR_numstr("0.25", 16), FR_NUM(0, 25, 2, 16),
+           FR_numstr("0.25", 16) == FR_NUM(0, 25, 2, 16) ? "yes" : "NO");
+    printf("| \"-0.025\" | 16 | %d | %d | %s |\n",
+           FR_numstr("-0.025", 16), -FR_NUM(0, 25, 3, 16),
+           FR_numstr("-0.025", 16) == -FR_NUM(0, 25, 3, 16) ? "yes" : "NO");
+    printf("| \"0.05\" | 16 | %d | %d | %s |\n",
+           FR_numstr("0.05", 16), FR_NUM(0, 5, 2, 16),
+           FR_numstr("0.05", 16) == FR_NUM(0, 5, 2, 16) ? "yes" : "NO");
+    printf("| \"42\" | 8 | %d | %d | %s |\n",
+           FR_numstr("42", 8), 42 << 8,
+           FR_numstr("42", 8) == (42 << 8) ? "yes" : "NO");
+    printf("| \"1.0\" | 8 | %d | %d | %s |\n",
+           FR_numstr("1.0", 8), 1 << 8,
+           FR_numstr("1.0", 8) == (1 << 8) ? "yes" : "NO");
+    printf("| \"3.14159\" | 16 | %d | %d | %s |\n",
+           FR_numstr("3.14159", 16), FR_NUM(3, 14159, 5, 16),
+           FR_numstr("3.14159", 16) == FR_NUM(3, 14159, 5, 16) ? "yes" : "NO");
+    printf("| \"  3.14\" | 16 | %d | %d | %s |\n",
+           FR_numstr("  3.14", 16), FR_NUM(3, 14, 2, 16),
+           FR_numstr("  3.14", 16) == FR_NUM(3, 14, 2, 16) ? "yes" : "NO");
+    printf("| \"-7.0\" | 16 | %d | %d | %s |\n",
+           FR_numstr("-7.0", 16), -(7 << 16),
+           FR_numstr("-7.0", 16) == -(7 << 16) ? "yes" : "NO");
+    printf("| NULL | 16 | %d | 0 | %s |\n",
+           FR_numstr(NULL, 16),
+           FR_numstr(NULL, 16) == 0 ? "yes" : "NO");
+    printf("| \"\" | 16 | %d | 0 | %s |\n",
+           FR_numstr("", 16),
+           FR_numstr("", 16) == 0 ? "yes" : "NO");
 
     md_h3("2.5 FR_INT");
     printf("| Op | Result |\n|---|---:|\n");

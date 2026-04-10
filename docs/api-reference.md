@@ -121,7 +121,7 @@ so call sites read as intent:
 | `FR2I(x, r)` | `x`: fixed-point at radix `r` | integer | `(x) >> (r)`. Truncates toward **−∞** (C's signed shift). `FR2I(-1, 4) == -1`, not 0. |
 | `FR_INT(x, r)` | `x`: fixed-point at radix `r` | integer | Truncates toward **zero**. `FR_INT(-1, 4) == 0`. Useful when you want C's normal integer-cast behaviour. |
 | `FR_NUM(i, f, d, r)` | `i`: integer part; `f`: decimal fraction digits; `d`: number of digits in `f`; `r`: target radix | `s32` at radix `r` | Build a fixed-point literal from decimal. `FR_NUM(12, 34, 2, 10)` is 12.34 at s.10. Rounds toward zero; for round-to-nearest, add half an LSB at the call site. |
-| `FR_num(i, f, r)` | `i`: integer part; `f`: decimal fraction digits; `r`: target radix | `s32` at radix `r` | Convenience wrapper that auto-detects the digit count of `f`. `FR_num(3, 14159, 16)` is 3.14159 at s.16. Cannot handle leading-zero fractions (e.g. 0.05) — use `FR_NUM(i, f, d, r)` for those. |
+| `FR_numstr(s, r)` | `s`: null-terminated decimal string (e.g. `"3.14159"`); `r`: target radix | `s32` at radix `r` | Runtime string-to-fixed-point parser (inverse of `FR_printNumF`). Handles signs, leading whitespace, and leading-zero fractions like `"0.05"`. Up to 9 fractional digits. No malloc, no strtod, no libm. Returns 0 for NULL or empty input. |
 | `FR2D(x, r)` | `x`: fixed-point at radix `r` | `double` | Debug-only: `x / (double)(1 << r)`. Pulls in `libm` — compile it out of release builds. |
 | `D2FR(d, r)` | `d`: `double`; `r`: target radix | `s32` at radix `r` | Debug-only: `(s32)(d * (1 << r))`. Same caveat as above. |
 

@@ -172,10 +172,10 @@ so call sites read as intent:</p>
   <td>Build a fixed-point literal from decimal. <code>FR_NUM(12, 34, 2, 10)</code> is 12.34 at s.10. Rounds toward zero; for round-to-nearest, add half an LSB at the call site.</td>
 </tr>
 <tr>
-  <td><code>FR_num(i, f, r)</code></td>
-  <td><code>i</code>: integer part; <code>f</code>: decimal fraction digits; <code>r</code>: target radix</td>
+  <td><code>FR_numstr(s, r)</code></td>
+  <td><code>s</code>: null-terminated decimal string (e.g. <code>"3.14159"</code>); <code>r</code>: target radix</td>
   <td><code>s32</code> at radix <code>r</code></td>
-  <td>Convenience wrapper that auto-detects the digit count of <code>f</code>. <code>FR_num(3, 14159, 16)</code> is 3.14159 at s.16. Cannot handle leading-zero fractions (e.g. 0.05) &mdash; use <code>FR_NUM(i, f, d, r)</code> for those.</td>
+  <td>Runtime string-to-fixed-point parser (inverse of <code>FR_printNumF</code>). Handles signs, leading whitespace, and leading-zero fractions like <code>"0.05"</code>. Up to 9 fractional digits. No malloc, no strtod, no libm. Returns 0 for NULL or empty input.</td>
 </tr>
 <tr>
   <td><code>FR2D(x, r)</code></td>

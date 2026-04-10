@@ -99,32 +99,6 @@ extern "C"
     (((i) < 0)                                                         \
         ? -((s32)(((s32)(f) << (r)) / FR_NUM_POW10(d)))                \
         :  ((s32)(((s32)(f) << (r)) / FR_NUM_POW10(d)))))
-/* Count decimal digits of a non-negative integer literal.
- * Used by FR_num() to auto-detect the digit count.
- * Cannot detect leading zeros — use FR_NUM(i,f,d,r) for those. */
-#define FR_NUM_NDIGITS(f) \
-    ((f) >= 1000000000L ? 10 : \
-     (f) >= 100000000L ? 9 :  \
-     (f) >= 10000000L ? 8 :   \
-     (f) >= 1000000L ? 7 :    \
-     (f) >= 100000L ? 6 :     \
-     (f) >= 10000L ? 5 :      \
-     (f) >= 1000L ? 4 :       \
-     (f) >= 100L ? 3 :        \
-     (f) >= 10L ? 2 : 1)
-
-/* Convenience wrapper: FR_num(integer, frac_digits, radix)
- * Auto-detects the number of fractional digits.
- * Examples:
- *   FR_num(3, 14159, 16)  →  3.14159 at radix 16
- *   FR_num(-3, 5, 16)     → -3.5     at radix 16
- *   FR_num(0, 25, 16)     →  0.25    at radix 16
- *   FR_num(1, 0, 8)       →  1.0     at radix 8
- *
- * Leading-zero fractions (e.g. 0.05) cannot be auto-detected —
- * use FR_NUM(0, 5, 2, radix) for those.                         */
-#define FR_num(i, f, r) FR_NUM((i), (f), FR_NUM_NDIGITS(f), (r))
-
 /*
 FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 */
@@ -420,6 +394,9 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
   int FR_printNumF(int (*f)(char), s32 n, int radix, int pad, int prec); /* print fixed radix num as floating point e.g.  -12.34" */
   int FR_printNumD(int (*f)(char), int n, int pad);                      /* print decimal number with optional padding e.g. " 12" */
   int FR_printNumH(int (*f)(char), int n, int showPrefix);               /* print num as a hexidecimal e.g. "0x12ab"              */
+
+  /* string-to-fixed-point parser (inverse of FR_printNumF) */
+  s32 FR_numstr(const char *s, u16 radix);
 
 /*===============================================
  * Square root and hypot

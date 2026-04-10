@@ -204,7 +204,7 @@ int main(void)
            (int)(FR_FRAC(db, 8) * 100 &gt;&gt; 8));
 
     /* 10^(0.3) is approximately 2.0 */
-    s32 x = FR_POW10(FR_num(0, 3, 16), 16);
+    s32 x = FR_POW10(FR_NUM(0, 3, 1, 16), 16);
     printf("10^0.3 = 0x%x (expect ~0x20000 = 2.0 at radix 16)\n",
            (unsigned)x);
     return 0;
@@ -463,6 +463,123 @@ int main()
     printf("rotated (100, 0) by 45 deg = (%d, %d)\n", xp, yp);
     return 0;
 }</code></pre>
+
+<hr>
+
+<h2>11. String round-trip and radix precision</h2>
+
+<p><code>FR_numstr</code> parses a decimal string into a fixed-point value;
+<code>FR_printNumF</code> renders a fixed-point value back to a decimal
+string. Together they form a symmetric pair &mdash; the natural
+I/O layer for config files, serial protocols, or any situation
+where a human-readable number must survive a round trip through
+fixed-point representation.</p>
+
+<p>The key insight is that <strong>the radix controls how many
+fractional bits you have</strong>, and that directly determines how
+many decimal digits survive the round trip faithfully. The
+rule of thumb: every ~3.32 bits of radix give you one reliable
+decimal digit (<code>log10(2) &asymp; 0.301</code>, so
+<code>1 / 0.301 &asymp; 3.32</code>).</p>
+
+<table>
+<thead><tr><th>Radix</th><th>Fractional bits</th><th>Reliable decimal digits</th><th>Smallest step</th></tr></thead>
+<tbody>
+<tr><td>8</td><td>8</td><td>~2</td><td>1/256 &asymp; 0.0039</td></tr>
+<tr><td>16</td><td>16</td><td>~4&ndash;5</td><td>1/65536 &asymp; 0.0000153</td></tr>
+<tr><td>24</td><td>24</td><td>~7</td><td>1/16777216 &asymp; 0.0000001</td></tr>
+</tbody>
+</table>
+
+<p>This example parses the same string <code>"3.14159265"</code> at three
+different radixes and prints it back, so you can see exactly
+where each radix runs out of precision.</p>
+
+<pre><code class="language-c">#include &lt;stdio.h&gt;
+#include "FR_math.h"
+
+/* Buffer-based putc for FR_printNumF &mdash; collects output in buf[]. */
+static char buf[64];
+static int  pos;
+static int buf_putc(char c) { buf[pos++] = c; buf[pos] = '\0'; return 0; }
+
+int main(void)
+{
+    const char *input = "3.14159265";
+
+    printf("Round-trip: \"%s\" through three radixes\n\n", input);
+    printf("  radix  bits  parse-hex   printed-back\n");
+    printf("  -----  ----  ---------   ---------------\n");
+
+    /* ---- Radix 8: only ~2 reliable decimal digits ---- */
+    {
+        s32 val = FR_numstr(input, 8);
+        pos = 0;
+        FR_printNumF(buf_putc, val, 8, 0, 8);
+        printf("     8      8  0x%08x  %s\n", (unsigned)val, buf);
+        /* Expected: "3.14062500" &mdash; digits after the 2nd are
+         * unreliable because 8 bits can only distinguish 256
+         * fractional levels. 0.14159 rounds to 36/256 &asymp; 0.140625. */
+    }
+
+    /* ---- Radix 16: ~4&ndash;5 reliable decimal digits ---- */
+    {
+        s32 val = FR_numstr(input, 16);
+        pos = 0;
+        FR_printNumF(buf_putc, val, 16, 0, 8);
+        printf("    16     16  0x%08x  %s\n", (unsigned)val, buf);
+        /* Expected: "3.14158630" &mdash; good through 5 digits, then
+         * quantisation noise appears.  This is the sweet spot for
+         * most embedded work: 16 bits of fraction fits in an s32
+         * with 15 bits of integer range (&plusmn;32767). */
+    }
+
+    /* ---- Radix 24: ~7 reliable decimal digits ---- */
+    {
+        s32 val = FR_numstr(input, 24);
+        pos = 0;
+        FR_printNumF(buf_putc, val, 24, 0, 8);
+        printf("    24     24  0x%08x  %s\n", (unsigned)val, buf);
+        /* Expected: "3.14159262" &mdash; good through 7+ digits.
+         * The trade-off: with 24 fractional bits you only have
+         * 7 integer bits (&plusmn;127), so the range is much smaller. */
+    }
+
+    /* ---- Practical guidance ----
+     *
+     * Choose your radix based on the precision you need to
+     * preserve through a round trip:
+     *
+     *   - Config file says "gain = 0.75"?  Radix 8 is plenty.
+     *   - Sensor calibration "offset = 1.2345"?  Radix 16.
+     *   - Scientific constant "k = 0.0000056"?  Radix 24,
+     *     or even radix 28 if you only need a small integer range.
+     *
+     * FR_numstr + FR_printNumF handle the string side;
+     * FR_CHRDX handles radix changes in between.
+     */
+
+    return 0;
+}</code></pre>
+
+<p>Expected output:</p>
+
+<pre><code>Round-trip: "3.14159265" through three radixes
+
+  radix  bits  parse-hex   printed-back
+  -----  ----  ---------   ---------------
+     8      8  0x00000324  3.14062500
+    16     16  0x0003243f  3.14158630
+    24     24  0x03243f6a  3.14159262</code></pre>
+
+<p>The hex column makes the bit-level reality visible:
+at radix 8 the value is <code>0x324</code> &mdash; only 10 significant bits &mdash;
+so the decimal rendering can only faithfully reproduce about two
+fractional digits. At radix 24 the value is <code>0x03243F6A</code> &mdash; 26
+significant bits &mdash; and seven decimal digits survive. The
+eighth digit (<code>5</code> vs <code>4</code>) shows the quantisation floor:
+<code>2^&minus;24 &asymp; 6 &times; 10^&minus;8</code>, so the last digit is always
+uncertain.</p>
 
 <hr>
 

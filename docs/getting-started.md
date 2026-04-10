@@ -138,12 +138,42 @@ int main(void)
 {
     const int radix = 16;
 
-    /* Build constants at compile time — no float needed.
-     * FR_num(integer, frac_digits, radix) auto-detects digit count.
-     * The compiler folds this to a single constant.                  */
-    s32 pi     = FR_num(3, 14159, radix);      /* 3.14159  s15.16  */
+    /* ---- Compile-time constant: FR_NUM(integer, frac, digits, radix) ----
+     *
+     * FR_NUM builds a fixed-point value from its decimal parts:
+     *   arg 1 (i): integer part          — here 3
+     *   arg 2 (f): fractional digits     — here 14159  (the digits after ".")
+     *   arg 3 (d): how many digits in f  — here 5      (1-4-1-5-9 = 5 digits)
+     *   arg 4 (r): radix (frac bits)     — here 16
+     *
+     * Result: (3 << 16) + (14159 << 16) / 100000 = 205887 = 0x0003243F
+     *
+     * Because every argument is a literal, the compiler folds the entire
+     * expression to a single constant — zero runtime cost, no float.
+     * Use FR_NUM for any value you know at compile time.              */
+    s32 pi     = FR_NUM(3, 14159, 5, radix);   /* 3.14159  s15.16  */
     s32 two    = I2FR(2, radix);                /* 2.0      s15.16  */
     s32 two_pi = FR_FixMuls(pi, two, radix);    /* 2 * pi   s15.16  */
+
+    /* ---- Runtime string parser: FR_numstr(string, radix) ----
+     *
+     * FR_numstr is the runtime counterpart of FR_NUM.  It parses a
+     * null-terminated decimal string (like "3.14159") and returns the
+     * same fixed-point value that FR_NUM would produce.
+     *
+     * Use it when the number is not known at compile time — for
+     * example, reading from a serial port, a config file, or user
+     * input on an LCD menu:
+     *
+     *   s32 gain = FR_numstr(uart_line_buf, 16);   // e.g. "0.05"
+     *   s32 freq = FR_numstr(cfg_lookup("freq"), 8);
+     *
+     * It handles signs ("-3.5"), leading whitespace ("  3.14"),
+     * leading-zero fractions ("0.05"), and up to 9 decimal digits.
+     * No malloc, no strtod, no libm — safe for bare-metal use.
+     *
+     * FR_numstr is the inverse of FR_printNumF: one converts a
+     * fixed-point number to a string, the other converts it back.    */
 
     /* FR_printNumF(putc, value, radix, min_width, frac_digits)
      * Prints a string like "3.14158" through the callback.           */
@@ -188,12 +218,11 @@ raw = 0x0003243f radix=16
 
 Key differences from the desktop version:
 
-- **No float anywhere.** `FR_num(3, 14159, 16)` builds the
-  constant from the integer 3, the fractional digits 14159, and the
-  radix 16 — the digit count is auto-detected. The compiler folds
-  the whole expression to a single `0x0003243f` literal at compile
-  time. (Use `FR_NUM(i, f, d, r)` if the fraction has leading zeros,
-  e.g. `FR_NUM(0, 5, 2, 16)` for 0.05.)
+- **No float anywhere.** `FR_NUM(3, 14159, 5, 16)` builds the
+  constant from the integer 3, the five fractional digits 14159, and
+  the radix 16. The compiler folds the whole expression to a single
+  `0x0003243f` literal at compile time. For runtime parsing (e.g.
+  from a serial port or config file), use `FR_numstr("3.14159", 16)`.
 - **No `<stdio.h>`.** All output goes through the single-character
   callback. The three print functions together add under 500 bytes
   of code on Cortex-M4 at `-Os`.

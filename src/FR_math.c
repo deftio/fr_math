@@ -805,6 +805,56 @@ int FR_printNumH(int (*f)(char), int n, int showPrefix)
 }
 
 /*=======================================================
+ * FR_numstr — parse a decimal string into a fixed-point value.
+ *
+ * This is the runtime inverse of FR_printNumF: given a string like
+ * "12.34" or "-0.05" and a radix (number of fractional bits), it
+ * returns the s32 fixed-point representation.
+ *
+ * Features:
+ *   - Leading whitespace is skipped.
+ *   - Optional sign ('+' or '-').
+ *   - Up to 9 fractional digits are used (s32 range).
+ *   - No malloc, no strtod, no libm.
+ *
+ * Returns 0 for NULL or empty input.
+ */
+s32 FR_numstr(const char *s, u16 radix)
+{
+    static const s32 pow10[10] = {
+        1L, 10L, 100L, 1000L, 10000L,
+        100000L, 1000000L, 10000000L, 100000000L, 1000000000L
+    };
+    s32 int_part = 0, frac_part = 0;
+    int frac_digits = 0, neg = 0;
+    s32 result;
+
+    if (!s || !*s) return 0;
+
+    while (*s == ' ' || *s == '\t') s++;          /* skip whitespace */
+    if (*s == '-') { neg = 1; s++; }              /* sign            */
+    else if (*s == '+') { s++; }
+
+    while (*s >= '0' && *s <= '9')                /* integer part    */
+        { int_part = int_part * 10 + (*s - '0'); s++; }
+
+    if (*s == '.') {                              /* fractional part */
+        s++;
+        while (*s >= '0' && *s <= '9') {
+            if (frac_digits < 9)
+                { frac_part = frac_part * 10 + (*s - '0'); frac_digits++; }
+            s++;
+        }
+    }
+
+    result = int_part << radix;
+    if (frac_digits > 0)
+        result += (s32)(((int64_t)frac_part << radix) / pow10[frac_digits]);
+
+    return neg ? -result : result;
+}
+
+/*=======================================================
  * Square root and hypot
  *
  * fr_isqrt64 is a private helper implementing the digit-by-digit
