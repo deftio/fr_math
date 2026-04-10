@@ -956,16 +956,16 @@ s32 FR_hypot(s32 x, s32 y, u16 radix)
  *   2. Determine which of 4 angular slices lo/hi falls into.
  *   3. Apply pre-computed shift-only linear coefficients for that slice.
  *
- * Peak error: ~0.26% (~3.6% for FR_hypot_fast's worst case).
+ * Peak error: ~0.4%.
  * The result is at the same radix as the inputs — scale-invariant.
  */
 s32 FR_hypot_fast(s32 x, s32 y)
 {
     s32 hi, lo;
 
-    /* absolute values */
-    x = (x < 0) ? -x : x;
-    y = (y < 0) ? -y : y;
+    /* absolute values (clamp INT32_MIN to INT32_MAX to avoid UB) */
+    if (x < 0) x = (x == (s32)0x80000000) ? 0x7FFFFFFF : -x;
+    if (y < 0) y = (y == (s32)0x80000000) ? 0x7FFFFFFF : -y;
 
     /* hi = max(|x|,|y|), lo = min(|x|,|y|) */
     if (x > y) { hi = x; lo = y; }
@@ -1003,15 +1003,15 @@ s32 FR_hypot_fast(s32 x, s32 y)
  * FR_hypot_fast8 — 8-segment piecewise-linear magnitude approximation.
  *
  * Same approach as FR_hypot_fast but with 8 angular slices for tighter fit.
- * Peak error: ~0.07%.
+ * Peak error: ~0.14%.
  */
 s32 FR_hypot_fast8(s32 x, s32 y)
 {
     s32 hi, lo;
 
-    /* absolute values */
-    x = (x < 0) ? -x : x;
-    y = (y < 0) ? -y : y;
+    /* absolute values (clamp INT32_MIN to INT32_MAX to avoid UB) */
+    if (x < 0) x = (x == (s32)0x80000000) ? 0x7FFFFFFF : -x;
+    if (y < 0) y = (y == (s32)0x80000000) ? 0x7FFFFFFF : -y;
 
     /* hi = max(|x|,|y|), lo = min(|x|,|y|) */
     if (x > y) { hi = x; lo = y; }

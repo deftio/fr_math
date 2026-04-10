@@ -415,8 +415,8 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
    * Based on piecewise-linear approximation of sqrt(x*x + y*y).
    * See US Patent 6,567,777 B1 (Chatterjee, public domain).
    *
-   *   FR_hypot_fast(x, y)   4-segment, ~0.26% peak error
-   *   FR_hypot_fast8(x, y)  8-segment, ~0.07% peak error
+   *   FR_hypot_fast(x, y)   4-segment, ~0.4% peak error
+   *   FR_hypot_fast8(x, y)  8-segment, ~0.14% peak error
    *
    * Inputs are raw signed integers (or fixed-point at any radix — the
    * result is at the same radix as the inputs, just like FR_hypot).

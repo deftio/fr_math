@@ -19,6 +19,7 @@ A high-level list of operations includes:
 * Logarithms: log, log2, log10
 * Exponentials: exp, pow2, pow10
 * Floor/ceil/truncate (in fixed radix)
+* Square root, hypotenuse (exact), and fast approximate magnitude (shift-only, no multiply/64-bit)
 * Conversions between degrees/radians/grads/freq without loss of precision even at high bit packing
 * 2D coordinate transformations (rotate/translate/scale between local and global coordinates)
 * Printing of fixed-radix numbers over serial (e.g., print a signed fixed-radix number to serial consoles)
@@ -261,5 +262,5 @@ This library can be used freely in open source or commercial projects.
 Current version: 2.0.0 — see [release_notes.md](release_notes.md) for the
 v1 → v2 migration guide and the full list of numerical fixes and new
 functionality (radian-native trig, BAM macros, wave generators, ADSR,
-sqrt/hypot).
+sqrt/hypot, fast approximate hypot).
 

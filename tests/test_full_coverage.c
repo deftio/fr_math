@@ -329,6 +329,10 @@ int test_sqrt_hypot() {
     result = FR_hypot_fast(I2FR(1, 16), I2FR(1, 16));
     if (result < 92000 || result > 93300) return TEST_FAIL;
 
+    /* INT32_MIN must not crash (UB in negation) */
+    result = FR_hypot_fast((s32)0x80000000, 0);
+    if (result <= 0) return TEST_FAIL;
+
     /* FR_hypot_fast8 (8-seg) — tighter tolerance (~0.1%) */
     result = FR_hypot_fast8(I2FR(3, 16), I2FR(4, 16));
     if (result < I2FR(5, 16) - 400 || result > I2FR(5, 16) + 400) return TEST_FAIL;
