@@ -18,7 +18,7 @@ jobs:
             compiler: gcc  # Use default clang on macOS
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Set up compiler
       run: |
@@ -61,7 +61,7 @@ jobs:
     # not lcov format. Could be re-enabled if we switch to lcov.
     #- name: Upload coverage to Codecov
     #  if: matrix.os == 'ubuntu-latest' && matrix.compiler == 'gcc'
-    #  uses: codecov/codecov-action@v3
+    #  uses: codecov/codecov-action@v4
     #  with:
     #    file: ./coverage/coverage.info
     #    flags: unittests
@@ -79,7 +79,7 @@ jobs:
             arch: RISC-V
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Install cross-compiler
       run: |
@@ -108,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Install 32-bit support
       run: |
@@ -133,7 +133,7 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     
     - name: Build with sanitizers
       run: |

@@ -9,10 +9,6 @@ the first time. No prior exposure to fixed-point is assumed. If you
 should still be useful, because FR_Math has its own conventions and
 it's better to see them spelled out than to guess.
 
-One promise up front: we're going to *show* a lot
-more than we *tell*. Every abstract rule in this page is
-followed by a concrete example you can type into a compiler.
-
 ---
 
 ## Why fixed-point is still a good idea
@@ -50,11 +46,136 @@ performance wins come from. More on that shortly.
 
 ---
 
+## A first try: scaling in base 10
+
+Before we jump into binary, let's do the obvious thing a programmer
+would try if you handed them this problem fresh: pick a scale
+factor, multiply every fractional value by it, and store the result
+in a plain `int`. It's the cleanest way to see what problems
+fixed-point math has to solve, before we've committed to any
+particular solution.
+
+Say we want to add `10.25` and `0.55`. Pick a scale factor of 100
+so the first two decimal digits survive the round-trip through an
+integer:
+
+```
+ 10.25 × 100  →  1025
+  0.55 × 100  →    55
+ 1025  +   55 →  1080
+```
+
+Divide the result by 100 at the end and you get `10.80`. That's
+the right answer. Now write it in C:
+
+```c
+int a = 1025;   /* 10.25 times 100 */
+int b = 55;     /* 0.55  times 100 */
+int c = a + b;  /* 1080 */
+
+printf("%d + %d = %d\n", a, b, c);
+/* prints: 1025 + 55 = 1080  (not 10.25 + 0.55 = 10.80) */
+```
+
+And immediately we run into the first problem. The compiler has no
+idea these numbers were meant to be scaled — to it they are plain
+`int` variables holding 1025, 55, and 1080. Every time we want to
+display one, compare two of them against a human-readable
+threshold, or reason about the result, *we* have to do the "divide
+by 100" in our head. No type system helps us. No implicit
+conversion catches the mistake. We picked the scale factor, and we
+own the bookkeeping forever.
+
+That's hazard number one: **the programmer tracks the scale by
+hand**. Get it wrong on one variable in one function and the bug
+is silent.
+
+---
+
+## The other hazard: overflow
+
+Hazard number two is quieter, and much more dangerous. Take two
+signed 8-bit integers:
+
+```c
+signed char a = 34, b = 3, c;
+c = a * b;      /* c = 102. Fine. */
+```
+
+34 × 3 is 102, which still fits in a signed byte (max `+127`). Now
+change `b` to 5:
+
+```c
+b = 5;
+c = a * b;      /* real answer: 170. c actually becomes -86. */
+```
+
+170 doesn't fit in a signed byte. C doesn't raise an error — it
+silently wraps. 170 becomes −86, the program keeps running, and
+two modules downstream a thermostat decides it's freezing. This
+is called **overflow** (or wrap-around), and it is the second
+thing any fixed-point code has to worry about constantly. Worse,
+scaled-integer code makes it more likely on purpose: the whole
+point of scaling is to cram more magnitude into a small register,
+so the inputs that used to fit comfortably can now tip over the
+top.
+
+FR_Math gives you three tools for this — wider intermediates,
+saturating variants, and explicit sentinel returns — and they all
+get their own section below under "Overflow, saturation, and the
+sentinels". For now just file it away: *scaled-integer math means
+you think about overflow on every multiply*.
+
+---
+
+## Why we move to powers of two
+
+The base-10 version above works as arithmetic, but it's not a
+great use of bits. Three problems pile on top of each other:
+
+- **Divide-by-10 is slow.** On most chips a divide is many cycles
+  and can't be pipelined cheaply. Divide-by-100 is worse. That
+  scale factor you picked now costs you runtime on every
+  conversion — and in a real pipeline you convert a *lot*.
+- **The bit count doesn't match the math.** You get 100 distinct
+  fractional steps per integer unit, which isn't a power of two,
+  so there's no clean way to say "this variable has *N* bits of
+  fractional precision". You can only say "divided by 100", and
+  you can't cleanly reason about how much integer headroom is
+  left in the register.
+- **Changing precision is painful.** Want to move from "scaled by
+  100" to "scaled by 1000"? That's a multiply by 10 on every
+  value, with all the same divide costs on the way back out
+  later.
+
+Swap the scale factor for a power of two and all three problems
+evaporate. Instead of "multiplied by 100" we say "shifted left by
+*N*". Now:
+
+- The conversion is a single shift instruction, which has been
+  free or close to free on every CPU ever made.
+- The precision is exactly *N* bits — the same currency the
+  silicon already deals in. You can see at a glance how much
+  integer headroom is left.
+- Moving between radixes (say, from 4 fractional bits to 8) is
+  another single shift, in whichever direction you want.
+
+This is the real reason fixed-point in the wild is almost always
+binary. Base-10 scaling survives in a few corners — COBOL, some
+currency code, the occasional receipt printer — but every DSP,
+every embedded graphics library, and every retro console's inner
+loop uses powers of two. FR_Math follows the same rule without
+apology. From here on out, "scale factor" means "shift count" and
+every fractional value is a signed or unsigned integer with an
+agreed-upon number of low bits dedicated to the fractional part.
+
+---
+
 ## The core trick, with a thermometer
 
-The easiest way to see fixed-point is to build a toy example. Say
-you're writing firmware for a cheap digital thermometer. The
-spec is:
+The easiest way to see binary fixed-point in action is to build a
+toy example small enough that the shifts are obvious. Say you're
+writing firmware for a cheap digital thermometer. The spec is:
 
 - Range: −64 °C to +64 °C (good enough for a
   kitchen probe).
@@ -159,6 +280,124 @@ in your source code*, not a runtime field.
 
 ---
 
+## Quantisation and loss of precision
+
+Fixing the radix also fixes the smallest representable fractional
+step. At radix *N*, that step is `2^−N` — nothing finer survives
+the round-trip into the integer. Any real value smaller than the
+step rounds to zero; any real value landing between two adjacent
+steps rounds to one of them. The difference between the ideal
+value and its stored form is called **quantisation error**, and it
+is the main price paid for doing fractional math in integer
+registers.
+
+A concrete example. Store `0.1` as an s*M*.4 value:
+
+```
+0.1 × 2^4  =  0.1 × 16      =  1.6     →  stored as 1
+1 / 2^4    =  1 / 16        =  0.0625
+error      =  0.1 − 0.0625  =  0.0375  (37.5 %)
+```
+
+Radix 4 is too coarse for a value like 0.1 — the error is a
+sizeable fraction of the value itself. Move the same number to
+radix 16 and the picture changes:
+
+```
+0.1 × 2^16 =  0.1 × 65536  =  6553.6  →  stored as 6553
+6553 / 65536                =  0.09999847...
+error                       =  0.00000153  (< 0.002 %)
+```
+
+This behaviour isn't a bug — it is the same compromise IEEE-754
+floating point makes with its mantissa. The difference is that a
+float hides the trade-off behind a variable exponent, while
+fixed-point puts it on a ledger that the programmer chooses up
+front. The upside is predictability; the downside is that the
+choice has to be made per variable.
+
+A useful rule of thumb: pick the radix so that `2^−N` is at most
+half the smallest step the application cares about. Any coarser
+and small signals vanish; any finer and integer headroom is being
+spent for no benefit.
+
+A second consequence worth recording: quantisation error
+*accumulates*. Summing a million low-radix values sums the errors
+too. Signal-processing pipelines with long feedback paths are the
+main reason to carry accumulators at a wider radix than the
+individual samples — an idea the worked example later in this
+primer will put into practice.
+
+---
+
+## Displaying a fixed-point value
+
+The first thing most new code wants to do with a fixed-point value
+is print it. That is where the absence of language support bites
+immediately: `printf("%d", x)` shows the underlying integer, which
+for the value 3.5 stored at radix 4 is `56`. Not very illuminating.
+
+The standard pattern is to split the value into an integer part
+and a fractional part, then format each one as a plain integer.
+For a non-negative s*M*.*N* value `x`:
+
+```c
+s32 int_part  = x >> N;              /* same as FR2I(x, N) */
+s32 frac_bits = x & ((1 << N) - 1);  /* the low N bits     */
+```
+
+The integer part prints directly with `%d`. The fractional part is
+trickier: `frac_bits` is an integer in `[0, 2^N)`, which needs
+rescaling to however many decimal digits are wanted after the
+decimal point. Four digits is a reasonable default:
+
+```c
+/* Convert the fractional bits into a 0..9999 value by
+ * multiplying up and then dividing by the radix scale.    */
+s32 frac_dec = (frac_bits * 10000) >> N;
+
+printf("%d.%04d\n", (int)int_part, (int)frac_dec);
+```
+
+For `x = 56` at radix 4, that prints `3.5000`. For `x = 23` at
+radix 4 (which represents 1.4375), it prints `1.4375`. Note that
+the final digit is truncated, not rounded: a real value of
+`1.43756` would still print `1.4375`.
+
+Negative values need one extra step. A bitwise mask on a negative
+integer returns the two's-complement pattern of the low bits,
+which doesn't correspond to the fractional part of the real
+value. The cleanest workaround is to strip the sign first, format
+the magnitude with the positive-value formula, and prepend the
+minus sign by hand:
+
+```c
+void fr_show(s32 x, int radix)
+{
+    const char *sign = "";
+    if (x < 0) { sign = "-"; x = -x; }
+
+    s32 int_part  = x >> radix;
+    s32 frac_bits = x & ((1 << radix) - 1);
+    s32 frac_dec  = (frac_bits * 10000) >> radix;
+
+    printf("%s%d.%04d", sign, (int)int_part, (int)frac_dec);
+}
+```
+
+FR_Math ships this operation as
+`FR_printNumF(f, n, radix, pad, prec)`. Instead of hard-coding
+`printf`, the library version takes a per-character output
+callback `f`, which makes it usable on targets without stdio — a
+UART write, an LCD glyph pusher, a ring-buffer append. The `pad`
+parameter sets a minimum field width and `prec` sets the number of
+fractional digits. Rounding behaviour matches the hand-rolled
+version: excess fractional digits are truncated, and negative
+values are handled without the two's-complement trap described
+above.
+
+---
+
 ## Arithmetic: what the operations actually do
 
 Once you've chosen a radix, the everyday operations behave
@@ -252,6 +491,69 @@ that handles the mixed-radix case — you can multiply an
 `s11.4` by an `s9.6` and ask for the answer at
 radix 8 without doing any manual shifts.
 
+### Division
+
+```
+a (sM1.N) / b (sM2.N)  →  c (s?.0)   ← the naive answer
+```
+
+Division is the operation where the naive answer is almost always
+wrong. When two radix-*N* values are divided with plain integer
+`/`, the fractional parts of numerator and denominator cancel each
+other out and the result comes out at radix 0. That is
+arithmetically correct but rarely what the caller wanted, because
+the integer division then throws away every fractional bit of the
+real-world answer.
+
+To get a radix-*N* result out of two radix-*N* operands, the
+numerator has to be pre-scaled by `2^N` first:
+
+```
+result = (a << N) / b
+```
+
+The shift recovers the *N* fractional bits the raw division was
+about to discard. A concrete example, dividing `7.0` by `2.0` at
+radix 4:
+
+```c
+s32 a = I2FR(7, 4);     /* 7.0 at s.4 = 112 */
+s32 b = I2FR(2, 4);     /* 2.0 at s.4 = 32  */
+
+/* Naive: 112 / 32 = 3, which stored at radix 4 represents
+ * 0.1875.  Wrong by nearly a factor of 20.                */
+s32 wrong = a / b;
+
+/* Correct: pre-scale the numerator by 2^4 first. */
+s32 right = ((s64)a << 4) / b;
+/* (112 * 16) / 32 = 1792 / 32 = 56 = 3.5 at s.4            */
+```
+
+Three things to watch for:
+
+- **Overflow of the shifted numerator.** Shifting an
+  s*M*.*N* value left by *N* adds *N* bits to the register. If
+  the numerator is already near the top of its range, that shift
+  wraps. Carrying the numerator in an `int64_t` before the shift
+  (as the example above does) avoids the trap on anything up to
+  radix 31.
+- **Division by zero.** C does not check for it at runtime; on
+  most targets it either faults or produces silent garbage. Code
+  that accepts a divisor from outside the function has to check
+  it explicitly before the divide.
+- **Rounding toward zero.** C's integer division truncates toward
+  zero for both signs, so `−7 / 2 == −3` (not `−4`). Fixed-point
+  division inherits that behaviour. Round-to-nearest can be
+  layered on top by adding `b / 2` (for a positive numerator) or
+  `−b / 2` (for a negative numerator) to the pre-scaled numerator
+  before the divide.
+
+FR_Math intentionally does not ship a division macro. Division is
+far less common than multiply in the kinds of pipelines the
+library targets, and every real use has slightly different
+constraints around the divisor check and the rounding mode. The
+pattern above inlines cleanly at the call site when it's needed.
+
 ### Changing radix
 
 Sooner or later you'll have a value at one radix and need
@@ -271,6 +573,56 @@ for you:
 
 The value is conserved as closely as the destination radix can
 represent it. Nothing more, nothing less.
+
+### Rounding on the way back down
+
+Every operation that drops fractional bits — changing radix down,
+bringing a multiply result back to a narrower type, converting
+back to a plain integer — has to decide what to do with the bits
+being thrown away. C's right-shift operator on signed values
+truncates toward *negative* infinity, which surprises code that
+expected it to truncate toward zero. The effect is subtle but
+persistent:
+
+```c
+s32 half     =  8;    /*  0.5 at s.4 */
+s32 neg_half = -8;    /* -0.5 at s.4 */
+
+printf("%d\n", half     >> 4);  /*  0 */
+printf("%d\n", neg_half >> 4);  /* -1, not 0 */
+```
+
+The negative case truncates *downward*: −0.5 becomes −1. For
+display code and for anything that compares magnitudes across
+sign, this is a common source of off-by-one bugs — the positive
+and negative versions of the same magnitude round in opposite
+directions.
+
+The standard fix is round-half-away-from-zero: add half of the
+shift amount before the shift, with the sign chosen to match the
+value.
+
+```c
+/* Round-to-nearest from radix r back to integer. */
+s32 bias   = (1 << (r - 1));
+s32 result = (x >= 0) ? ((x + bias) >> r)
+                      : -(((-x) + bias) >> r);
+```
+
+That form handles both signs symmetrically: 0.5 rounds to 1, −0.5
+rounds to −1, 0.4 rounds to 0, −0.4 rounds to 0. The library
+macro `FR_INT` takes a slightly different approach — it truncates
+toward zero rather than toward negative infinity, which matches
+C's `/` operator and is often easier to reason about. Which
+rounding mode is right depends on the downstream consumer; for
+display code, round-half-away-from-zero is almost always what a
+human reader expects.
+
+A further rounding mode, round-half-to-even ("banker's
+rounding"), avoids statistical bias in long-running accumulators
+but costs an extra branch per operation. The library does not
+include it by default. Code that needs it can build it on top of
+the raw shift.
 
 ---
 
@@ -372,6 +724,154 @@ narrower radix leaves more headroom, packs tighter in RAM, and
 shifts faster on small cores. If you find yourself wanting
 `s15.16` on every single variable, stop and ask whether
 you actually need 15 integer bits on that particular signal.
+
+---
+
+## A worked example: one-pole IIR low-pass filter
+
+The sections up to this point have introduced the pieces
+individually: scaling, notation, quantisation, arithmetic,
+overflow, and radix choice. A small end-to-end example is the
+fastest way to see how those pieces fit together on a real
+pipeline. The filter walked through below is a single-pole
+infinite-impulse-response (IIR) low-pass — about the simplest
+entry in the DSP catalogue, but realistic enough to exercise
+nearly every decision the primer has covered so far.
+
+In floating point, the filter is one line of arithmetic:
+
+```c
+/* Reference implementation, float. */
+float y = 0.0f;
+
+void step(float x)
+{
+    y = y + alpha * (x - y);
+}
+```
+
+`alpha` controls how fast the filter tracks its input. Values
+close to 1 make the output follow the input almost immediately;
+values close to 0 smooth hard and react slowly. For this
+walkthrough `alpha = 0.05`, a reasonably slow filter that takes
+about 20 samples to reach roughly 63 % of a step input.
+
+### Step 1: inventory the ranges
+
+Three variables carry state through the loop. Each needs its
+range and its required precision identified before any radix can
+be picked:
+
+- `x` — the input sample. Assumed here to arrive as a 16-bit
+  signed audio sample in the range ±32767. That fixes one sign
+  bit plus 15 integer bits, or in s*M*.*N* terms, `s15.0`.
+- `alpha` — the filter coefficient. By construction
+  `0 ≤ alpha ≤ 1`, so it has zero integer bits. The entire
+  coefficient lives in the fractional part.
+- `y` — the filter state. It represents a filtered version of
+  `x`, so it shares the same ±32767 output range. But because it
+  accumulates small updates on every sample, it will drift and
+  lose precision unless carried at a higher radix than the raw
+  input. This is the quantisation-error accumulation noted
+  earlier in the primer, showing up in practice.
+
+### Step 2: pick the radixes
+
+The goal is to keep enough fractional precision in the state that
+a single-LSB update does not get lost, while keeping every
+intermediate product inside a 32-bit register.
+
+- `x` stays at radix 0 (`s15.0`) — it arrives from the ADC that
+  way and shifting it at the input costs memory for no benefit.
+- `alpha` goes to radix 15 (`s0.15`). With 15 fractional bits
+  the smallest representable coefficient is
+  `1/32768 ≈ 0.0000305`, which is three orders of magnitude
+  finer than the chosen `alpha = 0.05`. Plenty of resolution.
+- `y` is carried internally at radix 15 (`s16.15`). That is 16
+  integer bits (the full ±32767 range plus one sign bit) and 15
+  fractional bits to absorb the small per-sample updates. Total:
+  32 bits — fits an `s32` exactly, with no headroom spent on
+  anything unnecessary.
+
+### Step 3: walk through one sample
+
+```c
+/* Filter state held at radix 15. Persists across calls. */
+static s32 y_r15 = 0;
+
+/* alpha = 0.05 at radix 15:  0.05 * 32768 = 1638.4 -> 1638 */
+#define ALPHA_R15  1638
+
+/* One filter tick. x arrives as a raw s16 audio sample. */
+s16 iir_step(s16 x)
+{
+    /* Bring x up to the state's radix for the subtraction.
+     * Cast to s32 before shifting so the shift happens in
+     * 32-bit space, not 16-bit.                           */
+    s32 x_r15 = (s32)x << 15;
+
+    /* delta = x - y, both at radix 15. No fractional bits
+     * grow, and the s32 range is just wide enough to hold
+     * the worst-case signed difference of two s16.15
+     * values.                                             */
+    s32 delta_r15 = x_r15 - y_r15;
+
+    /* alpha * delta. delta is s16.15, alpha is s0.15, so
+     * the raw product is s16.30 -- does not fit in 32 bits.
+     * Promote to int64 for the multiply, shift off the
+     * extra 15 fractional bits, and the result lands back
+     * at radix 15.                                        */
+    s64 prod       = (s64)delta_r15 * (s64)ALPHA_R15;
+    s32 update_r15 = (s32)(prod >> 15);
+
+    /* Accumulate. Both sides are at radix 15, the sum is at
+     * radix 15, and as long as delta stays inside the
+     * ALPHA-scaled range the accumulator never saturates. */
+    y_r15 = y_r15 + update_r15;
+
+    /* Output: round-half-away-from-zero back down to s15.0. */
+    s32 bias = (y_r15 >= 0) ? (1 << 14) : -(1 << 14);
+    return (s16)((y_r15 + bias) >> 15);
+}
+```
+
+### Step 4: what each line actually defends against
+
+- The `(s32)x << 15` line casts before shifting. Without the
+  cast the shift would happen in 16-bit space and overflow on
+  the very first sample.
+- The `(s64)` promotion on the multiply forces the product to be
+  computed in 64-bit. Without it, the 32-bit intermediate
+  overflows whenever the input and state differ by more than
+  roughly 40 LSB of 16-bit output — far below normal audio
+  levels. The promotion is required, not optional.
+- The `bias` term on the output is round-half-away-from-zero
+  rather than truncate-toward-negative-infinity. Without it, the
+  output carries a systematic negative bias of up to one LSB,
+  which a DC-sensitive downstream stage (a meter, an integrator,
+  a feedback loop) may care about.
+
+### Step 5: test against the reference
+
+Correctness of a fixed-point port is judged by running it
+alongside the floating-point reference on the same input stream
+and recording the maximum absolute difference. A simple harness
+feeds both versions a few thousand samples — a mix of sine tones,
+step inputs, and silence is enough to exercise the relevant paths
+— and reports the worst-case delta. For a radix-15 one-pole IIR
+the expected worst-case difference is on the order of a few LSB,
+comparable to the inherent quantisation of the 16-bit output
+format and not audible in normal listening. Anything substantially
+larger indicates a radix choice that is too tight, a rounding
+mode that is drifting, or a missing int64 promotion on the
+multiply.
+
+That is the full recipe: identify the ranges, pick radixes with
+the register budget in mind, write the operations with explicit
+intermediate types, choose an appropriate rounding mode on the
+output, and cross-check against a float reference. Every other
+FR_Math pipeline follows the same template, only with more
+variables.
 
 ---
 

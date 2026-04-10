@@ -93,6 +93,126 @@ and you live with it.
 
 ---
 
+## The same program for embedded targets
+
+The example above uses `printf` and a build-time float literal to
+get started quickly on a desktop. On an embedded target neither is
+usually available — there is no `<stdio.h>` and often no
+floating-point unit. FR_Math ships three callback-based print
+functions that replace `printf` for numeric output:
+
+| Function | Output |
+| --- | --- |
+| `FR_printNumF(f, n, radix, pad, prec)` | Fixed-point value as decimal with a dot, e.g. `"3.14158"` |
+| `FR_printNumD(f, n, pad)` | Plain signed integer, e.g. `"-42"` |
+| `FR_printNumH(f, n, showPrefix)` | Hexadecimal, e.g. `"0x0003243f"` |
+
+Each function takes a `int (*f)(char)` callback and calls it once
+per output character. Point that callback at a UART transmit
+register, an LCD driver, a ring buffer — whatever the platform
+provides.
+
+Save this as `hello_embedded.c`:
+
+```c
+/* hello_embedded.c — FR_Math on bare metal, no printf, no float. */
+#include "FR_defs.h"
+#include "FR_math.h"
+
+/* ---- Platform glue ------------------------------------------------
+ * Replace uart_putc() with your board's serial-TX function.
+ * The FR_printNum family calls f(char) once per character.
+ */
+static int uart_putc(char c)
+{
+    /* e.g. STM32:  HAL_UART_Transmit(&huart1, (uint8_t *)&c, 1, 10); */
+    /* e.g. AVR:    while (!(UCSR0A & (1 << UDRE0))); UDR0 = c;       */
+    (void)c;
+    return 0;
+}
+
+/* Helper: emit a C string through the same callback. */
+static void emit(const char *s) { while (*s) uart_putc(*s++); }
+
+int main(void)
+{
+    const int radix = 16;
+
+    /* Build constants at compile time — no float needed.
+     * FR_num(integer, frac_digits, radix) auto-detects digit count.
+     * The compiler folds this to a single constant.                  */
+    s32 pi     = FR_num(3, 14159, radix);      /* 3.14159  s15.16  */
+    s32 two    = I2FR(2, radix);                /* 2.0      s15.16  */
+    s32 two_pi = FR_FixMuls(pi, two, radix);    /* 2 * pi   s15.16  */
+
+    /* FR_printNumF(putc, value, radix, min_width, frac_digits)
+     * Prints a string like "3.14158" through the callback.           */
+    FR_printNumF(uart_putc, pi,     radix, 0, 5);
+    emit(" * 2 = ");
+    FR_printNumF(uart_putc, two_pi, radix, 0, 5);
+    emit("\r\n");
+
+    /* Trig: cos(45 deg) printed as fixed-point and hex. */
+    s16 cos45 = FR_CosI(45);                         /* s0.15         */
+    emit("cos(45) = ");
+    FR_printNumF(uart_putc, (s32)cos45, 15, 0, 5);   /* decimal       */
+    emit(" (");
+    FR_printNumH(uart_putc, cos45, 1);                /* hex           */
+    emit(")\r\n");
+
+    /* Plain integer output with FR_printNumD. */
+    emit("raw = ");
+    FR_printNumH(uart_putc, (int)pi, 1);
+    emit(" radix=");
+    FR_printNumD(uart_putc, radix, 0);
+    emit("\r\n");
+
+    while (1) {}   /* bare-metal main never returns */
+}
+```
+
+Compile for a Cortex-M4 (or any bare-metal C99 target):
+
+```bash
+arm-none-eabi-gcc -Isrc -mcpu=cortex-m4 -mthumb -Os \
+    hello_embedded.c src/FR_math.c --specs=nosys.specs -o hello_embedded.elf
+```
+
+Expected serial output (32-bit `int` platform):
+
+```
+3.14158 * 2 = 6.28317
+cos(45) = 0.70709 (0x00005a82)
+raw = 0x0003243f radix=16
+```
+
+Key differences from the desktop version:
+
+- **No float anywhere.** `FR_num(3, 14159, 16)` builds the
+  constant from the integer 3, the fractional digits 14159, and the
+  radix 16 — the digit count is auto-detected. The compiler folds
+  the whole expression to a single `0x0003243f` literal at compile
+  time. (Use `FR_NUM(i, f, d, r)` if the fraction has leading zeros,
+  e.g. `FR_NUM(0, 5, 2, 16)` for 0.05.)
+- **No `<stdio.h>`.** All output goes through the single-character
+  callback. The three print functions together add under 500 bytes
+  of code on Cortex-M4 at `-Os`.
+- **Buffer variant.** To print into RAM instead of a UART, swap
+  `uart_putc` for a function that appends to a `char[]` and bumps
+  a write pointer:
+
+```c
+static char buf[64];
+static int  pos = 0;
+
+static int buf_putc(char c) { buf[pos++] = c; return 0; }
+```
+
+Then pass `buf_putc` in place of `uart_putc`. After the call,
+`buf[0..pos-1]` holds the formatted string.
+
+---
+
 ## Using the 2D transform module
 
 ```c

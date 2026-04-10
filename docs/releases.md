@@ -81,7 +81,7 @@ mandatory.
 
 ### New documentation
 
-- [API Reference](guide/api-reference.md) —
+- [API Reference](api-reference.md) —
   complete per-symbol reference with inputs, outputs, radix
   handling, and worst-case error.
 - `CONTRIBUTING.md` — PR expectations,

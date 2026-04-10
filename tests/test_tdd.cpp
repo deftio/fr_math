@@ -225,6 +225,19 @@ static void section_macros_basic(void) {
     printf("| FR_NUM(1, 0, 0, 8) | %d | 1.0 << 8 = 256 |\n", FR_NUM(1, 0, 0, 8));
     printf("\n> Signature: `FR_NUM(int, frac_digits, num_digits, radix)`.\n\n");
 
+    md_h3("2.4b FR_num (convenience wrapper)");
+    printf("| FR_num | FR_NUM | Match |\n|---|---:|---:|\n");
+    printf("| FR_num(12, 34, 10) | FR_NUM(12, 34, 2, 10) | %s |\n",
+           FR_num(12, 34, 10) == FR_NUM(12, 34, 2, 10) ? "yes" : "NO");
+    printf("| FR_num(-3, 5, 16) | FR_NUM(-3, 5, 1, 16) | %s |\n",
+           FR_num(-3, 5, 16) == FR_NUM(-3, 5, 1, 16) ? "yes" : "NO");
+    printf("| FR_num(0, 25, 16) | FR_NUM(0, 25, 2, 16) | %s |\n",
+           FR_num(0, 25, 16) == FR_NUM(0, 25, 2, 16) ? "yes" : "NO");
+    printf("| FR_num(1, 0, 8) | FR_NUM(1, 0, 0, 8) | %s |\n",
+           FR_num(1, 0, 8) == FR_NUM(1, 0, 0, 8) ? "yes" : "NO");
+    printf("| FR_num(3, 14159, 16) | FR_NUM(3, 14159, 5, 16) | %s |\n",
+           FR_num(3, 14159, 16) == FR_NUM(3, 14159, 5, 16) ? "yes" : "NO");
+
     md_h3("2.5 FR_INT");
     printf("| Op | Result |\n|---|---:|\n");
     printf("| FR_INT(I2FR(50,8), 8) | %d |\n", FR_INT(I2FR(50, 8), 8));

@@ -56,6 +56,10 @@ htmlcov/
 .idea/
 *.sublime-*
 
+# Claude Code local files
+CLAUDE.local.md
+.claude/
+
 # OS files
 .DS_Store
 Thumbs.db
