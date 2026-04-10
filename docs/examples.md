@@ -150,6 +150,12 @@ int main(void)
     s32 bad = FR_sqrt(-1, r);
     if (bad == FR_DOMAIN_ERROR)
         printf("sqrt(-1) rejected, good.\n");
+
+    /* Fast approximate — no multiply, no 64-bit math */
+    s32 h_fast  = FR_hypot_fast(three, four);     /* 4-seg, ~0.4% err */
+    s32 h_fast8 = FR_hypot_fast8(three, four);    /* 8-seg, ~0.14% err */
+    printf("hypot_fast(3,4)  = %d (integer part)\n", (int)FR2I(h_fast, r));
+    printf("hypot_fast8(3,4) = %d (integer part)\n", (int)FR2I(h_fast8, r));
     return 0;
 }
 ```

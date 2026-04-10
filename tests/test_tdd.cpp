@@ -1258,6 +1258,50 @@ static void section_v2_new(void) {
     table_row_stats("FR_hypot sweep", &hyp_stats);
     printf("\n");
 
+    md_h3("11.4b FR_hypot_fast (4-seg) vs hypot(), radix 16");
+    printf("| x | y | FR_hypot_fast | as double | hypot() | abs err | rel err%% |\n");
+    printf("|---:|---:|---:|---:|---:|---:|---:|\n");
+    stats_t hf4_stats; stats_reset(&hf4_stats);
+    for (int i = 0; i < (int)(sizeof(hyp_cases)/sizeof(hyp_cases[0])); i++) {
+        s32 fx = (s32)(hyp_cases[i].x * (1L << 16));
+        s32 fy = (s32)(hyp_cases[i].y * (1L << 16));
+        s32 r  = FR_hypot_fast(fx, fy);
+        double rd = frd(r, 16);
+        double ref = hypot(hyp_cases[i].x, hyp_cases[i].y);
+        double err = rd - ref; if (err < 0) err = -err;
+        double rel = (ref > 0) ? err / ref * 100.0 : 0.0;
+        stats_add(&hf4_stats, sqrt(hyp_cases[i].x*hyp_cases[i].x + hyp_cases[i].y*hyp_cases[i].y),
+                  rd, ref);
+        printf("| %g | %g | %ld | %.6g | %.6g | %.4g | %.4g |\n",
+               hyp_cases[i].x, hyp_cases[i].y, (long)r, rd, ref, err, rel);
+    }
+    printf("\n");
+    table_header_stats();
+    table_row_stats("FR_hypot_fast sweep", &hf4_stats);
+    printf("\n");
+
+    md_h3("11.4c FR_hypot_fast8 (8-seg) vs hypot(), radix 16");
+    printf("| x | y | FR_hypot_fast8 | as double | hypot() | abs err | rel err%% |\n");
+    printf("|---:|---:|---:|---:|---:|---:|---:|\n");
+    stats_t hf8_stats; stats_reset(&hf8_stats);
+    for (int i = 0; i < (int)(sizeof(hyp_cases)/sizeof(hyp_cases[0])); i++) {
+        s32 fx = (s32)(hyp_cases[i].x * (1L << 16));
+        s32 fy = (s32)(hyp_cases[i].y * (1L << 16));
+        s32 r  = FR_hypot_fast8(fx, fy);
+        double rd = frd(r, 16);
+        double ref = hypot(hyp_cases[i].x, hyp_cases[i].y);
+        double err = rd - ref; if (err < 0) err = -err;
+        double rel = (ref > 0) ? err / ref * 100.0 : 0.0;
+        stats_add(&hf8_stats, sqrt(hyp_cases[i].x*hyp_cases[i].x + hyp_cases[i].y*hyp_cases[i].y),
+                  rd, ref);
+        printf("| %g | %g | %ld | %.6g | %.6g | %.4g | %.4g |\n",
+               hyp_cases[i].x, hyp_cases[i].y, (long)r, rd, ref, err, rel);
+    }
+    printf("\n");
+    table_header_stats();
+    table_row_stats("FR_hypot_fast8 sweep", &hf8_stats);
+    printf("\n");
+
     md_h3("11.5 fr_wave_sqr / fr_wave_pwm at key BAM phases");
     printf("| phase | duty | sqr | pwm |\n|---:|---:|---:|---:|\n");
     u16 phs[] = {0, 0x2000, 0x4000, 0x6000, 0x8000, 0xa000, 0xc000, 0xe000, 0xffff};
