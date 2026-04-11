@@ -27,10 +27,16 @@ HEADERS = $(SRC_DIR)/FR_defs.h $(SRC_DIR)/FR_math.h $(SRC_DIR)/FR_math_2D.h
 .PHONY: all
 all: dirs lib examples
 
-# Create build directories
+# Create build directories and emit version string from FR_MATH_VERSION_HEX
 .PHONY: dirs
 dirs:
 	@mkdir -p $(BUILD_DIR) $(COV_DIR)
+	@RAW=$$(grep '#define FR_MATH_VERSION_HEX' $(SRC_DIR)/FR_math.h | awk '{print $$3}'); \
+	 HEX=$$((RAW)); \
+	 MAJ=$$(( (HEX >> 16) & 0xff )); \
+	 MIN=$$(( (HEX >> 8)  & 0xff )); \
+	 PAT=$$(( HEX & 0xff )); \
+	 echo "$${MAJ}.$${MIN}.$${PAT}" > $(BUILD_DIR)/version.txt
 
 # Build library
 .PHONY: lib

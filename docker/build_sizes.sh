@@ -59,14 +59,32 @@ compile_sdcc() {
         return
     fi
 
-    # SDCC is not GCC-based; it doesn't produce ELF, so `size` won't work.
-    # Compile to verify the library builds on 8051, but report "compiles"
-    # rather than a byte count (the .rel object format isn't comparable).
-    if sdcc -mmcs51 --std-c99 --opt-code-size ${INC} \
-       -c "${SRC}" -o "${obj}.rel" 2>/dev/null; then
-        echo "compiles"
-    else
+    # SDCC produces Intel HEX, not ELF — link with a dummy main to get
+    # a .mem report that includes the ROM/FLASH total.
+    cat > /tmp/main_8051.c << 'CEOF'
+void main(void) {}
+CEOF
+
+    if ! sdcc -mmcs51 --std-c99 --opt-code-size ${INC} \
+         -c "${SRC}" -o "${obj}.rel" 2>/dev/null; then
         echo "fail"
+        return
+    fi
+
+    sdcc -mmcs51 --std-c99 --opt-code-size \
+         -c /tmp/main_8051.c -o /tmp/main_8051.rel 2>/dev/null
+
+    # Link may fail (8051 internal RAM is tiny) but .mem is still written.
+    sdcc -mmcs51 --opt-code-size \
+         /tmp/main_8051.rel "${obj}.rel" \
+         -o "${obj}.ihx" 2>/dev/null || true
+
+    local rom
+    rom=$(grep 'ROM/EPROM/FLASH' "${obj}.mem" 2>/dev/null | awk '{print $4}')
+    if [[ -n "${rom}" && "${rom}" != "0" ]]; then
+        echo "${rom}"
+    else
+        echo "compiles"
     fi
 }
 

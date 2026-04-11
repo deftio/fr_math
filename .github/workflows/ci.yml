@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ master, main, 2025_update ]
+    branches: [ master, main ]
   pull_request:
     branches: [ master, main ]
 
@@ -16,10 +16,10 @@ jobs:
         exclude:
           - os: macos-latest
             compiler: gcc  # Use default clang on macOS
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Set up compiler
       run: |
         if [ "${{ matrix.compiler }}" = "gcc" ]; then
@@ -29,23 +29,23 @@ jobs:
           echo "CC=clang" >> $GITHUB_ENV
           echo "CXX=clang++" >> $GITHUB_ENV
         fi
-    
+
     - name: Build library
       run: make lib
-    
+
     - name: Build examples
       run: make examples
-    
+
     - name: Run tests
       run: make test
-    
+
     - name: Generate size report
       run: |
         echo "## Build Size Report (${{ matrix.os }} - ${{ matrix.compiler }})" >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
         size build/*.o 2>/dev/null | head -5 >> $GITHUB_STEP_SUMMARY || echo "Size command not available" >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
-    
+
     - name: Generate coverage report
       if: matrix.os == 'ubuntu-latest' && matrix.compiler == 'gcc'
       run: |
@@ -56,17 +56,6 @@ jobs:
         # Capture the last part of the output for the summary
         make coverage 2>&1 | tail -20 >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
-    
-    # Codecov upload disabled for now - our coverage script uses gcov directly
-    # not lcov format. Could be re-enabled if we switch to lcov.
-    #- name: Upload coverage to Codecov
-    #  if: matrix.os == 'ubuntu-latest' && matrix.compiler == 'gcc'
-    #  uses: codecov/codecov-action@v4
-    #  with:
-    #    file: ./coverage/coverage.info
-    #    flags: unittests
-    #    name: codecov-umbrella
-    #    fail_ci_if_error: false
 
   cross-compile:
     runs-on: ubuntu-latest
@@ -77,21 +66,21 @@ jobs:
             arch: ARM
           - target: riscv64-linux-gnu
             arch: RISC-V
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Install cross-compiler
       run: |
         sudo apt-get update
         sudo apt-get install -y gcc-${{ matrix.target }} g++-${{ matrix.target }}
-    
+
     - name: Cross-compile
       run: |
         export CC=${{ matrix.target }}-gcc
         export CXX=${{ matrix.target }}-g++
         make lib
-    
+
     - name: Generate cross-compile size report
       run: |
         echo "## Cross-Compile Size Report (${{ matrix.arch }})" >> $GITHUB_STEP_SUMMARY
@@ -106,22 +95,22 @@ jobs:
 
   test-32bit:
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Install 32-bit support
       run: |
         sudo apt-get update
         sudo apt-get install -y gcc-multilib g++-multilib
-    
+
     - name: Build and test 32-bit
       run: |
         export CFLAGS="-m32"
         export CXXFLAGS="-m32"
         make clean
         make test
-    
+
     - name: Generate 32-bit size report
       run: |
         echo "## 32-bit Build Size Report" >> $GITHUB_STEP_SUMMARY
@@ -131,18 +120,85 @@ jobs:
 
   overflow-tests:
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v4
-    
+
     - name: Build with sanitizers
       run: |
         export CFLAGS="-fsanitize=undefined -fsanitize=integer -fno-sanitize-recover=all"
         export CXXFLAGS="-fsanitize=undefined -fsanitize=integer -fno-sanitize-recover=all"
         make clean
         make test || true  # Allow failure to see all issues
-    
+
     - name: Run overflow edge case tests
       run: |
         echo "Testing overflow and saturation behavior..."
         # This will be expanded when we enhance the test suite
+
+  # Auto-tag a GitHub release when all CI jobs pass on a push to master/main.
+  # Source of truth: FR_MATH_VERSION_HEX in src/FR_math.h (0xMMmmpp).
+  # Fails if the tag already exists (prevents duplicate releases).
+  release:
+    if: github.event_name == 'push'
+    needs: [build-and-test, cross-compile, test-32bit, overflow-tests]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Extract version from FR_MATH_VERSION_HEX
+      id: version
+      run: |
+        RAW=$(grep '#define FR_MATH_VERSION_HEX' src/FR_math.h | awk '{print $3}')
+        if [ -z "$RAW" ]; then
+          echo "ERROR: FR_MATH_VERSION_HEX not found in src/FR_math.h"
+          exit 1
+        fi
+        HEX=$((RAW))
+        MAJ=$(( (HEX >> 16) & 0xff ))
+        MIN=$(( (HEX >> 8)  & 0xff ))
+        PAT=$(( HEX & 0xff ))
+        VER="${MAJ}.${MIN}.${PAT}"
+        echo "version=$VER" >> "$GITHUB_OUTPUT"
+        echo "tag=v$VER" >> "$GITHUB_OUTPUT"
+        echo "Detected FR_MATH_VERSION_HEX=$RAW → v$VER"
+
+    - name: Check tag does not already exist
+      run: |
+        if git ls-remote --tags origin "refs/tags/${{ steps.version.outputs.tag }}" | grep -q .; then
+          echo "ERROR: tag ${{ steps.version.outputs.tag }} already exists on remote."
+          echo "Bump FR_MATH_VERSION in src/FR_math.h before pushing."
+          exit 1
+        fi
+        echo "Tag ${{ steps.version.outputs.tag }} is available."
+
+    - name: Create GitHub release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        TAG="${{ steps.version.outputs.tag }}"
+        VER="${{ steps.version.outputs.version }}"
+
+        # Use release_notes.md as body if it exists, otherwise a default.
+        if [ -f release_notes.md ]; then
+          BODY_FILE="release_notes.md"
+        else
+          BODY_FILE=""
+        fi
+
+        if [ -n "$BODY_FILE" ]; then
+          gh release create "$TAG" \
+            --title "FR_Math $VER" \
+            --notes-file "$BODY_FILE" \
+            --target "${{ github.sha }}"
+        else
+          gh release create "$TAG" \
+            --title "FR_Math $VER" \
+            --notes "FR_Math release $VER" \
+            --target "${{ github.sha }}"
+        fi
+
+        echo "Created release $TAG"

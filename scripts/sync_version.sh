@@ -1,29 +1,32 @@
 #!/usr/bin/env bash
 #
-# sync_version.sh — propagate the contents of the repo-root VERSION file
-# into every file that carries a user-visible version string. Idempotent:
-# running it when everything already matches is a no-op.
+# sync_version.sh — propagate the version from FR_MATH_VERSION_HEX in
+# src/FR_math.h into every file that carries a user-visible version string.
+# Idempotent: running it when everything already matches is a no-op.
 #
-# Single source of truth: /VERSION (one line, e.g. "2.0.0").
+# Single source of truth: src/FR_math.h
+#   #define FR_MATH_VERSION_HEX  0xMMmmpp   (major << 16 | minor << 8 | patch)
+#
+# The hex define is what embedded targets return at runtime. Everything
+# else — the string define, VERSION file, README badges, docs — is derived.
+#
+# To bump the version:
+#   1. Edit FR_MATH_VERSION_HEX in src/FR_math.h
+#   2. Run ./scripts/sync_version.sh
 #
 # Files kept in sync:
+#   src/FR_math.h                — FR_MATH_VERSION string (derived from _HEX)
+#   VERSION                      — plain-text "X.Y.Z" (derived from _HEX)
 #   README.md                    — shields.io version badge
-#   README.md                    — "Current version:" line in the Version section
-#   pages/assets/site.js         — FR_VERSION constant (shown in every docs page header)
+#   README.md                    — "Current version:" line
+#   pages/assets/site.js         — FR_VERSION constant (docs page header)
 #   src/FR_math_2D.h             — @version doxygen tag
 #   src/FR_math_2D.cpp           — @version doxygen tag
-#   scripts/make_release.sh      — git tag hint in the squash-merge instructions
-#
-# Files NOT touched (history / descriptive prose):
-#   release_notes.md             — canonical change log, user edits when bumping
-#   pages/releases.html          — release history page
-#   pages/**/*.html              — "As of v2.0.0" dated observations
-#   docs/**/*.md                 — plain-text markdown mirror (human-maintained)
+#   scripts/make_release.sh      — git tag hint in squash-merge instructions
 #
 # Usage:
-#   ./scripts/sync_version.sh              # update files to match VERSION
+#   ./scripts/sync_version.sh              # sync all files from FR_math.h
 #   ./scripts/sync_version.sh --check      # verify only, exit 1 if any drift
-#   ./scripts/sync_version.sh --set X.Y.Z  # rewrite VERSION first, then sync
 #
 # Exit status: 0 on success (everything in sync, or successfully synced).
 #              1 on drift detected in --check mode.
@@ -54,43 +57,43 @@ for arg in "$@"; do
         --check)
             MODE="check"
             ;;
-        --set)
-            echo -e "${RED}--set requires a value: --set X.Y.Z${NC}" >&2
-            exit 2
-            ;;
-        --set=*)
-            NEW_VER="${arg#--set=}"
-            echo "${NEW_VER}" > "${PROJECT_ROOT}/VERSION"
-            ;;
         -h|--help)
-            sed -n '3,32p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+            sed -n '3,34p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *)
-            # Positional: treat as the new version if it looks like X.Y.Z.
-            if [[ "${arg}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-                echo "${arg}" > "${PROJECT_ROOT}/VERSION"
-            else
-                echo -e "${RED}Unknown argument: ${arg}${NC}" >&2
-                echo "Try $0 --help" >&2
-                exit 2
-            fi
+            echo -e "${RED}Unknown argument: ${arg}${NC}" >&2
+            echo "Try $0 --help" >&2
+            exit 2
             ;;
     esac
 done
 
-# Read source of truth.
-if [[ ! -f "${PROJECT_ROOT}/VERSION" ]]; then
-    echo -e "${RED}VERSION file not found at ${PROJECT_ROOT}/VERSION${NC}" >&2
-    exit 2
-fi
-VERSION=$(head -1 "${PROJECT_ROOT}/VERSION" | tr -d '[:space:]')
-if [[ ! "${VERSION}" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-    echo -e "${RED}VERSION file does not contain a valid X.Y.Z version: '${VERSION}'${NC}" >&2
+# --------------------------------------------------------------------------
+# Source of truth: FR_MATH_VERSION_HEX in src/FR_math.h
+# --------------------------------------------------------------------------
+H_FILE="${PROJECT_ROOT}/src/FR_math.h"
+if [[ ! -f "${H_FILE}" ]]; then
+    echo -e "${RED}src/FR_math.h not found${NC}" >&2
     exit 2
 fi
 
-echo -e "Target version: ${GREEN}${VERSION}${NC}"
+# Read the hex define and convert to X.Y.Z.
+RAW_HEX=$(grep '#define FR_MATH_VERSION_HEX' "${H_FILE}" | awk '{print $3}' | tr -d '\r')
+if [[ -z "${RAW_HEX}" ]]; then
+    echo -e "${RED}FR_MATH_VERSION_HEX not found in src/FR_math.h${NC}" >&2
+    exit 2
+fi
+
+# Convert 0xMMmmpp → decimal components.
+HEX_NUM=$((RAW_HEX))
+V_MAJ=$(( (HEX_NUM >> 16) & 0xff ))
+V_MIN=$(( (HEX_NUM >> 8)  & 0xff ))
+V_PAT=$(( HEX_NUM & 0xff ))
+VERSION="${V_MAJ}.${V_MIN}.${V_PAT}"
+WANT_HEX=$(printf "0x%02x%02x%02x" "${V_MAJ}" "${V_MIN}" "${V_PAT}")
+
+echo -e "Source of truth: ${GREEN}FR_MATH_VERSION_HEX = ${WANT_HEX}${NC}  →  ${GREEN}${VERSION}${NC}"
 echo ""
 
 # Track whether we made any modifications (for drift detection in --check mode).
@@ -131,49 +134,93 @@ update_file() {
     fi
 }
 
+# Helper for files with \r\n (FR_math.h): compare + sed instead of perl -i.
+check_or_update_line() {
+    local label="$1"
+    local file="$2"
+    local current="$3"
+    local wanted="$4"
+    local sed_expr="$5"
+
+    if [[ "${current}" == "${wanted}" ]]; then
+        echo -e "  ${GREEN}ok  ${NC} ${label}"
+    elif [[ "${MODE}" == "check" ]]; then
+        echo -e "  ${RED}DRIFT${NC} ${label}  (have '${current}', want '${wanted}')"
+        DRIFT=1
+    else
+        sed "${sed_expr}" "${file}" > "${file}.tmp" && mv "${file}.tmp" "${file}"
+        echo -e "  ${YELLOW}updated${NC} ${label}"
+        CHANGED=1
+    fi
+}
+
 # --------------------------------------------------------------------------
-# 1. README.md — shields.io version badge
+# 1. src/FR_math.h — FR_MATH_VERSION string (derived from _HEX)
+# --------------------------------------------------------------------------
+H_STR=$(grep '#define FR_MATH_VERSION ' "${H_FILE}" | grep '"' | sed 's/.*"\(.*\)".*/\1/' | tr -d '\r')
+check_or_update_line "src/FR_math.h FR_MATH_VERSION" "${H_FILE}" \
+    "${H_STR}" "${VERSION}" \
+    "s/#define FR_MATH_VERSION .*\"[0-9]*\.[0-9]*\.[0-9]*\"/#define FR_MATH_VERSION     \"${VERSION}\"/"
+
+# --------------------------------------------------------------------------
+# 2. VERSION file (derived from _HEX)
+# --------------------------------------------------------------------------
+VER_FILE="${PROJECT_ROOT}/VERSION"
+VER_CUR=""
+if [[ -f "${VER_FILE}" ]]; then
+    VER_CUR=$(head -1 "${VER_FILE}" | tr -d '[:space:]')
+fi
+if [[ "${VER_CUR}" == "${VERSION}" ]]; then
+    echo -e "  ${GREEN}ok  ${NC} VERSION"
+elif [[ "${MODE}" == "check" ]]; then
+    echo -e "  ${RED}DRIFT${NC} VERSION  (have '${VER_CUR}', want '${VERSION}')"
+    DRIFT=1
+else
+    echo "${VERSION}" > "${VER_FILE}"
+    echo -e "  ${YELLOW}updated${NC} VERSION"
+    CHANGED=1
+fi
+
+# --------------------------------------------------------------------------
+# 3. README.md — shields.io version badge
 #    Pattern: img.shields.io/badge/version-2.0.0-blue.svg
 # --------------------------------------------------------------------------
 update_file "README.md version badge" "${PROJECT_ROOT}/README.md" \
     "s|(img\\.shields\\.io/badge/version-)[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z]+\\.svg)|\${1}${VERSION}\${2}|g"
 
 # --------------------------------------------------------------------------
-# 2. README.md — "Current version: X.Y.Z" line in the Version section
+# 4. README.md — "Current version: X.Y.Z" line in the Version section
 # --------------------------------------------------------------------------
 update_file "README.md Current version: line" "${PROJECT_ROOT}/README.md" \
     "s|(Current version: )[0-9]+\\.[0-9]+\\.[0-9]+|\${1}${VERSION}|g"
 
 # --------------------------------------------------------------------------
-# 3. pages/assets/site.js — FR_VERSION constant
+# 5. pages/assets/site.js — FR_VERSION constant
 #    Pattern: var FR_VERSION = 'v2.0.0';
 # --------------------------------------------------------------------------
 update_file "pages/assets/site.js FR_VERSION" "${PROJECT_ROOT}/pages/assets/site.js" \
     "s|(var FR_VERSION = 'v)[0-9]+\\.[0-9]+\\.[0-9]+(';)|\${1}${VERSION}\${2}|g"
 
 # --------------------------------------------------------------------------
-# 4. src/FR_math_2D.h — @version doxygen tag
+# 6. src/FR_math_2D.h — @version doxygen tag
 # --------------------------------------------------------------------------
 update_file "src/FR_math_2D.h @version" "${PROJECT_ROOT}/src/FR_math_2D.h" \
     "s|(\\@version )[0-9]+\\.[0-9]+\\.[0-9]+|\${1}${VERSION}|g"
 
 # --------------------------------------------------------------------------
-# 5. src/FR_math_2D.cpp — @version doxygen tag
+# 7. src/FR_math_2D.cpp — @version doxygen tag
 # --------------------------------------------------------------------------
 update_file "src/FR_math_2D.cpp @version" "${PROJECT_ROOT}/src/FR_math_2D.cpp" \
     "s|(\\@version )[0-9]+\\.[0-9]+\\.[0-9]+|\${1}${VERSION}|g"
 
 # --------------------------------------------------------------------------
-# 6. scripts/make_release.sh — git tag hint in squash-merge instructions
+# 8. scripts/make_release.sh — git tag hint in squash-merge instructions
 #    Patterns:
 #       git tag -a v2.0.0 -m "FR_Math 2.0.0"
 #       git push origin v2.0.0
 # --------------------------------------------------------------------------
 update_file "scripts/make_release.sh tag hint" "${PROJECT_ROOT}/scripts/make_release.sh" \
     "s|v[0-9]+\\.[0-9]+\\.[0-9]+|v${VERSION}|g if /git (tag|push origin v)/"
-# The perl above only substitutes on lines that match the git tag/push hint,
-# so we don't accidentally clobber other version strings elsewhere in the
-# script.
 update_file "scripts/make_release.sh tag message" "${PROJECT_ROOT}/scripts/make_release.sh" \
     "s|(FR_Math )[0-9]+\\.[0-9]+\\.[0-9]+|\${1}${VERSION}|g"
 
@@ -183,14 +230,15 @@ update_file "scripts/make_release.sh tag message" "${PROJECT_ROOT}/scripts/make_
 echo ""
 if [[ "${MODE}" == "check" ]]; then
     if [[ "${DRIFT}" == "1" ]]; then
-        echo -e "${RED}Version drift detected. Run ./scripts/sync_version.sh to fix.${NC}"
+        echo -e "${RED}Version drift detected.${NC}"
+        echo -e "${RED}Edit FR_MATH_VERSION_HEX in src/FR_math.h, then run ./scripts/sync_version.sh${NC}"
         exit 1
     fi
-    echo -e "${GREEN}All files in sync with VERSION=${VERSION}.${NC}"
+    echo -e "${GREEN}All files in sync with FR_MATH_VERSION_HEX=${WANT_HEX} (${VERSION}).${NC}"
 else
     if [[ "${CHANGED}" == "1" ]]; then
-        echo -e "${YELLOW}Version ${VERSION} propagated. Review with 'git diff' and commit.${NC}"
+        echo -e "${YELLOW}Version ${VERSION} (${WANT_HEX}) propagated. Review with 'git diff' and commit.${NC}"
     else
-        echo -e "${GREEN}All files already at ${VERSION}. Nothing to do.${NC}"
+        echo -e "${GREEN}All files already at ${VERSION} (${WANT_HEX}). Nothing to do.${NC}"
     fi
 fi

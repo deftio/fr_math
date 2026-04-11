@@ -35,10 +35,12 @@ A high-level list of operations includes:
 | 68k | 5.0 KB |
 | x86-64 | 5.3 KB |
 | RISC-V 32 (rv32im) | 5.9 KB |
+| x86-32 | 6.6 KB |
 | MSP430 (16-bit) | 7.9 KB |
-| 8051 (SDCC) | compiles |
+| 8051 (SDCC) | 18.1 KB * |
 
 Sizes are code-only (text section). The optional 2D module adds ~1 KB.
+\* 8051 and MSP430 are 8/16-bit — every 32-bit operation expands to multiple instructions.
 See [`docker/`](docker/) for the cross-compile setup used to generate this table.
 
 FR_Math allows the computation of fractional quantities with only integer registers but with an eye towards performance rather than just packing floating-point equivalents in integer registers. The implementations here were chosen to minimize the need for overflow tests and similar bounds checking.
