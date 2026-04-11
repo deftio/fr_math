@@ -19,10 +19,10 @@
 
 <p><strong>A C language fixed-point math library for embedded systems.</strong></p>
 
-<p>FR_Math gives you trig, log/exp, 2D transforms, square root, and a
-small DSP toolkit (wave generators, ADSR envelope) that all run on
+<p>FR_Math provides trig, log/exp, 2D transforms, square root, and a
+small DSP toolkit (wave generators, ADSR envelope) &mdash; all running on
 plain integer registers. No floating-point unit required, no
-floating-point library required, no runtime allocation. It has been
+floating-point library required, no runtime allocation. The library has
 shipped on processors that predate MMX and is still maintained today.</p>
 
 <ul>
@@ -36,8 +36,6 @@ shipped on processors that predate MMX and is still maintained today.</p>
       documented worst case in the
       <a href="guide/api-reference.html">API reference</a>.</li>
 </ul>
-
-<hr>
 
 <h2>What&rsquo;s in the box</h2>
 
@@ -60,8 +58,6 @@ shipped on processors that predate MMX and is still maintained today.</p>
 <p>Every function is covered by the
 <a href="https://github.com/deftio/fr_math/blob/master/tests/test_tdd.cpp">TDD
 characterization suite</a> in the repo.</p>
-
-<hr>
 
 <h2>Why fixed-point, in 2026?</h2>
 
@@ -88,8 +84,6 @@ fixed-point pays off:</p>
 <p>FR_Math is engineered for these use cases. It does not try to be a
 generic <code>float</code> replacement.</p>
 
-<hr>
-
 <h2>Quick taste</h2>
 
 <pre><code class="language-c">#include "FR_defs.h"
@@ -112,8 +106,6 @@ R.XformPt(&amp;p);                   /* p is now ~(86.6, 50.0) at radix 8 */</co
 complete walkthrough, or jump straight to the
 <a href="guide/fixed-point-primer.html">Fixed-Point Primer</a> if you
 want to understand <em>how</em> the radix notation works first.</p>
-
-<hr>
 
 <h2>History</h2>
 

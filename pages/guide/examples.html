@@ -28,8 +28,6 @@ math library. The 2D example additionally needs
 <code>src/FR_math_2D.cpp</code> and a C++ compiler
 (<code>c++</code> or <code>g++</code>).</p>
 
-<hr>
-
 <h2>1. Basic radix conversion</h2>
 
 <p>This first example walks through the three foundational moves:
@@ -68,8 +66,6 @@ int main(void)
            (int)a_r4, a_r4 == a ? "yes" : "no");
     return 0;
 }</code></pre>
-
-<hr>
 
 <h2>2. Trig &mdash; integer degrees vs radian vs BAM</h2>
 
@@ -119,8 +115,6 @@ int main(void)
 <p>All four answers should land within a couple of LSBs of
 <code>1 &lt;&lt; 14 = 16384</code>, which is 0.5 in s0.15.</p>
 
-<hr>
-
 <h2>3. Square root and hypotenuse</h2>
 
 <p>This example shows the integer-only root family. Both
@@ -169,8 +163,6 @@ int main(void)
     return 0;
 }</code></pre>
 
-<hr>
-
 <h2>4. Logarithm, exponential, decibels</h2>
 
 <p>A realistic embedded-audio use case: turn a linear amplitude
@@ -216,8 +208,6 @@ int main(void)
     return 0;
 }</code></pre>
 
-<hr>
-
 <h2>5. Arctangent and atan2</h2>
 
 <p>The inverse-trig functions in FR_Math return angles in
@@ -259,8 +249,6 @@ int main(void)
     return 0;
 }</code></pre>
 
-<hr>
-
 <h2>6. Wave generators + phase accumulator</h2>
 
 <p>A 16-sample snapshot of a 1&nbsp;kHz triangle wave at a
@@ -296,8 +284,6 @@ int main(void)
     }
     return 0;
 }</code></pre>
-
-<hr>
 
 <h2>7. ADSR envelope</h2>
 
@@ -349,8 +335,6 @@ int main(void)
     return 0;
 }</code></pre>
 
-<hr>
-
 <h2>8. 2D transforms</h2>
 
 <p>This example builds a 2D affine transform from rotation and
@@ -396,8 +380,6 @@ int main()
     return 0;
 }</code></pre>
 
-<hr>
-
 <h2>9. Formatted output without printf</h2>
 
 <p>On a deep-embedded target you often don&rsquo;t have
@@ -438,8 +420,6 @@ int main(void)
     return 0;
 }</code></pre>
 
-<hr>
-
 <h2>10. Integer-only 2D transform for scanline renderers</h2>
 
 <p>The <code>XFormPtI16</code> fast path takes <code>s16</code>
@@ -469,8 +449,6 @@ int main()
     printf("rotated (100, 0) by 45 deg = (%d, %d)\n", xp, yp);
     return 0;
 }</code></pre>
-
-<hr>
 
 <h2>11. String round-trip and radix precision</h2>
 
@@ -586,8 +564,6 @@ significant bits &mdash; and seven decimal digits survive. The
 eighth digit (<code>5</code> vs <code>4</code>) shows the quantisation floor:
 <code>2^&minus;24 &asymp; 6 &times; 10^&minus;8</code>, so the last digit is always
 uncertain.</p>
-
-<hr>
 
 <h2>See also</h2>
 

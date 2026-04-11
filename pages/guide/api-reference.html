@@ -78,8 +78,6 @@ shifts live in the macro parameters. That&rsquo;s the deal the
 library makes with you: pay attention to the radix at each call site,
 and in return get float-like ergonomics with integer-only codegen.</p>
 
-<hr>
-
 <h2>Types and constants</h2>
 
 <h3>Integer type aliases</h3>
@@ -131,8 +129,6 @@ re-computing.</p>
 <tr><td><code>FR_krSQRT2</code></td><td>46341</td><td>1/&radic;2 &asymp; 0.70711.</td></tr>
 </tbody>
 </table>
-
-<hr>
 
 <h2>Conversions and scalar macros</h2>
 
@@ -282,8 +278,6 @@ so call sites read as intent:</p>
 </tbody>
 </table>
 
-<hr>
-
 <h2>Arithmetic</h2>
 
 <p>FR_Math splits arithmetic into three flavours. The
@@ -375,8 +369,6 @@ thin wrapper.</p>
 </tbody>
 </table>
 
-<hr>
-
 <h2>Shift-only scaling macros</h2>
 
 <p>These macros exist specifically for CPUs without a hardware
@@ -411,8 +403,6 @@ were written for chips where a 32-bit multiply was measured in
 <em>dozens</em> of cycles and a shift was one cycle. They still have
 value today on the smallest MCUs and any time you want an angle
 conversion that can&rsquo;t accidentally overflow an intermediate.</p>
-
-<hr>
 
 <h2>Angle conventions and BAM</h2>
 
@@ -549,8 +539,6 @@ u16 bam    = FR_RAD2BAM(rad_16, 16);
 s32 back   = FR_BAM2RAD(bam, 16);
 </code></pre>
 
-<hr>
-
 <h2>Trigonometry</h2>
 
 <p>Every trig function in FR_Math &mdash; integer-degree, radian, or
@@ -618,8 +606,6 @@ radix entirely, two convenience macros cover pure integer degrees:</p>
 </tbody>
 </table>
 
-<hr>
-
 <h2>Inverse trigonometry</h2>
 
 <p>Every inverse-trig function in FR_Math returns the angle <em>in
@@ -638,8 +624,6 @@ conversion.</p>
 <tr><td><code>FR_acos</code></td><td><code>s16 FR_acos(s32 input, u16 radix)</code></td><td>[0&deg;, +180&deg;]. Same domain check as <code>FR_asin</code>.</td></tr>
 </tbody>
 </table>
-
-<hr>
 
 <h2>Logarithm and exponential</h2>
 
@@ -780,8 +764,6 @@ happens to be expressible as a shift-only sum (the
 shift-only scaling section above). That makes the whole rescale
 free, so the exponential wrappers can be macros and skip a call.</p>
 
-<hr>
-
 <h2>Roots</h2>
 
 <table>
@@ -837,8 +819,6 @@ free, so the exponential wrappers can be macros and skip a call.</p>
 </tr>
 </tbody>
 </table>
-
-<hr>
 
 <h2>Wave generators</h2>
 
@@ -957,8 +937,6 @@ for (int i = 0; i &lt; n_samples; ++i) {
     phase += inc;                           /* wraps mod 2^16 for free */
 }</code></pre>
 
-<hr>
-
 <h2>ADSR envelope</h2>
 
 <p>The envelope generator is a five-state machine &mdash; Idle,
@@ -1065,8 +1043,6 @@ for (int i = 0; i &lt; 48000; ++i) {           /* 1 second of tone */
     out[i]   = (s16)((tone * amp) &gt;&gt; 15);    /* multiplied       */
     phase += inc;
 }</code></pre>
-
-<hr>
 
 <h2>2D transforms (<code>FR_math_2D.h</code>)</h2>
 
@@ -1277,8 +1253,6 @@ methods to skip the cross-term multiply-adds when <code>m01</code>
 and <code>m10</code> are both zero (pure scale / translate), saving
 two multiplies per point.</p>
 
-<hr>
-
 <h2>Formatted output</h2>
 
 <table>
@@ -1293,8 +1267,6 @@ two multiplies per point.</p>
 <p>All three take a user-supplied <code>putc</code> callback so you
 can direct output at a UART, an in-memory buffer, or
 <code>stdout</code> without pulling in <code>printf</code>.</p>
-
-<hr>
 
 <h2>See also</h2>
 

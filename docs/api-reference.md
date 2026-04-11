@@ -60,8 +60,6 @@ shifts live in the macro parameters. That's the deal the
 library makes with you: pay attention to the radix at each call site,
 and in return get float-like ergonomics with integer-only codegen.
 
----
-
 ## Types and constants
 
 ### Integer type aliases
@@ -105,8 +103,6 @@ re-computing.
 | `FR_kSQRT2` | 92682 | √2 ≈ 1.41421. |
 | `FR_krSQRT2` | 46341 | 1/√2 ≈ 0.70711. |
 
----
-
 ## Conversions and scalar macros
 
 ### Integer ↔ fixed-point
@@ -149,8 +145,6 @@ so call sites read as intent:
 | --- | --- | --- | --- |
 | `FR_INTERP(x0, x1, delta, prec)` | `x0`, `x1`: endpoints (any radix, same radix as each other); `delta`: blend at radix `prec` in [0, 1]; `prec`: radix of `delta` | Same radix as `x0`/`x1` | `x0 + ((x1 - x0) * delta) >> prec`. Linear lerp. Extrapolates outside `[0, 1]`; you own the overflow check. |
 | `FR_INTERPI(x0, x1, delta, prec)` | as above, but `delta` is unsigned and masked into `[0, (1<<prec))` | as above | The "I" version forces `delta` into range, so it's safer when `delta` comes from an untrusted upstream (e.g. a running counter). |
-
----
 
 ## Arithmetic
 
@@ -208,8 +202,6 @@ thin wrapper.
 | `s32 FR_FixMulSat(s32 x, s32 y)` | as above | as above | Same, but clamps to `FR_OVERFLOW_POS` / `FR_OVERFLOW_NEG` on over/underflow. Prefer by default. |
 | `s32 FR_FixAddSat(s32 x, s32 y)` | `x`, `y`: any signed s32 at the same radix (radix is not rescaled) | saturated sum at the same radix | Classic sign-watching saturating add: returns `FR_OVERFLOW_POS` or `FR_OVERFLOW_NEG` if adding two same-sign values would flip the sign. |
 
----
-
 ## Shift-only scaling macros
 
 These macros exist specifically for CPUs without a hardware
@@ -239,8 +231,6 @@ were written for chips where a 32-bit multiply was measured in
 *dozens* of cycles and a shift was one cycle. They still have
 value today on the smallest MCUs and any time you want an angle
 conversion that can't accidentally overflow an intermediate.
-
----
 
 ## Angle conventions and BAM
 
@@ -372,8 +362,6 @@ u16 bam    = FR_RAD2BAM(rad_16, 16);
 s32 back   = FR_BAM2RAD(bam, 16);
 ```
 
----
-
 ## Trigonometry
 
 Every trig function in FR_Math — integer-degree, radian, or
@@ -429,8 +417,6 @@ radix entirely, two convenience macros cover pure integer degrees:
 | `fr_cos_deg(deg)` | `fr_cos_bam(FR_DEG2BAM(deg))` |
 | `fr_sin_deg(deg)` | `fr_sin_bam(FR_DEG2BAM(deg))` |
 
----
-
 ## Inverse trigonometry
 
 Every inverse-trig function in FR_Math returns the angle *in
@@ -446,8 +432,6 @@ conversion.
 | `FR_atan2` | `s16 FR_atan2(s32 y, s32 x)` | Full-circle [−180°, +180°]. |
 | `FR_asin` | `s16 FR_asin(s32 input, u16 radix)` | [−90°, +90°]. Returns `FR_DOMAIN_ERROR` for |input| > 1. |
 | `FR_acos` | `s16 FR_acos(s32 input, u16 radix)` | [0°, +180°]. Same domain check as `FR_asin`. |
-
----
 
 ## Logarithm and exponential
 
@@ -526,8 +510,6 @@ happens to be expressible as a shift-only sum (the
 shift-only scaling section above). That makes the whole rescale
 free, so the exponential wrappers can be macros and skip a call.
 
----
-
 ## Roots
 
 | Function | Inputs | Output | Notes |
@@ -536,8 +518,6 @@ free, so the exponential wrappers can be macros and skip a call.
 | `FR_hypot` | `s32 x`, `s32 y` both at `radix`<br>`u16 radix` | `s32` at the **same radix**. | Overflow-safe magnitude: computes `sqrt(x² + y²)` without an intermediate 32-bit overflow by promoting the sum of squares to `int64_t`. Accepts the full `s32` input range; output saturates at `FR_OVERFLOW_POS` only if the true hypot exceeds `2^31−1` at the given radix. |
 | `FR_hypot_fast` | `s32 x`, `s32 y` (any radix) | `s32` at the same radix. | Fast approximate magnitude using 4-segment piecewise-linear shift-only arithmetic. ~0.4% peak error. No multiply, no 64-bit, no ROM table. Based on the method of US Patent 6,567,777 B1 (public domain). No `radix` parameter needed — the algorithm is scale-invariant. |
 | `FR_hypot_fast8` | `s32 x`, `s32 y` (any radix) | `s32` at the same radix. | 8-segment variant. ~0.14% peak error. Same shift-only approach, more branches. |
-
----
 
 ## Wave generators
 
@@ -584,8 +564,6 @@ for (int i = 0; i < n_samples; ++i) {
     phase += inc;                           /* wraps mod 2^16 for free */
 }
 ```
-
----
 
 ## ADSR envelope
 
@@ -652,8 +630,6 @@ for (int i = 0; i < 48000; ++i) {           /* 1 second of tone */
     phase += inc;
 }
 ```
-
----
 
 ## 2D transforms (`FR_math_2D.h`)
 
@@ -736,8 +712,6 @@ methods to skip the cross-term multiply-adds when `m01`
 and `m10` are both zero (pure scale / translate), saving
 two multiplies per point.
 
----
-
 ## Formatted output
 
 | Function | Signature |
@@ -749,8 +723,6 @@ two multiplies per point.
 All three take a user-supplied `putc` callback so you
 can direct output at a UART, an in-memory buffer, or
 `stdout` without pulling in `printf`.
-
----
 
 ## See also
 

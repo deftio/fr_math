@@ -4,8 +4,6 @@ Release highlights. For the full per-symbol change log, see
 [release_notes.md](https://github.com/deftio/fr_math/blob/master/release_notes.md)
 in the repo.
 
----
-
 ## v2.0.0 — 2026
 
 The first major revision in more than twenty years. v2 is a
@@ -117,8 +115,6 @@ and a characterisation suite (`test_tdd.cpp`) that pins
 numerical behaviour to bit-exact reference values. Overall line
 coverage is **99%** on the library sources.
 
----
-
 ## v1.0.3 — 2025
 
 Test-coverage release. Overall line coverage went from 4% to 72%
@@ -136,22 +132,16 @@ Also fixed a broken `FR_atan` implementation, corrected
 declarations to use `const`, and fixed
 `XFormPtI` test assumptions.
 
----
-
 ## v1.02 — first public release
 
 Basic fixed-point operations, 2D transforms, and integer-degree
 trigonometry. This is the version that shipped inside the original
 Palm Pilot Inkstorm application.
 
----
-
 ## v1.01 — internal development
 
 Naming conventions cleanup and an initial test framework. Never
 released publicly.
-
----
 
 ## Timeline
 

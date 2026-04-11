@@ -1,12 +1,10 @@
 # Getting Started
 
-This page takes you from `git clone` to a running program
-in under five minutes. If you want to understand *why*
-fixed-point math works the way it does first, read the
+This page goes from `git clone` to a running program
+in under five minutes. For background on *why*
+fixed-point math works the way it does, start with the
 [Fixed-Point Primer](fixed-point-primer.md) and come
 back.
-
----
 
 ## Install
 
@@ -16,8 +14,8 @@ manager integration and no install step. Either:
 - Copy `src/FR_math.c`, `src/FR_math.h`,
   `src/FR_defs.h` (and optionally
   `src/FR_math_2D.cpp`, `src/FR_math_2D.h`,
-  and `src/FR_trig_table.h`) into your project, **or**
-- Add FR_Math as a git submodule and point your build system at
+  and `src/FR_trig_table.h`) into the target project, **or**
+- Add FR_Math as a git submodule and point the build system at
   `src/`.
 
 There are no external dependencies beyond `<stdint.h>`,
@@ -31,9 +29,7 @@ cd fr_math
 
 `build.sh` wipes `build/`, rebuilds the
 library, examples, and tests, and runs the full test suite. On success
-you will see 42 tests pass across six test binaries.
-
----
+the output shows 42 tests passing across six test binaries.
 
 ## A first program
 
@@ -93,10 +89,8 @@ pi as s15.16 = 0x0003243f = 3.141586
 The last decimal digit wobbles because we only kept 16 bits of
 fractional precision — that's roughly 5 significant decimal
 digits, which matches what we see. This is the core trade of
-fixed-point: **you pick the precision at build time**,
-and you live with it.
-
----
+fixed-point: **the precision is chosen at build time**,
+and the application lives with it.
 
 ## The same program for embedded targets
 
@@ -245,8 +239,6 @@ static int buf_putc(char c) { buf[pos++] = c; return 0; }
 Then pass `buf_putc` in place of `uart_putc`. After the call,
 `buf[0..pos-1]` holds the formatted string.
 
----
-
 ## Using the 2D transform module
 
 ```c
@@ -274,8 +266,6 @@ int main(void)
 See [Examples](examples.md) for audio, wave,
 envelope, and log/exp walkthroughs.
 
----
-
 ## Running the test suite
 
 ```bash
@@ -285,8 +275,6 @@ make coverage       # coverage report (requires gcov)
 
 As of v2.0.0, FR_Math ships with 42 passing tests and 99% line
 coverage across the library sources.
-
----
 
 ## Next steps
 

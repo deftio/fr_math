@@ -61,7 +61,6 @@ that know about the radix and do the shifts for you. You still get
 to <em>choose</em> the radix per call, which is where the real
 performance wins come from. More on that shortly.</p>
 
-
 <h2>A first try: scaling in base 10</h2>
 
 <p>Before we jump into binary, let&rsquo;s do the obvious thing a
@@ -105,7 +104,6 @@ picked the scale factor, and we own the bookkeeping forever.</p>
 scale by hand</strong>. Get it wrong on one variable in one function
 and the bug is silent.</p>
 
-
 <h2>The other hazard: overflow</h2>
 
 <p>Hazard number two is quieter, and much more dangerous. Take two
@@ -138,7 +136,6 @@ intermediates, saturating variants, and explicit sentinel returns
 &ldquo;Overflow, saturation, and the sentinels&rdquo;. For now just
 file it away: <em>scaled-integer math means you think about
 overflow on every multiply</em>.</p>
-
 
 <h2>Why we move to powers of two</h2>
 
@@ -187,7 +184,6 @@ same rule without apology. From here on out, &ldquo;scale
 factor&rdquo; means &ldquo;shift count&rdquo; and every fractional
 value is a signed or unsigned integer with an agreed-upon number of
 low bits dedicated to the fractional part.</p>
-
 
 <h2>The core trick, with a thermometer</h2>
 
@@ -238,7 +234,6 @@ CPU ever made is either free or close to it.</p>
 page is about conventions, arithmetic between different scales, and
 how to avoid overflow &mdash; but the foundation is just &ldquo;agree
 on a scale, and do integer math&rdquo;.</p>
-
 
 <h2>Notation: sM.N and the radix</h2>
 
@@ -299,7 +294,6 @@ you want to think of an FR_Math value as a &ldquo;number with a
 radix&rdquo;, think of the radix as a <em>type annotation that lives
 in your source code</em>, not a runtime field.</p>
 
-
 <h2>Quantisation and loss of precision</h2>
 
 <p>Fixing the radix also fixes the smallest representable
@@ -348,7 +342,6 @@ the errors too. Signal-processing pipelines with long feedback
 paths are the main reason to carry accumulators at a wider radix
 than the individual samples &mdash; an idea the worked example
 later in this primer will put into practice.</p>
-
 
 <h2>Displaying a fixed-point value</h2>
 
@@ -417,7 +410,6 @@ the number of fractional digits. Rounding behaviour matches the
 hand-rolled version: excess fractional digits are truncated, and
 negative values are handled without the two&rsquo;s-complement
 trap described above.</p>
-
 
 <h2>Arithmetic: what the operations actually do</h2>
 
@@ -645,7 +637,6 @@ bias in long-running accumulators but costs an extra branch
 per operation. The library does not include it by default.
 Code that needs it can build it on top of the raw shift.</p>
 
-
 <h2>Overflow, saturation, and the sentinels</h2>
 
 <p>The single biggest trap in any fixed-point code is <em>silent
@@ -695,7 +686,6 @@ don&rsquo;t fully control, and in release builds on well-bounded
 inputs the defensive paths never trigger. They&rsquo;re there for
 the one time you feed <code>-0.0000001</code> into a square root at
 3 AM.</p>
-
 
 <h2>Choosing a radix</h2>
 
@@ -751,7 +741,6 @@ narrower radix leaves more headroom, packs tighter in RAM, and
 shifts faster on small cores. If you find yourself wanting
 <code>s15.16</code> on every single variable, stop and ask whether
 you actually need 15 integer bits on that particular signal.</p>
-
 
 <h2>A worked example: one-pole IIR low-pass filter</h2>
 
@@ -915,7 +904,6 @@ mode on the output, and cross-check against a float reference.
 Every other FR_Math pipeline follows the same template, only
 with more variables.</p>
 
-
 <h2>FR_Math&rsquo;s naming conventions</h2>
 
 <p>A tour of the casing, because it tells you something about the
@@ -950,7 +938,6 @@ worth knowing what they actually do:</p>
       round-to-nearest (which is usually what you want for display),
       use <code>FR_FR2Iround(x, r)</code>.</li>
 </ul>
-
 
 <h2>Angle representations</h2>
 
@@ -1011,7 +998,6 @@ back to shift-and-add on chips without a hardware multiplier. The
 constants and has a worked example showing how <code>FR_BAM2DEG</code>
 turns into four shifts and three adds, if you&rsquo;re curious why
 the numbers look the way they do.</p>
-
 
 <h2>Going deeper</h2>
 

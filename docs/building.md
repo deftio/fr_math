@@ -4,8 +4,6 @@ FR_Math has no dependencies beyond a C99 compiler and
 `<stdint.h>`. The provided build system wraps
 `make` with a few convenience scripts.
 
----
-
 ## Requirements
 
 - A C99 compiler (`gcc`, `clang`, MSVC, IAR,
@@ -19,8 +17,6 @@ FR_Math has no dependencies beyond a C99 compiler and
 There is no Autotools, no CMake, no Ninja, no package-manager
 integration. The library is small enough that the Makefile fits on
 one screen.
-
----
 
 ## Makefile targets
 
@@ -36,8 +32,6 @@ one screen.
 
 All builds land in `build/`. Nothing is written inside
 `src/`.
-
----
 
 ## Convenience scripts
 
@@ -97,8 +91,6 @@ At the end, the script prints a squash-merge checklist you can
 paste into a PR description. It does *not* push, tag, or merge
 on its own.
 
----
-
 ## The test suite
 
 Tests live under `tests/` and are split into six
@@ -140,8 +132,6 @@ you improved a polynomial approximation), update the pinned values in
 `tests/test_tdd.cpp` and note the change in
 `release_notes.md` along with any updates to the
 [API reference](api-reference.md) precision entries.
-
----
 
 ## Cross-compilation
 
@@ -185,8 +175,6 @@ Expect the whole integer-only library to land around a few
 kilobytes of flash. The wave, trig, and log modules can be compiled
 in independently if you want to strip further.
 
----
-
 ## CI
 
 GitHub Actions runs on every push and every PR. The workflow file
@@ -196,8 +184,6 @@ each run starts from a clean checkout.
 
 The CI status badge on the README links directly to the latest
 run.
-
----
 
 ## Release checklist
 

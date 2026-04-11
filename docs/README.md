@@ -2,10 +2,10 @@
 
 **A C language fixed-point math library for embedded systems.**
 
-FR_Math gives you trig, log/exp, 2D transforms, square root, and a
-small DSP toolkit (wave generators, ADSR envelope) that all run on
+FR_Math provides trig, log/exp, 2D transforms, square root, and a
+small DSP toolkit (wave generators, ADSR envelope) — all running on
 plain integer registers. No floating-point unit required, no
-floating-point library required, no runtime allocation. It has been
+floating-point library required, no runtime allocation. The library has
 shipped on processors that predate MMX and is still maintained today.
 
 - Works on any C99 toolchain — gcc, clang, MSVC, IAR, Keil, sdcc,
@@ -15,8 +15,6 @@ shipped on processors that predate MMX and is still maintained today.
   argument, so you choose how many fractional bits you need per call.
 - Deterministic, bounded error — every public symbol has a documented
   worst case in the [API reference](api-reference.md).
-
----
 
 ## Contents
 
@@ -35,8 +33,6 @@ or any tooling. If you want the browser version, look in
 | [building.md](building.md) | Makefile, scripts, test suite, coverage, cross-compilation. |
 | [releases.md](releases.md) | Release history with per-version highlights and breaking changes. |
 
----
-
 ## What's in the box
 
 | Area | Functions |
@@ -54,8 +50,6 @@ or any tooling. If you want the browser version, look in
 
 Every function is covered by the TDD characterization suite in
 [`tests/test_tdd.cpp`](../tests/test_tdd.cpp).
-
----
 
 ## Why fixed-point, in 2026?
 
@@ -76,8 +70,6 @@ pays off:
 
 FR_Math is engineered for these use cases. It does not try to be a
 generic `float` replacement.
-
----
 
 ## Quick taste
 
@@ -103,8 +95,6 @@ See [getting-started.md](getting-started.md) for a complete
 walkthrough, or jump straight to
 [fixed-point-primer.md](fixed-point-primer.md) if you want to
 understand *how* the radix notation works first.
-
----
 
 ## History
 

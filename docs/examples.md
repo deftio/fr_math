@@ -13,8 +13,6 @@ math library. The 2D example additionally needs
 `src/FR_math_2D.cpp` and a C++ compiler
 (`c++` or `g++`).
 
----
-
 ## 1. Basic radix conversion
 
 This first example walks through the three foundational moves:
@@ -55,8 +53,6 @@ int main(void)
     return 0;
 }
 ```
-
----
 
 ## 2. Trig — integer degrees vs radian vs BAM
 
@@ -108,8 +104,6 @@ int main(void)
 All four answers should land within a couple of LSBs of
 `1 << 14 = 16384`, which is 0.5 in s0.15.
 
----
-
 ## 3. Square root and hypotenuse
 
 This example shows the integer-only root family. Both
@@ -160,8 +154,6 @@ int main(void)
 }
 ```
 
----
-
 ## 4. Logarithm, exponential, decibels
 
 A realistic embedded-audio use case: turn a linear amplitude
@@ -209,8 +201,6 @@ int main(void)
 }
 ```
 
----
-
 ## 5. Arctangent and atan2
 
 The inverse-trig functions in FR_Math return angles in
@@ -254,8 +244,6 @@ int main(void)
 }
 ```
 
----
-
 ## 6. Wave generators + phase accumulator
 
 A 16-sample snapshot of a 1 kHz triangle wave at a
@@ -293,8 +281,6 @@ int main(void)
     return 0;
 }
 ```
-
----
 
 ## 7. ADSR envelope
 
@@ -348,8 +334,6 @@ int main(void)
 }
 ```
 
----
-
 ## 8. 2D transforms
 
 This example builds a 2D affine transform from rotation and
@@ -397,8 +381,6 @@ int main()
 }
 ```
 
----
-
 ## 9. Formatted output without printf
 
 On a deep-embedded target you often don't have
@@ -441,8 +423,6 @@ int main(void)
 }
 ```
 
----
-
 ## 10. Integer-only 2D transform for scanline renderers
 
 The `XFormPtI16` fast path takes `s16`
@@ -474,8 +454,6 @@ int main()
     return 0;
 }
 ```
-
----
 
 ## 11. String round-trip and radix precision
 
@@ -590,8 +568,6 @@ fractional digits. At radix 24 the value is `0x03243F6A` — 26
 significant bits — and seven decimal digits survive. The
 eighth digit (`5` vs `4`) shows the quantisation floor: `2^−24 ≈
 6 × 10^−8`, so the last digit is always uncertain.
-
----
 
 ## See also
 

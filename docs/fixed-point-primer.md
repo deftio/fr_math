@@ -9,8 +9,6 @@ the first time. No prior exposure to fixed-point is assumed. If you
 should still be useful, because FR_Math has its own conventions and
 it's better to see them spelled out than to guess.
 
----
-
 ## Why fixed-point is still a good idea
 
 Every CPU arithmetic unit (ALU) speaks integers as its native
@@ -43,8 +41,6 @@ as painless as a float would be, by giving you macros and functions
 that know about the radix and do the shifts for you. You still get
 to *choose* the radix per call, which is where the real
 performance wins come from. More on that shortly.
-
----
 
 ## A first try: scaling in base 10
 
@@ -90,8 +86,6 @@ That's hazard number one: **the programmer tracks the scale by
 hand**. Get it wrong on one variable in one function and the bug
 is silent.
 
----
-
 ## The other hazard: overflow
 
 Hazard number two is quieter, and much more dangerous. Take two
@@ -125,8 +119,6 @@ saturating variants, and explicit sentinel returns — and they all
 get their own section below under "Overflow, saturation, and the
 sentinels". For now just file it away: *scaled-integer math means
 you think about overflow on every multiply*.
-
----
 
 ## Why we move to powers of two
 
@@ -168,8 +160,6 @@ loop uses powers of two. FR_Math follows the same rule without
 apology. From here on out, "scale factor" means "shift count" and
 every fractional value is a signed or unsigned integer with an
 agreed-upon number of low bits dedicated to the fractional part.
-
----
 
 ## The core trick, with a thermometer
 
@@ -220,8 +210,6 @@ Congratulations: that's fixed-point math. The rest of this
 page is about conventions, arithmetic between different scales, and
 how to avoid overflow — but the foundation is just "agree
 on a scale, and do integer math".
-
----
 
 ## Notation: sM.N and the radix
 
@@ -278,8 +266,6 @@ you want to think of an FR_Math value as a "number with a
 radix", think of the radix as a *type annotation that lives
 in your source code*, not a runtime field.
 
----
-
 ## Quantisation and loss of precision
 
 Fixing the radix also fixes the smallest representable fractional
@@ -327,8 +313,6 @@ too. Signal-processing pipelines with long feedback paths are the
 main reason to carry accumulators at a wider radix than the
 individual samples — an idea the worked example later in this
 primer will put into practice.
-
----
 
 ## Displaying a fixed-point value
 
@@ -395,8 +379,6 @@ fractional digits. Rounding behaviour matches the hand-rolled
 version: excess fractional digits are truncated, and negative
 values are handled without the two's-complement trap described
 above.
-
----
 
 ## Arithmetic: what the operations actually do
 
@@ -624,8 +606,6 @@ but costs an extra branch per operation. The library does not
 include it by default. Code that needs it can build it on top of
 the raw shift.
 
----
-
 ## Overflow, saturation, and the sentinels
 
 The single biggest trap in any fixed-point code is *silent
@@ -673,8 +653,6 @@ don't fully control, and in release builds on well-bounded
 inputs the defensive paths never trigger. They're there for
 the one time you feed `-0.0000001` into a square root at
 3 AM.
-
----
 
 ## Choosing a radix
 
@@ -724,8 +702,6 @@ narrower radix leaves more headroom, packs tighter in RAM, and
 shifts faster on small cores. If you find yourself wanting
 `s15.16` on every single variable, stop and ask whether
 you actually need 15 integer bits on that particular signal.
-
----
 
 ## A worked example: one-pole IIR low-pass filter
 
@@ -873,8 +849,6 @@ output, and cross-check against a float reference. Every other
 FR_Math pipeline follows the same template, only with more
 variables.
 
----
-
 ## FR_Math's naming conventions
 
 A tour of the casing, because it tells you something about the
@@ -904,8 +878,6 @@ worth knowing what they actually do:
   `-1`, not `0`. If you want
   round-to-nearest (which is usually what you want for display),
   use `FR_FR2Iround(x, r)`.
-
----
 
 ## Angle representations
 
@@ -962,8 +934,6 @@ back to shift-and-add on chips without a hardware multiplier. The
 constants and has a worked example showing how `FR_BAM2DEG`
 turns into four shifts and three adds, if you're curious why
 the numbers look the way they do.
-
----
 
 ## Going deeper
 
