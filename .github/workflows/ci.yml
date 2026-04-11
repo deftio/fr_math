@@ -18,7 +18,7 @@ jobs:
             compiler: gcc  # Use default clang on macOS
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up compiler
       run: |
@@ -68,7 +68,7 @@ jobs:
             arch: RISC-V
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Install cross-compiler
       run: |
@@ -97,7 +97,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Install 32-bit support
       run: |
@@ -122,7 +122,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Build with sanitizers
       run: |
@@ -147,7 +147,7 @@ jobs:
       contents: write
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Extract version from FR_MATH_VERSION_HEX
       id: version
