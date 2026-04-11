@@ -3,11 +3,12 @@
 # make_release.sh — full release validation for FR_Math. Runs a strict
 # clean build (warnings = errors), full test suite, coverage report, and
 # size report. Leaves artifacts in build/ and coverage/ for inspection,
-# and prints squash-merge instructions at the end.
+# and prints merge instructions at the end.
 #
 # This script does NOT push, tag, or merge anything. It is a pre-merge
-# validation gate — you run it locally, review the output, then follow
-# the printed instructions to merge to master.
+# validation gate — you run it locally, review the output, then merge
+# to master. CI on master auto-creates the GitHub release + tag from
+# FR_MATH_VERSION_HEX in src/FR_math.h.
 #
 # Usage:
 #   ./scripts/make_release.sh              # run full release validation
@@ -287,7 +288,7 @@ echo -e "  Commit:        ${CURRENT_SHA:0:12}"
 echo -e "  Tests:         ${TOTAL_PASSED} passed"
 echo -e "  Coverage:      ${OVERALL_PCT}"
 echo ""
-echo -e "${BOLD}Squash-merge checklist:${NC}"
+echo -e "${BOLD}Merge checklist:${NC}"
 echo ""
 echo "  1. Commit any remaining changes on this branch:"
 echo "       git add -A"
@@ -296,19 +297,16 @@ echo ""
 echo "  2. Push the branch to origin:"
 echo "       git push -u origin ${CURRENT_BRANCH}"
 echo ""
-echo "  3. Open a PR against master (via gh or the GitHub UI):"
-echo "       gh pr create --base master --head ${CURRENT_BRANCH} \\"
-echo "           --title \"<release title>\" --body-file release_notes.md"
-echo ""
-echo "  4. Wait for CI to pass on the PR."
-echo ""
-echo "  5. Squash-merge from the GitHub UI, or:"
-echo "       gh pr merge --squash --delete-branch"
-echo ""
-echo "  6. After merge, tag the release from master:"
+echo "  3. Merge to master:"
 echo "       git checkout master && git pull"
-echo "       git tag -a v2.0.0 -m \"FR_Math 2.0.0\""
-echo "       git push origin v2.0.0"
+echo "       git merge ${CURRENT_BRANCH}"
+echo "       git push origin master"
+echo ""
+echo "  CI will run automatically on the push to master."
+echo "  If all checks pass, the release job reads FR_MATH_VERSION_HEX"
+echo "  from src/FR_math.h and creates a GitHub release + tag."
 echo ""
 echo -e "${YELLOW}Note:${NC} this script does NOT push, tag, or merge for you."
+echo -e "${YELLOW}Note:${NC} version is controlled by FR_MATH_VERSION_HEX in src/FR_math.h."
+echo "  To bump: edit the hex define, then run ./scripts/sync_version.sh"
 echo ""
