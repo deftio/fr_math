@@ -25,6 +25,22 @@ A high-level list of operations includes:
 * Printing of fixed-radix numbers over serial (e.g., print a signed fixed-radix number to serial consoles)
 * The library has no dependencies and compiles on all C targets with no floating-point libraries or emulation needed
 
+### Library size (FR_math.c only, `-Os`)
+
+| Target | Code (text) |
+|--------|-------------|
+| Cortex-M0 (Thumb-1) | 3.7 KB |
+| Cortex-M4 (Thumb-2) | 3.6 KB |
+| ESP32 (Xtensa) | 4.1 KB |
+| 68k | 5.0 KB |
+| x86-64 | 5.3 KB |
+| RISC-V 32 (rv32im) | 5.9 KB |
+| MSP430 (16-bit) | 7.9 KB |
+| 8051 (SDCC) | compiles |
+
+Sizes are code-only (text section). The optional 2D module adds ~1 KB.
+See [`docker/`](docker/) for the cross-compile setup used to generate this table.
+
 FR_Math allows the computation of fractional quantities with only integer registers but with an eye towards performance rather than just packing floating-point equivalents in integer registers. The implementations here were chosen to minimize the need for overflow tests and similar bounds checking.
 
 This library allows the programmer to choose the radix point (number of fractional bits) for all operations—so one can have 11.4 or 10.5 operations on the fly (where 11 and 10 are left of the radix point and 4 and 5 represent the number of fractional bits respectively). This is useful when using large quantities such as those that occur in frequency domain math operations like Fourier analysis.  All operations are performed in integer registers using pure C (with exports to C++).  Integer registers from 16 / 32 / 64 bit widths are supported but the focus is on 32 bit registers.
