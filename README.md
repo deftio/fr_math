@@ -9,7 +9,7 @@
  
 ## Overview
 
-FR_Math is a small library providing a comprehensive set of fixed-radix / mixed-radix functions written in C (and exported to C++ as well) for integer math arithmetic.  
+FR_Math is a small library providing a wide set of fixed-radix / mixed-radix functions written in C (and exported to C++ as well) for integer math arithmetic.  
 
 A high-level list of operations includes:
 
@@ -19,7 +19,7 @@ A high-level list of operations includes:
 * Logarithms: log, log2, log10
 * Exponentials: exp, pow2, pow10
 * Floor/ceil/truncate (in fixed radix)
-* Square root, hypotenuse (exact), and fast approximate magnitude (shift-only, no multiply/64-bit)
+* Square root, hypotenuse (exact), and fast approximate magnitude (shift-only, no multiply)
 * Conversions between degrees/radians/grads/freq without loss of precision even at high bit packing
 * 2D coordinate transformations (rotate/translate/scale between local and global coordinates)
 * Printing of fixed-radix numbers over serial (e.g., print a signed fixed-radix number to serial consoles)
@@ -28,6 +28,8 @@ A high-level list of operations includes:
 FR_Math allows the computation of fractional quantities with only integer registers but with an eye towards performance rather than just packing floating-point equivalents in integer registers. The implementations here were chosen to minimize the need for overflow tests and similar bounds checking.
 
 This library allows the programmer to choose the radix point (number of fractional bits) for all operations—so one can have 11.4 or 10.5 operations on the fly (where 11 and 10 are left of the radix point and 4 and 5 represent the number of fractional bits respectively). This is useful when using large quantities such as those that occur in frequency domain math operations like Fourier analysis.  All operations are performed in integer registers using pure C (with exports to C++).  Integer registers from 16 / 32 / 64 bit widths are supported but the focus is on 32 bit registers.
+
+This release adds tutorials and docs html pages covering examples and thinking in fixed point math.
 
 ## Documentation
 
@@ -95,6 +97,8 @@ The library has been tested on:
 - ARM (32-bit and 64-bit)
 - RISC-V
 - 32-bit targets
+- 68k
+- PIC 16xxx
 
 ## Usage
 
