@@ -114,8 +114,8 @@ binaries to keep compile times low:
 | `test_full_coverage` | Dark-corner cases: overflow sentinels, edge radixes, round-trips. |
 | `test_tdd` | Characterisation tests pinned to bit-exact reference values. |
 
-As of v2.0.0 the suite contains **40 tests** across
-those binaries and covers **97%** of the library source.
+As of v2.0.0 the suite contains **42 tests** across
+those binaries and covers **99%** of the library source.
 Every public symbol is exercised at least once.
 
 ### Running a single binary

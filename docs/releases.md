@@ -10,7 +10,7 @@ in the repo.
 
 The first major revision in more than twenty years. v2 is a
 bug-fix, precision, and feature release with a full test suite and
-97% line coverage.
+99% line coverage.
 
 ### 64-bit safety
 
@@ -112,10 +112,10 @@ mandatory.
 
 ### Test suite
 
-v2 ships with **40 tests** across six test binaries
+v2 ships with **42 tests** across six test binaries
 and a characterisation suite (`test_tdd.cpp`) that pins
 numerical behaviour to bit-exact reference values. Overall line
-coverage is **97%** on the library sources.
+coverage is **99%** on the library sources.
 
 ---
 

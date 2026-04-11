@@ -31,7 +31,7 @@ cd fr_math
 
 `build.sh` wipes `build/`, rebuilds the
 library, examples, and tests, and runs the full test suite. On success
-you will see 40 tests pass across six test binaries.
+you will see 42 tests pass across six test binaries.
 
 ---
 
@@ -283,7 +283,7 @@ make test           # build + run every test suite
 make coverage       # coverage report (requires gcov)
 ```
 
-As of v2.0.0, FR_Math ships with 40 passing tests and 97% line
+As of v2.0.0, FR_Math ships with 42 passing tests and 99% line
 coverage across the library sources.
 
 ---

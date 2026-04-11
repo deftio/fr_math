@@ -91,6 +91,13 @@ for the implementation plan this release executed.
   computes `sqrt(x^2 + y^2)` with no intermediate overflow up to the
   full s32 range. Bit-exact for perfect squares; max error ~1 LSB at
   the requested radix.
+- **Fast approximate magnitude** (`FR_hypot_fast`, `FR_hypot_fast8`):
+  shift-only piecewise-linear approximation of `sqrt(x^2 + y^2)` — no
+  multiply, no divide, no 64-bit math, no ROM table, no iteration.
+  `FR_hypot_fast` uses 4 segments (~0.4% peak error);
+  `FR_hypot_fast8` uses 8 segments (~0.14% peak error). Based on the
+  method of US Patent 6,567,777 B1 (Chatterjee, public domain). No
+  `radix` parameter needed — the algorithm is scale-invariant.
 - **Wave function family** for embedded audio / LFOs / control
   signals. All take a `u16` BAM phase and return s0.15 (s16, ±32767):
   - `fr_wave_sqr(phase)` — symmetric square wave.
