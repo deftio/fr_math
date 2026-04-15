@@ -551,7 +551,7 @@ int main(int argc, char *argv[])
 		{
 			double fi = (double)i / (32768.0);
 			double fac = acos(fi) * 57.29577951308232087679815;
-			double fr_ac = FR2D(FR_acos(i, FR_TRIG_PREC), 0);
+			double fr_ac = FR2D(FR_acos(i, FR_TRIG_PREC, 16), 16) * 57.29577951308232087679815;
 			printf("%6d : %8.4f %8.4f %8.4f %8.4f \n", i, fi, fac, fr_ac, FR_ERR(fac, fr_ac));
 		}
 	}

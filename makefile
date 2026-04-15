@@ -57,7 +57,7 @@ $(BUILD_DIR)/fr_example: $(EXAMPLE_DIR)/FR_Math_Example1.cpp $(BUILD_DIR)/FR_mat
 
 # Build and run tests
 .PHONY: test
-test: dirs test-basic test-comprehensive test-2d test-overflow test-full test-2d-complete test-tdd
+test: dirs examples test-basic test-comprehensive test-2d test-overflow test-full test-2d-complete test-tdd
 
 .PHONY: test-tdd
 test-tdd: $(BUILD_DIR)/test_tdd
