@@ -436,11 +436,11 @@ static const u32 gFR_POW2_FRAC_TAB[65] = {
  * fractional part is in [0, 1) by construction (Euclidean / mathematical
  * floor — the fractional part of -2.3 is +0.7, not -0.3). Then
  *   2^(int + frac) = 2^int * 2^frac
- * where 2^frac is looked up from a 17-entry table at radix 16, and 2^int
+ * where 2^frac is looked up from a 65-entry table at radix 16, and 2^int
  * is a shift.
  *
- * Worst-case absolute error: ~1.5e-4 over [-8, 8]. Linear interpolation
- * leaves a small concavity error in each table interval.
+ * Worst-case absolute error: ~1e-5 over [-8, 8] (65-entry table).
+ * Linear interpolation leaves a small concavity error in each interval.
  */
 s32 FR_pow2(s32 input, u16 radix)
 {

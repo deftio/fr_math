@@ -9,7 +9,7 @@ the first time. No prior exposure to fixed-point is assumed. If you
 should still be useful, because FR_Math has its own conventions and
 it's better to see them spelled out than to guess.
 
-## Why fixed-point is still a good idea
+## When fixed-point is useful
 
 Every CPU arithmetic unit (ALU) speaks integers as its native
 tongue. Add two 32-bit integers, you get a 33-bit result. Multiply

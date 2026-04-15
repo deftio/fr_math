@@ -309,14 +309,20 @@ so call sites read as intent:</p>
 <tr>
   <td><code>FR_DIV(x, xr, y, yr)</code></td>
   <td><code>x</code>: numerator at radix <code>xr</code>; <code>y</code>: denominator at radix <code>yr</code></td>
+  <td><code>s32</code> at radix <code>xr</code></td>
+  <td>Pre-scales the numerator in a 64-bit intermediate and <strong>rounds to nearest</strong> (adds half the divisor before truncating, with correct sign handling). Worst-case error &le; 0.5 LSB. Works correctly across the full Q16.16 range.</td>
+</tr>
+<tr>
+  <td><code>FR_DIV_TRUNC(x, xr, y, yr)</code></td>
+  <td><code>x</code>: numerator at radix <code>xr</code>; <code>y</code>: denominator at radix <code>yr</code></td>
   <td><code>((s64)(x) &lt;&lt; (yr)) / (s32)(y)</code></td>
-  <td>Pre-scales the numerator in a 64-bit intermediate to preserve fractional bits. Works correctly across the full Q16.16 range.</td>
+  <td>Truncating division (rounds toward zero). This was the behaviour of <code>FR_DIV</code> in v2.0.0; use it when you need exact backward compatibility or when the truncation bias is acceptable.</td>
 </tr>
 <tr>
   <td><code>FR_DIV32(x, xr, y, yr)</code></td>
   <td><code>x</code>: numerator at radix <code>xr</code>; <code>y</code>: denominator at radix <code>yr</code></td>
   <td><code>((s32)(x) &lt;&lt; (yr)) / (s32)(y)</code></td>
-  <td>32-bit-only path &mdash; requires |x| &lt; 2<sup>(31 &minus; yr)</sup> to avoid overflow. Use on tiny targets (PIC, AVR, 8051) where 64-bit ops pull in unwanted compiler runtime code.</td>
+  <td>32-bit-only truncating path &mdash; requires |x| &lt; 2<sup>(31 &minus; yr)</sup> to avoid overflow. Use on tiny targets (PIC, AVR, 8051) where 64-bit ops pull in unwanted compiler runtime code.</td>
 </tr>
 <tr>
   <td><code>FR_MOD(x, y)</code></td>
@@ -690,7 +696,7 @@ radix of the input.</p>
 
 <p>All three logarithms share a single implementation: find the
 leading bit position of the input (that gives you the integer part
-of <code>log2</code>), then interpolate a 33-entry mantissa table for
+of <code>log2</code>), then interpolate a 65-entry mantissa table for
 the fractional part, then scale the result to the requested output
 radix. <code>FR_ln</code> and <code>FR_log10</code> multiply the
 <code>log2</code> result by the appropriate radix-28 constant via
@@ -716,7 +722,7 @@ radix. <code>FR_ln</code> and <code>FR_log10</code> multiply the
     <code>u16 in_r</code> &mdash; input radix<br>
     <code>u16 out_r</code> &mdash; output radix
   </td>
-  <td><code>s32</code> at radix <code>out_r</code>. Worst-case error &plusmn; 2 LSB.</td>
+  <td><code>s32</code> at radix <code>out_r</code>. Worst-case error &le; 4 LSB at Q16.16.</td>
   <td>Domain: <code>input &gt; 0</code>. Returns <code>FR_DOMAIN_ERROR</code> for <code>input &le; 0</code>.</td>
 </tr>
 <tr>

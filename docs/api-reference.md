@@ -156,8 +156,9 @@ so call sites read as intent:
 | `FR_MIN(a, b)` | Two values of the same type | The smaller of the two | Evaluates each argument once. |
 | `FR_MAX(a, b)` | Two values of the same type | The larger of the two | Evaluates each argument once. |
 | `FR_CLAMP(x, lo, hi)` | `x`: value; `lo`, `hi`: bounds | `x` clamped to `[lo, hi]` | Equivalent to `FR_MIN(FR_MAX(x, lo), hi)`. |
-| `FR_DIV(x, xr, y, yr)` | `x`: numerator at radix `xr`; `y`: denominator at radix `yr` | `s32` at radix `xr` | `((s64)(x) << (yr)) / (s32)(y)`. Pre-scales the numerator in a 64-bit intermediate to preserve fractional bits. Works correctly across the full Q16.16 range. |
-| `FR_DIV32(x, xr, y, yr)` | same as `FR_DIV` | `s32` at radix `xr` | `((s32)(x) << (yr)) / (s32)(y)`. 32-bit-only path — requires `|x| < 2^(31 − yr)` to avoid overflow in the intermediate shift. Use on tiny targets (PIC, AVR, 8051) where 64-bit ops pull in unwanted compiler runtime code. |
+| `FR_DIV(x, xr, y, yr)` | `x`: numerator at radix `xr`; `y`: denominator at radix `yr` | `s32` at radix `xr` | Pre-scales the numerator in a 64-bit intermediate and **rounds to nearest** (adds half the divisor before truncating, with correct sign handling). Worst-case error ≤ 0.5 LSB. Works correctly across the full Q16.16 range. |
+| `FR_DIV_TRUNC(x, xr, y, yr)` | same as `FR_DIV` | `s32` at radix `xr` | `((s64)(x) << (yr)) / (s32)(y)`. Truncating division (rounds toward zero). This was the behaviour of `FR_DIV` in v2.0.0; use it when you need exact backward compatibility or when the truncation bias is acceptable. |
+| `FR_DIV32(x, xr, y, yr)` | same as `FR_DIV` | `s32` at radix `xr` | `((s32)(x) << (yr)) / (s32)(y)`. 32-bit-only truncating path — requires `|x| < 2^(31 − yr)` to avoid overflow in the intermediate shift. Use on tiny targets (PIC, AVR, 8051) where 64-bit ops pull in unwanted compiler runtime code. |
 | `FR_MOD(x, y)` | `x`, `y`: same radix | remainder at the same radix | `(x) % (y)`. Standard C remainder semantics. |
 
 ## Arithmetic
@@ -464,7 +465,7 @@ radix of the input.
 
 All three logarithms share a single implementation: find the
 leading bit position of the input (that gives you the integer part
-of `log2`), then interpolate a 33-entry mantissa table for
+of `log2`), then interpolate a 65-entry mantissa table for
 the fractional part, then scale the result to the requested output
 radix. `FR_ln` and `FR_log10` multiply the
 `log2` result by the appropriate radix-28 constant via
@@ -475,7 +476,7 @@ returning.
 
 | Function | Inputs | Output | Domain / precision |
 | --- | --- | --- | --- |
-| `FR_log2` | `s32 input` at radix `in_r`<br>`u16 in_r` — input radix<br>`u16 out_r` — output radix | `s32` at radix `out_r`. Worst-case error ± 2 LSB. | Domain: `input > 0`. Returns `FR_DOMAIN_ERROR` for `input ≤ 0`. |
+| `FR_log2` | `s32 input` at radix `in_r`<br>`u16 in_r` — input radix<br>`u16 out_r` — output radix | `s32` at radix `out_r`. Worst-case error ≤ 4 LSB at Q16.16. | Domain: `input > 0`. Returns `FR_DOMAIN_ERROR` for `input ≤ 0`. |
 | `FR_ln` | Same shape as `FR_log2`. | `s32` at radix `out_r`. Natural log. | Same domain. Internally computed as `FR_log2(x) × ln(2)`. |
 | `FR_log10` | Same shape as `FR_log2`. | `s32` at radix `out_r`. Common log. | Same domain. Internally computed as `FR_log2(x) / log2(10)`. |
 

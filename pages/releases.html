@@ -65,6 +65,9 @@ with v2.0.0 except where noted.</p>
   <li><strong><code>FR_pow2</code> table expanded</strong> from 17 entries
       (16 segments) to 65 entries (64 segments, 260 bytes). Interpolation
       error drops by ~16&times;.</li>
+  <li><strong><code>FR_log2</code> table expanded</strong> from 33 entries
+      to 65 entries (6-bit index / 24-bit interpolation). Worst-case error
+      &le; 4 LSB at Q16.16.</li>
   <li><strong><code>FR_MULK28</code> macro</strong> added: multiplies any
       fixed-point value by a radix-28 constant using a 64-bit intermediate
       with round-to-nearest. ~9 decimal digits of precision.</li>
@@ -86,8 +89,11 @@ with v2.0.0 except where noted.</p>
   <li><code>FR_MIN</code>, <code>FR_MAX</code>, <code>FR_CLAMP</code>
       &mdash; standard min/max/clamp.</li>
   <li><code>FR_DIV(x, xr, y, yr)</code> &mdash; fixed-point division with
-      64-bit pre-scaling. <code>FR_DIV32</code> is the 32-bit-only legacy
-      path.</li>
+      64-bit pre-scaling. Now <strong>rounds to nearest</strong>
+      (&le; 0.5 LSB error) instead of truncating.
+      <code>FR_DIV_TRUNC</code> preserves the old truncating behaviour
+      for backward compatibility. <code>FR_DIV32</code> is the 32-bit-only
+      truncating path.</li>
   <li><code>FR_MOD(x, xr, y, yr)</code> &mdash; fixed-point modulus.</li>
 </ul>
 
@@ -116,6 +122,7 @@ with v2.0.0 except where noted.</p>
 <tr><td>FR_atan signature</td><td><code>(input, radix)</code> &rarr; s16 degrees</td><td><code>(input, radix, out_radix)</code> &rarr; s32 radians</td></tr>
 <tr><td>FR_atan2 signature</td><td><code>(y, x)</code> &rarr; s16 degrees</td><td><code>(y, x, out_radix)</code> &rarr; s32 radians</td></tr>
 <tr><td>FR_BAM2RAD</td><td>off by 1024&times; (bug)</td><td>correct</td></tr>
+<tr><td>FR_DIV rounding</td><td>truncates toward zero</td><td>rounds to nearest (use <code>FR_DIV_TRUNC</code> for old behaviour)</td></tr>
 </tbody>
 </table>
 

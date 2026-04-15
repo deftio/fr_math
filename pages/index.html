@@ -19,11 +19,16 @@
 
 <p><strong>A C language fixed-point math library for embedded systems.</strong></p>
 
-<p>FR_Math provides trig, log/exp, 2D transforms, square root, and a
-small DSP toolkit (wave generators, ADSR envelope) &mdash; all running on
-plain integer registers. No floating-point unit required, no
-floating-point library required, no runtime allocation. The library has
-shipped on processors that predate MMX and is still maintained today.</p>
+<p>FR_Math is an integer-only C99 math library that has shipped on targets
+from 16&nbsp;MHz 68k processors to ARM Cortex-M to RISC-V &mdash;
+anywhere fractional math is needed without a floating-point unit. It
+covers trig, log/exp, square root, 2D transforms, wave generators, and
+an ADSR envelope in 4.2&nbsp;KB on a Cortex-M0 (6.5&nbsp;KB on RISC-V,
+20&nbsp;KB on 8051). Use cases include sensor fusion, audio/DSP, and
+graphics transforms on constrained systems where determinism and speed
+matter more than IEEE float precision. Every function takes a
+caller-chosen binary-point (radix), so you pick the precision you need
+per call instead of being locked to one fixed format.</p>
 
 <ul>
   <li>Works on any C99 toolchain — gcc, clang, MSVC, IAR, Keil, sdcc,
@@ -37,7 +42,12 @@ shipped on processors that predate MMX and is still maintained today.</p>
       <a href="guide/api-reference.html">API reference</a>.</li>
 </ul>
 
-<h2>Measured accuracy (Q16.16 unless noted)</h2>
+<h2>Measured accuracy</h2>
+
+<p>Errors below are measured at Q16.16 (s15.16). All functions accept any
+radix &mdash; Q16.16 is just the reference point for the table.
+See the <a href="https://github.com/deftio/fr_math/blob/master/build/test_tdd_report.md">TDD
+report</a> for sweeps at radixes 8, 12, 16, and 24.</p>
 
 <table>
 <thead><tr><th>Function</th><th>Max error</th><th>Note</th></tr></thead>
@@ -126,12 +136,20 @@ want to understand <em>how</em> the radix notation works first.</p>
 <tr><td>Fixed format</td><td>Q16.16 only</td><td>Q31 / Q15</td><td>Any radix</td></tr>
 <tr><td>Angle input</td><td>Radians (Q16.16)</td><td>Radians (float)</td><td>BAM (u16), degrees, or radians</td></tr>
 <tr><td>Exact cardinal angles</td><td>No</td><td>N/A</td><td>Yes</td></tr>
-<tr><td>Multiply-free path</td><td>No</td><td>No</td><td>Yes (shift macros)</td></tr>
+<tr><td>Multiply-free option</td><td>No</td><td>No</td><td>Yes (e.g. <code>FR_EXP_FAST</code>, <code>FR_hypot_fast</code>)</td></tr>
 <tr><td>Wave generators</td><td>No</td><td>No</td><td>6 shapes + ADSR</td></tr>
 <tr><td>Dependencies</td><td>None</td><td>ARM only</td><td>None</td></tr>
-<tr><td>Code size (Cortex-M4, -Os)</td><td>~8 KB</td><td>~40 KB+</td><td>3.6 KB</td></tr>
+<tr><td>Code size (Cortex-M0, -Os)</td><td>2.4 KB</td><td>~40 KB+</td><td>4.2 KB</td></tr>
 </tbody>
 </table>
+
+<p><small>Sizes measured with <code>arm-none-eabi-gcc -mcpu=cortex-m0
+-mthumb -Os</code>. libfixmath covers trig/sqrt/exp in Q16.16 only;
+FR_Math includes log/ln/log10, wave generators, ADSR, print helpers,
+and variable radix. CMSIS-DSP estimate is for the math function subset
+only. See
+<a href="https://github.com/deftio/fr_math/blob/master/docker/build_sizes.sh">docker/build_sizes.sh</a>
+for the build script.</small></p>
 
 <h2>History</h2>
 

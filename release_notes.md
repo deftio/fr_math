@@ -1,5 +1,81 @@
 # FR_Math Release Notes
 
+## Version 2.0.1 (2026)
+
+Precision and accuracy release. All changes are backward-compatible
+with v2.0.0 except where noted.
+
+### Trig output precision
+
+- `fr_cos_bam` / `fr_sin_bam` now return **s15.16** (was s0.15).
+  Exact values at cardinal angles: `cos(0°) = 65536`, `cos(90°) = 0`.
+  `FR_TRIG_ONE = 65536`.
+- `FR_TanI` / `fr_tan` return s15.16 (was s16.15). Saturation
+  is now `±INT32_MAX`.
+- All wrappers updated: `FR_Cos`, `FR_Sin`, `FR_CosI`, `FR_SinI`,
+  `FR_TanI`, `FR_Tan`.
+
+### Inverse trig now returns radians
+
+- `FR_acos`, `FR_asin`, `FR_atan` gain an `out_radix` parameter
+  and return radians at that radix (was degrees as `s16`).
+- `FR_atan2(y, x, out_radix)` also returns radians.
+- `FR_BAM2RAD` macro corrected (was off by a factor of 1024).
+
+### Rounding improvements
+
+- `FR_FixMuls` / `FR_FixMulSat`: add 0.5 LSB (`+0x8000`) before
+  the `>>16` shift. Both now **round to nearest** instead of
+  truncating.
+- `FR_sqrt` / `FR_hypot`: the internal `fr_isqrt64` now rounds to
+  nearest (remainder > root → +1). Worst-case error drops from
+  <1 LSB to **≤ 0.5 LSB**.
+- `FR_DIV` now **rounds to nearest** (≤ 0.5 LSB error) instead of
+  truncating. `FR_DIV_TRUNC` preserves the old truncating behaviour.
+
+### Improved exp / log accuracy
+
+- **`FR_pow2` table expanded** from 17 entries (16 segments) to
+  65 entries (64 segments, 260 bytes). Interpolation error drops
+  by ~16×.
+- **`FR_log2` table expanded** from 33 entries to 65 entries
+  (6-bit index / 24-bit interpolation). Worst-case error ≤ 4 LSB
+  at Q16.16.
+- **`FR_MULK28` macro** added: multiplies any fixed-point value
+  by a radix-28 constant using a 64-bit intermediate with
+  round-to-nearest. ~9 decimal digits of precision.
+- `FR_EXP` and `FR_POW10` now use `FR_MULK28` for the base
+  conversion instead of shift-only macros.
+- `FR_ln` and `FR_log10` also use `FR_MULK28` internally.
+- **`FR_EXP_FAST`** and **`FR_POW10_FAST`** added as shift-only
+  alternatives for 8-bit targets where 64-bit multiply is
+  expensive.
+
+### New symbols
+
+- `FR_MIN`, `FR_MAX`, `FR_CLAMP` — standard min/max/clamp.
+- `FR_DIV_TRUNC(x, xr, y, yr)` — truncating division (the old
+  `FR_DIV` behaviour).
+- `FR_MOD(x, xr, y, yr)` — fixed-point modulus.
+- Radix-28 constants: `FR_kLOG2E_28`, `FR_krLOG2E_28`,
+  `FR_kLOG2_10_28`, `FR_krLOG2_10_28`.
+
+### Breaking changes from v2.0.0
+
+| Change | v2.0.0 | v2.0.1 |
+|--------|--------|--------|
+| sin/cos return type | `s16` (s0.15) | `s32` (s15.16) |
+| sin/cos 1.0 value | 32767 | 65536 (exact) |
+| tan return format | s16.15 (radix 15) | s15.16 (radix 16) |
+| tan saturation | `±(32767 << 15)` | `±INT32_MAX` |
+| FR_acos/asin signature | `(input, radix)` → s16 degrees | `(input, radix, out_radix)` → s32 radians |
+| FR_atan signature | `(input, radix)` → s16 degrees | `(input, radix, out_radix)` → s32 radians |
+| FR_atan2 signature | `(y, x)` → s16 degrees | `(y, x, out_radix)` → s32 radians |
+| FR_BAM2RAD | off by 1024× (bug) | correct |
+| FR_DIV rounding | truncates toward zero | rounds to nearest (use `FR_DIV_TRUNC` for old behaviour) |
+
+---
+
 ## Version 2.0.0 (2026)
 
 This is a significant bug-fix and precision-improvement release. Several

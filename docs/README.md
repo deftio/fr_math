@@ -2,11 +2,16 @@
 
 **A C language fixed-point math library for embedded systems.**
 
-FR_Math provides trig, log/exp, 2D transforms, square root, and a
-small DSP toolkit (wave generators, ADSR envelope) — all running on
-plain integer registers. No floating-point unit required, no
-floating-point library required, no runtime allocation. The library has
-shipped on processors that predate MMX and is still maintained today.
+FR_Math is an integer-only C99 math library that has shipped on targets
+from 16 MHz 68k processors to ARM Cortex-M to RISC-V — anywhere
+fractional math is needed without a floating-point unit. It covers
+trig, log/exp, square root, 2D transforms, wave generators, and an ADSR
+envelope in 4.2 KB on a Cortex-M0 (6.5 KB on RISC-V, 20 KB on 8051).
+Use cases include sensor fusion, audio/DSP, and graphics transforms on
+constrained systems where determinism and speed matter more than IEEE
+float precision. Every function takes a caller-chosen binary-point
+(radix), so you pick the precision you need per call instead of being
+locked to one fixed format.
 
 - Works on any C99 toolchain — gcc, clang, MSVC, IAR, Keil, sdcc,
   AVR-gcc, MSP430-gcc, RISC-V.
@@ -33,7 +38,12 @@ or any tooling. If you want the browser version, look in
 | [building.md](building.md) | Makefile, scripts, test suite, coverage, cross-compilation. |
 | [releases.md](releases.md) | Release history with per-version highlights and breaking changes. |
 
-## Measured accuracy (Q16.16 unless noted)
+## Measured accuracy
+
+Errors below are measured at Q16.16 (s15.16). All functions accept any
+radix — Q16.16 is just the reference point for the table. See the
+[TDD report](../build/test_tdd_report.md) for sweeps at radixes 8, 12,
+16, and 24.
 
 | Function | Max error | Note |
 |---|---|---|
@@ -111,10 +121,17 @@ understand *how* the radix notation works first.
 | Fixed format | Q16.16 only | Q31 / Q15 | Any radix |
 | Angle input | Radians (Q16.16) | Radians (float) | BAM (u16), degrees, or radians |
 | Exact cardinal angles | No | N/A | Yes |
-| Multiply-free path | No | No | Yes (shift macros) |
+| Multiply-free option | No | No | Yes (e.g. `FR_EXP_FAST`, `FR_hypot_fast`) |
 | Wave generators | No | No | 6 shapes + ADSR |
 | Dependencies | None | ARM only | None |
-| Code size (Cortex-M4, -Os) | ~8 KB | ~40 KB+ | 3.6 KB |
+| Code size (Cortex-M0, -Os) | 2.4 KB | ~40 KB+ | 4.2 KB |
+
+Sizes measured with `arm-none-eabi-gcc -mcpu=cortex-m0 -mthumb -Os`.
+libfixmath covers trig/sqrt/exp in Q16.16 only; FR_Math includes
+log/ln/log10, wave generators, ADSR, print helpers, and variable radix.
+CMSIS-DSP estimate is for the math function subset only.
+See [`docker/build_sizes.sh`](../docker/build_sizes.sh) for the build
+script.
 
 ## History
 

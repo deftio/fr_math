@@ -40,6 +40,9 @@ with v2.0.0 except where noted.
 - **`FR_pow2` table expanded** from 17 entries (16 segments) to
   65 entries (64 segments, 260 bytes). Interpolation error drops
   by ~16×.
+- **`FR_log2` table expanded** from 33 entries to 65 entries
+  (6-bit index / 24-bit interpolation). Worst-case error ≤ 4 LSB
+  at Q16.16.
 - **`FR_MULK28` macro** added: multiplies any fixed-point value
   by a radix-28 constant using a 64-bit intermediate with
   round-to-nearest. ~9 decimal digits of precision in the
@@ -57,7 +60,10 @@ with v2.0.0 except where noted.
 
 - `FR_MIN`, `FR_MAX`, `FR_CLAMP` — standard min/max/clamp.
 - `FR_DIV(x, xr, y, yr)` — fixed-point division with 64-bit
-  pre-scaling. `FR_DIV32` is the 32-bit-only legacy path.
+  pre-scaling. Now **rounds to nearest** (≤ 0.5 LSB error)
+  instead of truncating. `FR_DIV_TRUNC` preserves the old
+  truncating behaviour for backward compatibility. `FR_DIV32` is
+  the 32-bit-only truncating path.
 - `FR_MOD(x, xr, y, yr)` — fixed-point modulus.
 
 ### Infrastructure
@@ -81,6 +87,7 @@ with v2.0.0 except where noted.
 | FR_atan signature | `(input, radix)` → s16 degrees | `(input, radix, out_radix)` → s32 radians |
 | FR_atan2 signature | `(y, x)` → s16 degrees | `(y, x, out_radix)` → s32 radians |
 | FR_BAM2RAD | off by 1024× (bug) | correct |
+| FR_DIV rounding | truncates toward zero | rounds to nearest (use `FR_DIV_TRUNC` for old behaviour) |
 
 ---
 

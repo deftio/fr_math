@@ -1,39 +1,44 @@
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-blue.svg)](https://opensource.org/licenses/BSD-2-Clause)
 [![CI](https://github.com/deftio/fr_math/actions/workflows/ci.yml/badge.svg)](https://github.com/deftio/fr_math/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen.svg)](#building-and-testing)
-[![Tests](https://img.shields.io/badge/tests-42%20passing-brightgreen.svg)](#building-and-testing)
 [![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://deftio.github.io/fr_math/)
 [![Version](https://img.shields.io/badge/version-2.0.1-blue.svg)](release_notes.md)
-![No FPU](https://img.shields.io/badge/FPU-not%20required-orange.svg)
-![Code size](https://img.shields.io/badge/Cortex--M4-3.6%20KB-informational.svg)
 
 # FR_Math: A C Language Fixed-Point Math Library for Embedded Systems
 
-FR_Math provides trig, log/exp, square root, 2D transforms, wave
-generators, and an ADSR envelope — all in integer-only C99. It replaces
-`libm` on targets that lack an FPU or where code size and determinism
-matter. The library compiles with gcc, clang, MSVC, IAR, Keil, SDCC,
-and AVR-gcc. Zero dependencies beyond `<stdint.h>`.
+FR_Math is an integer-only C99 math library that has shipped on targets
+from 16 MHz 68k processors to ARM Cortex-M to RISC-V — anywhere
+fractional math is needed without a floating-point unit. It covers
+trig, log/exp, square root, 2D transforms, wave generators, and an ADSR
+envelope in 4.2 KB on a Cortex-M0 (6.5 KB on RISC-V, 20 KB on 8051).
+Use cases include sensor fusion, audio/DSP, and graphics transforms on
+constrained systems where determinism and speed matter more than IEEE
+float precision. Every function takes a caller-chosen binary-point
+(radix), so you pick the precision you need per call instead of being
+locked to one fixed format. Zero dependencies beyond `<stdint.h>`.
 
 ### Library size (FR_math.c only, `-Os`)
 
 | Target | Code (text) |
 |--------|-------------|
-| Cortex-M0 (Thumb-1) | 3.7 KB |
-| Cortex-M4 (Thumb-2) | 3.6 KB |
-| ESP32 (Xtensa) | 4.1 KB |
-| 68k | 5.0 KB |
-| x86-64 | 5.3 KB |
-| RISC-V 32 (rv32im) | 5.9 KB |
-| x86-32 | 6.6 KB |
-| MSP430 (16-bit) | 7.9 KB |
-| 8051 (SDCC) | 18.1 KB * |
+| Cortex-M0 (Thumb-1) | 4.2 KB |
+| Cortex-M4 (Thumb-2) | 4.1 KB |
+| ESP32 (Xtensa) | 4.6 KB |
+| 68k | 5.5 KB |
+| x86-64 | 5.8 KB |
+| RISC-V 32 (rv32im) | 6.5 KB |
+| x86-32 | 7.2 KB |
+| MSP430 (16-bit) | 8.4 KB |
+| 8051 (SDCC) | 20.4 KB * |
 
 Sizes are code-only (text section). The optional 2D module adds ~1 KB.
 \* 8051 and MSP430 are 8/16-bit — every 32-bit operation expands to multiple instructions.
 See [`docker/`](docker/) for the cross-compile setup.
 
-### Measured accuracy (Q16.16 unless noted)
+### Measured accuracy
+
+Errors below are measured at Q16.16 (s15.16). All functions accept any
+radix — Q16.16 is just the reference point for the table.
 
 | Function | Max error | Note |
 |---|---|---|

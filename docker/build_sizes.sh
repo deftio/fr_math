@@ -159,23 +159,63 @@ fmt_size() {
     echo "The optional 2D module (\`FR_math_2D.cpp\`) adds ~1 KB."
 } | tee "${TABLE}"
 
-# ── optimization comparison (Cortex-M4) ──────────────────────────────
+# ── optimization comparison (Cortex-M0) ──────────────────────────────
 
 echo ""
-echo "### Optimization comparison (Cortex-M4)"
+echo "### Optimization comparison (Cortex-M0)"
 echo ""
 echo "| Flag | Code (text) |"
 echo "|------|-------------|"
 
 for opt in O0 Os O2 O3; do
-    obj="${OUT}/FR_math_cm4_${opt}.o"
-    arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -mfloat-abi=soft \
+    obj="${OUT}/FR_math_cm0_${opt}.o"
+    arm-none-eabi-gcc -mcpu=cortex-m0 -mthumb \
         ${INC} -std=c99 -Wall -${opt} -ffreestanding \
         -c "${SRC}" -o "${obj}" 2>/dev/null
     text=$(arm-none-eabi-size --format=berkeley "${obj}" 2>/dev/null | tail -1 | awk '{print $1}')
     kb=$(awk "BEGIN { printf \"%.1f\", ${text}/1024.0 }")
     echo "| -${opt} | ${text} B (${kb} KB) |"
 done
+
+# ── library comparison (Cortex-M0, -Os) ──────────────────────────────
+# Compiles FR_Math and libfixmath for Cortex-M0 so all numbers come
+# from the same toolchain, same flags, same target.
+
+LFM_DIR="/src/.compare/libfixmath/libfixmath"
+LFM_INC="-I${LFM_DIR}"
+ARM_FLAGS="-mcpu=cortex-m0 -mthumb -std=c99 -Wall -Os -ffreestanding"
+
+echo ""
+echo "### Library comparison (Cortex-M0, -Os, arm-none-eabi-gcc)"
+echo ""
+
+if [[ -d "${LFM_DIR}" ]] && command -v arm-none-eabi-gcc >/dev/null 2>&1; then
+    # FR_Math
+    fr_obj="${OUT}/FR_math_cmp_cm0.o"
+    arm-none-eabi-gcc ${ARM_FLAGS} ${INC} -c "${SRC}" -o "${fr_obj}" 2>/dev/null
+    fr_text=$(arm-none-eabi-size --format=berkeley "${fr_obj}" 2>/dev/null | tail -1 | awk '{print $1}')
+
+    # libfixmath — compile each source file, sum text sections
+    lfm_total=0
+    LFM_SRCS="fix16.c fix16_sqrt.c fix16_exp.c fix16_trig.c fix16_str.c uint32.c fract32.c"
+    for src in ${LFM_SRCS}; do
+        obj="${OUT}/lfm_${src%.c}.o"
+        arm-none-eabi-gcc ${ARM_FLAGS} ${LFM_INC} \
+            -c "${LFM_DIR}/${src}" -o "${obj}" 2>/dev/null
+        text=$(arm-none-eabi-size --format=berkeley "${obj}" 2>/dev/null | tail -1 | awk '{print $1}')
+        lfm_total=$((lfm_total + text))
+    done
+
+    fr_kb=$(awk "BEGIN { printf \"%.1f\", ${fr_text}/1024.0 }")
+    lfm_kb=$(awk "BEGIN { printf \"%.1f\", ${lfm_total}/1024.0 }")
+
+    echo "| Library | Code (text) |"
+    echo "|---------|-------------|"
+    echo "| FR_Math | ${fr_text} B (${fr_kb} KB) |"
+    echo "| libfixmath | ${lfm_total} B (${lfm_kb} KB) |"
+else
+    echo "(skipped — libfixmath not found in .compare/ or arm-none-eabi-gcc not available)"
+fi
 
 echo ""
 echo "Size table saved to build/size_table.md"
