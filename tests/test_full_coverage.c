@@ -38,46 +38,78 @@ static int fail_count = 0;
     } \
 } while(0)
 
-/* Test FR_FixMuls - uncovered function */
+/* Test FR_FixMuls - signed multiply with round-to-nearest */
 int test_fixmuls() {
     s32 result;
-    
-    /* Test positive * positive */
+
+    /* Test positive * positive: 1.0 * 2.0 = 2.0 */
     result = FR_FixMuls(0x10000, 0x20000);
-    
-    /* Test negative * positive */
+    if (result != 0x20000) return TEST_FAIL;
+
+    /* Test negative * positive: -1.0 * 2.0 = -2.0 */
     result = FR_FixMuls(-0x10000, 0x20000);
-    
-    /* Test positive * negative */
+    if (result != -0x20000) return TEST_FAIL;
+
+    /* Test positive * negative: 1.0 * -2.0 = -2.0 */
     result = FR_FixMuls(0x10000, -0x20000);
-    
-    /* Test negative * negative */
+    if (result != -0x20000) return TEST_FAIL;
+
+    /* Test negative * negative: -1.0 * -2.0 = 2.0 */
     result = FR_FixMuls(-0x10000, -0x20000);
-    
-    (void)result;
+    if (result != 0x20000) return TEST_FAIL;
+
+    /* Rounding test: 1.5 * 1.0 at radix 16.
+     * 1.5 = 0x18000. Product = 0x18000 * 0x10000 = 0x180000000.
+     * + 0x8000 = 0x180008000. >> 16 = 0x18000 = 1.5 exactly. */
+    result = FR_FixMuls(0x18000, 0x10000);
+    if (result != 0x18000) return TEST_FAIL;
+
+    /* Rounding matters: 3 * 3 = 9 at full precision, but at radix 16
+     * 0x30000 * 0x30000 = 0x900000000, + 0x8000 = 0x900008000,
+     * >> 16 = 0x90000 = 9.0 exactly. */
+    result = FR_FixMuls(0x30000, 0x30000);
+    if (result != 0x90000) return TEST_FAIL;
+
+    /* Rounding edge: product whose low 16 bits are exactly 0x8000 rounds up.
+     * 0x18001 * 0x10000 = 0x180010000. + 0x8000 = 0x180018000. >> 16 = 0x18001. */
+    result = FR_FixMuls(0x18001, 0x10000);
+    if (result != 0x18001) return TEST_FAIL;
+
     return TEST_PASS;
 }
 
-/* Test FR_FixMulSat - uncovered function */
+/* Test FR_FixMulSat - saturating multiply with round-to-nearest */
 int test_fixmulsat() {
     s32 result;
-    
-    /* Test normal multiplication */
-    result = FR_FixMulSat(0x1000, 0x2000);
-    
-    /* Test overflow case - large positive numbers */
+
+    /* Normal: 1.0 * 2.0 = 2.0 */
+    result = FR_FixMulSat(0x10000, 0x20000);
+    if (result != 0x20000) return TEST_FAIL;
+
+    /* Overflow saturates to positive */
     result = FR_FixMulSat(0x7FFF0000, 0x7FFF0000);
-    
-    /* Test negative * positive */
-    result = FR_FixMulSat(-0x1000, 0x2000);
-    
-    /* Test both negative */
-    result = FR_FixMulSat(-0x1000, -0x2000);
-    
-    /* Test saturation case */
+    if (result != FR_OVERFLOW_POS) return TEST_FAIL;
+
+    /* Negative * positive */
+    result = FR_FixMulSat(-0x10000, 0x20000);
+    if (result != -0x20000) return TEST_FAIL;
+
+    /* Negative * negative */
+    result = FR_FixMulSat(-0x10000, -0x20000);
+    if (result != 0x20000) return TEST_FAIL;
+
+    /* Non-overflowing large multiply: 0x7FFFFFFF * 2 fits after >>16 */
     result = FR_FixMulSat(0x7FFFFFFF, 2);
-    
-    (void)result;
+    if (result != 0x10000) return TEST_FAIL;
+
+    /* Negative overflow saturates to negative */
+    result = FR_FixMulSat(0x7FFF0000, -0x7FFF0000);
+    if (result != FR_OVERFLOW_NEG) return TEST_FAIL;
+
+    /* Rounding: same as FixMuls for non-overflowing inputs */
+    result = FR_FixMulSat(0x18000, 0x10000);
+    if (result != 0x18000) return TEST_FAIL;
+
     return TEST_PASS;
 }
 
@@ -98,6 +130,57 @@ int test_fixaddsat() {
     result = FR_FixAddSat(1000, -500);
     
     (void)result;
+    return TEST_PASS;
+}
+
+/* Test FR_DIV (64-bit), FR_DIV32 (32-bit), FR_MOD */
+int test_div() {
+    s32 result;
+
+    /* Basic: 10 / 2 = 5 at radix 8 */
+    result = FR_DIV(I2FR(10, 8), 8, I2FR(2, 8), 8);
+    if (result != I2FR(5, 8)) return TEST_FAIL;
+
+    /* FR_DIV32 same for small values */
+    result = FR_DIV32(I2FR(10, 8), 8, I2FR(2, 8), 8);
+    if (result != I2FR(5, 8)) return TEST_FAIL;
+
+    /* Fractional result: 7 / 2 = 3.5 at radix 8 */
+    result = FR_DIV(I2FR(7, 8), 8, I2FR(2, 8), 8);
+    if (result != I2FR(3, 8) + (1 << 7)) return TEST_FAIL;
+
+    /* 64-bit advantage: large numerator that overflows in 32-bit.
+     * 1000 / 3 at radix 16.  1000 << 16 = 65,536,000 which fits s32,
+     * but 30000 << 16 = 1,966,080,000 which is near INT32_MAX.
+     * Use a value that overflows 32-bit but works in 64-bit. */
+    result = FR_DIV(I2FR(30000, 16), 16, I2FR(3, 16), 16);
+    /* 30000 / 3 = 10000.0 exactly */
+    if (result != I2FR(10000, 16)) return TEST_FAIL;
+
+    /* Negative numerator */
+    result = FR_DIV(I2FR(-10, 8), 8, I2FR(2, 8), 8);
+    if (result != I2FR(-5, 8)) return TEST_FAIL;
+
+    /* Negative denominator */
+    result = FR_DIV(I2FR(10, 8), 8, I2FR(-2, 8), 8);
+    if (result != I2FR(-5, 8)) return TEST_FAIL;
+
+    /* Both negative */
+    result = FR_DIV(I2FR(-10, 8), 8, I2FR(-2, 8), 8);
+    if (result != I2FR(5, 8)) return TEST_FAIL;
+
+    /* FR_MOD: 10 % 3 = 1 at radix 8 */
+    result = FR_MOD(I2FR(10, 8), I2FR(3, 8));
+    if (result != I2FR(1, 8)) return TEST_FAIL;
+
+    /* FR_MOD: -10 % 3 = -1 (C semantics) */
+    result = FR_MOD(I2FR(-10, 8), I2FR(3, 8));
+    if (result != I2FR(-1, 8)) return TEST_FAIL;
+
+    /* FR_DIV with different radix: x at radix 8, y at radix 4 */
+    result = FR_DIV(I2FR(10, 8), 8, I2FR(2, 4), 4);
+    if (result != I2FR(5, 8)) return TEST_FAIL;
+
     return TEST_PASS;
 }
 
@@ -163,33 +246,39 @@ int test_trig_complete() {
 
 /* Test inverse trig functions */
 int test_inverse_trig() {
-    s16 result;
-    s32 input;
-    
-    /* Test acos */
-    input = I2FR(1, 15);  /* cos(0) = 1 */
-    result = FR_acos(input, 15);
-    
-    input = 0;  /* cos(90) = 0 */
-    result = FR_acos(input, 15);
-    
-    input = -I2FR(1, 15);  /* cos(180) = -1 */
-    result = FR_acos(input, 15);
-    
-    /* Test special case: exactly ±1.0 */
-    input = 0x8000;  /* Special case in code */
-    result = FR_acos(input, 15);
-    result = FR_acos(-input, 15);
-    
-    /* Test asin */
-    input = 0;  /* sin(0) = 0 */
-    result = FR_asin(input, 15);
-    
-    input = I2FR(1, 15);  /* sin(90) = 1 */
-    result = FR_asin(input, 15);
-    
-    /* Note: FR_atan is declared but not implemented in FR_math.c */
-    
+    s32 result, input;
+
+    /* acos/asin now return radians at out_radix. Use radix 16 (s15.16).
+     * pi/2 ≈ 102944 at radix 16, pi ≈ 205887 at radix 16. */
+
+    /* Test acos(1.0) = 0 */
+    input = I2FR(1, 15);
+    result = FR_acos(input, 15, 16);
+    if (result < -200 || result > 200) return TEST_FAIL;
+
+    /* Test acos(0) = pi/2 ≈ 102944 */
+    result = FR_acos(0, 15, 16);
+    if (result < 100000 || result > 106000) return TEST_FAIL;
+
+    /* Test acos(-1.0) = pi ≈ 205887 */
+    input = -I2FR(1, 15);
+    result = FR_acos(input, 15, 16);
+    if (result < 200000 || result > 210000) return TEST_FAIL;
+
+    /* Test special case: exactly ±1.0 (clamped range) */
+    input = 0x8000;
+    result = FR_acos(input, 15, 16);
+    result = FR_acos(-input, 15, 16);
+
+    /* Test asin(0) = 0 */
+    result = FR_asin(0, 15, 16);
+    if (result < -200 || result > 200) return TEST_FAIL;
+
+    /* Test asin(1.0) = pi/2 ≈ 102944 */
+    input = I2FR(1, 15);
+    result = FR_asin(input, 15, 16);
+    if (result < 100000 || result > 106000) return TEST_FAIL;
+
     (void)result;
     return TEST_PASS;
 }
@@ -279,10 +368,15 @@ int test_sqrt_hypot() {
     result = FR_sqrt(I2FR(100, 16), 16);
     if (result != I2FR(10, 16)) return TEST_FAIL;
 
-    /* Sqrt of 2 ≈ 1.41421 */
+    /* Sqrt of 2 ≈ 1.41421356... At radix 16: 1.41421356 * 65536 = 92681.9...
+     * Round-to-nearest → 92682. Allow ±1 LSB for the rounding. */
     result = FR_sqrt(I2FR(2, 16), 16);
-    /* Allow ±2 LSB */
-    if (result < 92680 || result > 92684) return TEST_FAIL;
+    if (result < 92681 || result > 92683) return TEST_FAIL;
+
+    /* Sqrt of 3 ≈ 1.73205080... At radix 16: 1.73205 * 65536 = 113512.0...
+     * Verifies rounding for another non-perfect square. */
+    result = FR_sqrt(I2FR(3, 16), 16);
+    if (result < 113511 || result > 113513) return TEST_FAIL;
 
     /* Negative input → INT32_MIN sentinel */
     result = FR_sqrt(-1, 16);
@@ -363,50 +457,51 @@ int test_sqrt_hypot() {
  * tools see the radian path. */
 int test_radian_trig() {
     /* Use radix 13 so a full revolution (2π) ≈ 51472 fits in s32
-     * and the rad->bam reciprocal multiply is well within range. */
-    s16 c, s;
-    s32 t;
+     * and the rad->bam reciprocal multiply is well within range.
+     * sin/cos now return s32 at radix 16 (s15.16). 1.0 = 65536. */
+    s32 c, s, t;
 
-    /* angle = 0: cos≈32767, sin≈0, tan≈0 */
+    /* angle = 0: cos=65536 (exact), sin≈0, tan≈0 */
     c = fr_cos(0, 13);
     s = fr_sin(0, 13);
     t = fr_tan(0, 13);
-    if (c < 32700 || c > 32767) return TEST_FAIL;
-    if (s < -32 || s > 32)      return TEST_FAIL;
-    if (t < -16 || t > 16)      return TEST_FAIL;
+    if (c < 65400 || c > 65536) return TEST_FAIL;
+    if (s < -64 || s > 64)      return TEST_FAIL;
+    if (t < -32 || t > 32)      return TEST_FAIL;
 
-    /* angle = π/2 ≈ 12868 at radix 13: cos≈0, sin≈32767, tan saturates */
+    /* angle = π/2 ≈ 12868 at radix 13: cos≈0, sin≈65536, tan saturates */
     c = fr_cos(12868, 13);
     s = fr_sin(12868, 13);
     t = fr_tan(12868, 13);
-    if (c < -64  || c > 64)     return TEST_FAIL;
-    if (s < 32700)              return TEST_FAIL;
+    if (c < -128  || c > 128)   return TEST_FAIL;
+    if (s < 65400)              return TEST_FAIL;
     /* tan(π/2) hits the c==0 saturation branch — accept any large positive */
     (void)t;
 
-    /* angle = π ≈ 25736: cos≈-32767, sin≈0 */
+    /* angle = π ≈ 25736: cos≈-65536, sin≈0 */
     c = fr_cos(25736, 13);
     s = fr_sin(25736, 13);
-    if (c > -32700)             return TEST_FAIL;
-    if (s < -64 || s > 64)      return TEST_FAIL;
+    if (c > -65400)             return TEST_FAIL;
+    if (s < -128 || s > 128)    return TEST_FAIL;
 
     /* radix=0 path (rad as integer radians, not very meaningful but covers
      * the `if (radix > 0)` branch's else side) */
     c = fr_cos(0, 0);
-    if (c < 32700)              return TEST_FAIL;
+    if (c < 65400)              return TEST_FAIL;
 
-    /* FR_atan uses FR_atan2(input, 1<<radix) */
-    s16 deg;
-    deg = FR_atan(I2FR(1, 16), 16);   /* atan(1) = 45° */
-    if (deg < 44 || deg > 46)   return TEST_FAIL;
-    deg = FR_atan(I2FR(0, 16), 16);   /* atan(0) = 0° */
-    if (deg < -1 || deg > 1)    return TEST_FAIL;
-    deg = FR_atan(I2FR(-1, 16), 16);  /* atan(-1) = -45° */
-    if (deg < -46 || deg > -44) return TEST_FAIL;
+    /* FR_atan now returns radians at out_radix. Test with radix 16.
+     * atan(1) = pi/4 ≈ 0.7854. At radix 16: 0.7854 * 65536 ≈ 51472. */
+    s32 rad;
+    rad = FR_atan(I2FR(1, 16), 16, 16);   /* atan(1) = pi/4 */
+    if (rad < 50000 || rad > 53000)   return TEST_FAIL;
+    rad = FR_atan(I2FR(0, 16), 16, 16);   /* atan(0) = 0 */
+    if (rad < -200 || rad > 200)      return TEST_FAIL;
+    rad = FR_atan(I2FR(-1, 16), 16, 16);  /* atan(-1) = -pi/4 */
+    if (rad < -53000 || rad > -50000) return TEST_FAIL;
 
     /* FR_atan2(0,0) - undefined-but-defined branch */
-    deg = FR_atan2(0, 0);
-    (void)deg;
+    rad = FR_atan2(0, 0, 16);
+    (void)rad;
 
     return TEST_PASS;
 }
@@ -568,6 +663,21 @@ int test_macros_complete() {
     result = FR_SGN(-100);
     result = FR_SGN(0);
     
+    /* Test FR_MIN, FR_MAX, FR_CLAMP */
+    if (FR_MIN(3, 7) != 3)   return TEST_FAIL;
+    if (FR_MIN(-5, 2) != -5) return TEST_FAIL;
+    if (FR_MIN(0, 0) != 0)   return TEST_FAIL;
+
+    if (FR_MAX(3, 7) != 7)   return TEST_FAIL;
+    if (FR_MAX(-5, 2) != 2)  return TEST_FAIL;
+    if (FR_MAX(0, 0) != 0)   return TEST_FAIL;
+
+    if (FR_CLAMP(5, 0, 10) != 5)   return TEST_FAIL;
+    if (FR_CLAMP(-5, 0, 10) != 0)  return TEST_FAIL;
+    if (FR_CLAMP(15, 0, 10) != 10) return TEST_FAIL;
+    if (FR_CLAMP(0, 0, 10) != 0)   return TEST_FAIL;
+    if (FR_CLAMP(10, 0, 10) != 10) return TEST_FAIL;
+
     /* Test FR_ADD with different radixes */
     val = I2FR(10, 4);
     FR_ADD(val, 4, I2FR(5, 8), 8);
@@ -618,27 +728,27 @@ int test_macros_complete() {
  * internal conditionals. */
 int test_edge_branches() {
     s32 r32;
-    s16 r16;
     fr_adsr_t env;
 
     /* FR_Tan(deg, radix) c==0 branch. At radix 0, deg=-16384 and
      * deg=16384 both drive the internal BAM to exactly 90°/270°, so
      * cos==0 and we hit the saturation return. */
     r32 = FR_Tan(-16384, 0);                 /* bam=16384 (sin>0) */
-    if (r32 != ((s32)FR_TRIG_MAXVAL << FR_TRIG_PREC)) return TEST_FAIL;
+    if (r32 != FR_TRIG_MAXVAL) return TEST_FAIL;
     r32 = FR_Tan(16384, 0);                  /* bam=49152 (sin<0) */
-    if (r32 != -((s32)FR_TRIG_MAXVAL << FR_TRIG_PREC)) return TEST_FAIL;
+    if (r32 != -FR_TRIG_MAXVAL) return TEST_FAIL;
 
-    /* FR_atan2 with |y| > |x| — hits the ay>ax branch (ratio=ax/ay,
-     * a = 90 - atan_q1). All four quadrant-sign combinations. */
-    r16 = FR_atan2(I2FR(5, 16), I2FR(1, 16));    /* near +90° */
-    if (r16 < 75 || r16 > 85)   return TEST_FAIL;
-    r16 = FR_atan2(I2FR(-5, 16), I2FR(1, 16));   /* near -90° */
-    if (r16 < -85 || r16 > -75) return TEST_FAIL;
-    r16 = FR_atan2(I2FR(5, 16), I2FR(-1, 16));   /* near +(180-90)=101° */
-    if (r16 < 95 || r16 > 105)  return TEST_FAIL;
-    r16 = FR_atan2(I2FR(-5, 16), I2FR(-1, 16));  /* near -101° */
-    if (r16 < -105 || r16 > -95) return TEST_FAIL;
+    /* FR_atan2 now returns radians at out_radix.
+     * At radix 16: pi/2 ≈ 102944, pi ≈ 205887.
+     * atan2(5, 1) ≈ atan(5) ≈ 1.373 rad ≈ 90025 at radix 16. */
+    r32 = FR_atan2(I2FR(5, 16), I2FR(1, 16), 16);    /* near 1.373 rad */
+    if (r32 < 87000 || r32 > 93000) return TEST_FAIL;
+    r32 = FR_atan2(I2FR(-5, 16), I2FR(1, 16), 16);   /* near -1.373 rad */
+    if (r32 < -93000 || r32 > -87000) return TEST_FAIL;
+    r32 = FR_atan2(I2FR(5, 16), I2FR(-1, 16), 16);   /* near pi - 1.373 ≈ 1.768 rad */
+    if (r32 < 112000 || r32 > 120000) return TEST_FAIL;
+    r32 = FR_atan2(I2FR(-5, 16), I2FR(-1, 16), 16);  /* near -1.768 rad */
+    if (r32 < -120000 || r32 > -112000) return TEST_FAIL;
 
     /* FR_pow2 with radix > 16 — hits `frac_full >>= (radix - 16)`. */
     r32 = FR_pow2(I2FR(2, 20), 20);              /* 2^2 = 4 */
@@ -726,6 +836,9 @@ int main() {
     RUN_TEST(test_fixmuls);
     RUN_TEST(test_fixmulsat);
     RUN_TEST(test_fixaddsat);
+
+    printf("\nDivision & Modulo:\n");
+    RUN_TEST(test_div);
     
     printf("\nTrigonometry (Complete):\n");
     RUN_TEST(test_trig_complete);

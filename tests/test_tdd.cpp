@@ -592,6 +592,33 @@ static void section_arithmetic(void) {
                (unsigned long)a, (long long)r);
     }
     printf("\n");
+
+    md_h3("4.6 FR_DIV (64-bit) vs FR_DIV32 (32-bit) vs double");
+    printf("| x | y | radix | FR_DIV | FR_DIV32 | expected (double) | DIV err | DIV32 err | DIV32 overflow? |\n");
+    printf("|---:|---:|---:|---:|---:|---:|---:|---:|---:|\n");
+    struct { double xd, yd; int r; } div_cases[] = {
+        {10, 2, 8}, {7, 2, 8}, {-10, 3, 8}, {100, 7, 16},
+        {1, 3, 16}, {30000, 3, 16}, {0.5, 0.25, 16},
+        {-1000, -7, 12}, {1, 1, 8}, {32000, 1, 16},
+    };
+    for (int i = 0; i < (int)(sizeof(div_cases)/sizeof(div_cases[0])); i++) {
+        int r = div_cases[i].r;
+        s32 xfp = (s32)(div_cases[i].xd * (1L << r));
+        s32 yfp = (s32)(div_cases[i].yd * (1L << r));
+        double expected = div_cases[i].xd / div_cases[i].yd;
+        s32 d64 = FR_DIV(xfp, r, yfp, r);
+        s32 d32 = FR_DIV32(xfp, r, yfp, r);
+        double d64d = frd(d64, r);
+        double d32d = frd(d32, r);
+        double e64 = d64d - expected; if (e64 < 0) e64 = -e64;
+        double e32 = d32d - expected; if (e32 < 0) e32 = -e32;
+        int overflow32 = (d64 != d32) ? 1 : 0;
+        printf("| %g | %g | %d | %ld | %ld | %.6g | %.4g | %.4g | %s |\n",
+               div_cases[i].xd, div_cases[i].yd, r,
+               (long)d64, (long)d32, expected, e64, e32,
+               overflow32 ? "YES" : "no");
+    }
+    printf("\n");
 }
 
 /* ============================================================
@@ -608,8 +635,8 @@ static void section_trig_int(void) {
     for (int deg = -720; deg <= 720; deg++) {
         double exp_cos = cos(deg * M_PI / 180.0);
         double exp_sin = sin(deg * M_PI / 180.0);
-        double act_cos = frd(FR_CosI((s16)deg), FR_TRIG_PREC);
-        double act_sin = frd(FR_SinI((s16)deg), FR_TRIG_PREC);
+        double act_cos = frd(FR_CosI((s16)deg), FR_TRIG_OUT_PREC);
+        double act_sin = frd(FR_SinI((s16)deg), FR_TRIG_OUT_PREC);
         stats_add(&cos_stats, deg, act_cos, exp_cos);
         stats_add(&sin_stats, deg, act_sin, exp_sin);
     }
@@ -617,7 +644,7 @@ static void section_trig_int(void) {
     table_header_stats();
     table_row_stats("FR_CosI [-720..720]", &cos_stats);
     table_row_stats("FR_SinI [-720..720]", &sin_stats);
-    printf("\n> Tolerance reference: 1 LSB in s0.15 = 1/32768 ≈ 3.05e-5.\n\n");
+    printf("\n> Tolerance reference: 1 LSB in s15.16 = 1/65536 ≈ 1.53e-5. Poles (0,90,180,270) are exact.\n\n");
 
     md_h3("5.1 FR_TanI vs tan() (skipping ±90n)");
     stats_t tan_stats;
@@ -626,7 +653,7 @@ static void section_trig_int(void) {
     for (int deg = -89; deg <= 89; deg++) {
         if (deg % 90 == 0 && deg != 0) { tan_skipped++; continue; }
         double exp_tan = tan(deg * M_PI / 180.0);
-        double act_tan = frd(FR_TanI((s16)deg), FR_TRIG_PREC);
+        double act_tan = frd(FR_TanI((s16)deg), FR_TRIG_OUT_PREC);
         stats_add(&tan_stats, deg, act_tan, exp_tan);
     }
     table_header_stats();
@@ -639,7 +666,7 @@ static void section_trig_int(void) {
     for (int i = 0; i < (int)(sizeof(specials)/sizeof(specials[0])); i++) {
         int d = specials[i];
         s32 t = FR_TanI((s16)d);
-        double td = frd(t, FR_TRIG_PREC);
+        double td = frd(t, FR_TRIG_OUT_PREC);
         double ref = (d % 180 == 90) ? INFINITY : tan(d * M_PI / 180.0);
         printf("| %d | %ld | %.6g | %.6g |\n", d, (long)t, td, ref);
     }
@@ -663,8 +690,8 @@ static void section_trig_frac(void) {
         s16 deg_fr = (s16)(q << (8 - 2));  /* radix 8, 0.25 step = 64 LSBs */
         double exp_c = cos(deg_d * M_PI / 180.0);
         double exp_s = sin(deg_d * M_PI / 180.0);
-        double act_c = frd(FR_Cos(deg_fr, 8), FR_TRIG_PREC);
-        double act_s = frd(FR_Sin(deg_fr, 8), FR_TRIG_PREC);
+        double act_c = frd(FR_Cos(deg_fr, 8), FR_TRIG_OUT_PREC);
+        double act_s = frd(FR_Sin(deg_fr, 8), FR_TRIG_OUT_PREC);
         stats_add(&cos_f, deg_d, act_c, exp_c);
         stats_add(&sin_f, deg_d, act_s, exp_s);
     }
@@ -679,7 +706,7 @@ static void section_trig_frac(void) {
     for (int i = 0; i < (int)(sizeof(check_degs)/sizeof(check_degs[0])); i++) {
         s16 deg_fr = (s16)(check_degs[i] * 256);
         s32 t = FR_Tan(deg_fr, 8);
-        double td = frd(t, FR_TRIG_PREC);
+        double td = frd(t, FR_TRIG_OUT_PREC);
         double ref = tan(check_degs[i] * M_PI / 180.0);
         double e = td - ref; if (e < 0) e = -e;
         printf("| %.2f | %ld | %.6g | %.6g | %.6g |\n",
@@ -699,16 +726,16 @@ static void section_inverse_trig(void) {
     md_h3("7.1 FR_acos sweep [-1, +1]");
     stats_t acos_stats;
     stats_reset(&acos_stats);
-    /* radix 15 inputs, 200 samples */
+    /* radix 15 inputs, output radians at radix 16, 200 samples */
     for (int i = -200; i <= 200; i++) {
         double xd = i / 200.0;
         s32 fr = (s32)(xd * (1 << 15));
-        s16 deg = FR_acos(fr, 15);
-        double ref_deg = acos(xd) * 180.0 / M_PI;
-        stats_add(&acos_stats, xd, (double)deg, ref_deg);
+        s32 rad = FR_acos(fr, 15, 16);
+        double ref_rad = acos(xd);
+        stats_add(&acos_stats, xd, frd(rad, 16), ref_rad);
     }
     table_header_stats();
-    table_row_stats("FR_acos vs acos() (deg)", &acos_stats);
+    table_row_stats("FR_acos vs acos() (rad)", &acos_stats);
     printf("\n");
 
     md_h3("7.2 FR_asin sweep [-1, +1]");
@@ -717,28 +744,28 @@ static void section_inverse_trig(void) {
     for (int i = -200; i <= 200; i++) {
         double xd = i / 200.0;
         s32 fr = (s32)(xd * (1 << 15));
-        s16 deg = FR_asin(fr, 15);
-        double ref_deg = asin(xd) * 180.0 / M_PI;
-        stats_add(&asin_stats, xd, (double)deg, ref_deg);
+        s32 rad = FR_asin(fr, 15, 16);
+        double ref_rad = asin(xd);
+        stats_add(&asin_stats, xd, frd(rad, 16), ref_rad);
     }
     table_header_stats();
-    table_row_stats("FR_asin vs asin() (deg)", &asin_stats);
+    table_row_stats("FR_asin vs asin() (rad)", &asin_stats);
     printf("\n");
 
-    md_h3("7.3 FR_atan2 (octant-reduced arctan, returns degrees)");
-    printf("| (y, x) | FR_atan2 | atan2() degrees |\n|---|---:|---:|\n");
+    md_h3("7.3 FR_atan2 (returns radians at radix 16)");
+    printf("| (y, x) | FR_atan2 (rad s15.16) | atan2() radians |\n|---|---:|---:|\n");
     struct { s32 y, x; } pts[] = {
         {0, 1}, {1, 1}, {1, 0}, {1, -1}, {0, -1}, {-1, -1}, {-1, 0}, {-1, 1},
         {3, 4}, {-3, 4}, {3, -4}, {-3, -4}
     };
     for (int i = 0; i < (int)(sizeof(pts)/sizeof(pts[0])); i++) {
-        s16 r = FR_atan2(pts[i].y, pts[i].x);
-        double ref = atan2((double)pts[i].y, (double)pts[i].x) * 180.0 / M_PI;
-        printf("| (%ld, %ld) | %d | %.4g |\n",
-               (long)pts[i].y, (long)pts[i].x, r, ref);
+        s32 r = FR_atan2(pts[i].y, pts[i].x, 16);
+        double ref = atan2((double)pts[i].y, (double)pts[i].x);
+        printf("| (%ld, %ld) | %.4f | %.4f |\n",
+               (long)pts[i].y, (long)pts[i].x, frd(r, 16), ref);
     }
-    printf("\n> `FR_atan2` returns degrees with max error ~1 LSB (= 1 degree).\n");
-    printf("> `FR_atan(x, radix)` is implemented as `FR_atan2(x, 1<<radix)` and returns degrees.\n\n");
+    printf("\n> `FR_atan2` returns radians at the specified output radix.\n");
+    printf("> `FR_atan(x, radix, out_radix)` is implemented as `FR_atan2(x, 1<<radix, out_radix)`.\n\n");
 }
 
 /* ============================================================
@@ -1436,14 +1463,14 @@ static void section_summary(void) {
     printf("| FR_NUM | OK | 2.4 | `FR_NUM(i,f,d,r)` honors fractional argument |\n");
     printf("| FR_DEG2RAD / FR_RAD2DEG | OK | 3, 3.1 | `FR_DEG2RAD(x)` multiplies by π/180, `FR_RAD2DEG(x)` by 180/π |\n");
     printf("| FR_SMUL10, FR_SDIV10, FR_S(r)LOG2*, FR_RAD2Q/Q2RAD/DEG2Q/Q2DEG | OK | 3 | Approximation factors match expected to ~5 decimals |\n");
-    printf("| FR_FixMuls | OK | 4.1 | int64 fast path |\n");
-    printf("| FR_FixMulSat | OK | 4.2, 4.3 | int64 fast path with explicit saturation |\n");
+    printf("| FR_FixMuls | OK | 4.1 | int64 fast path; rounds to nearest (+0x8000 before >>16) |\n");
+    printf("| FR_FixMulSat | OK | 4.2, 4.3 | int64 fast path with round-to-nearest and explicit saturation |\n");
     printf("| FR_FixAddSat | OK | 4.4, 4.5 | Saturation behaves identically on LP64 host and ILP32 MCU |\n");
-    printf("| FR_CosI / FR_SinI | OK | 5 | Max abs error ~3e-5 (1 LSB in s0.15) over [-720, +720]; implemented as macros routing to fr_*_bam |\n");
+    printf("| FR_CosI / FR_SinI | OK | 5 | s15.16 output; exact at poles; max abs error ~1.5e-5 (1 LSB s15.16) over [-720, +720]; macros routing to fr_*_bam |\n");
     printf("| FR_TanI (integer degrees) | OK | 5.1, 5.2 | Routed through BAM trig |\n");
     printf("| FR_Cos / FR_Sin (interpolated) | OK | 6.1 | Within LSB-level error for r8 inputs in s16 |\n");
     printf("| FR_Tan (interpolated) | OK | 6.2 | Locals are s32 |\n");
-    printf("| fr_cos / fr_sin / fr_cos_bam / fr_sin_bam / fr_cos_deg / fr_sin_deg | OK | 6 | Radian/BAM/degree-native trig; 129-entry s0.15 quadrant table with round-to-nearest linear interp; max err ≤1 LSB s0.15 |\n");
+    printf("| fr_cos / fr_sin / fr_cos_bam / fr_sin_bam / fr_cos_deg / fr_sin_deg | OK | 6 | s15.16 output; 129-entry quadrant table with round-to-nearest linear interp; exact at cardinal angles |\n");
     printf("| FR_acos | OK | 7.1 | Max error ~0.83° over [-1, +1] swept at 200 points |\n");
     printf("| FR_asin | OK | 7.2 | Same precision as FR_acos |\n");
     printf("| FR_atan2 | OK | 7.3 | Octant-reduced arctan with 33-entry table; max err ≤1°; signature `FR_atan2(y, x)` returns degrees |\n");
@@ -1465,7 +1492,8 @@ static void section_summary(void) {
     printf("| FR_Matrix2D_CPT::setrotate (both overloads) | OK | 10.4 | Within 1 LSB of `cos`/`sin` from libm; sign convention is `[c -s; s c]` (CCW rotation) |\n");
     printf("| FR_Matrix2D_CPT::add, sub, +=, -=, *= | OK | 10.9 | Return void |\n");
     printf("| FR_Matrix2D_CPT::checkfast | OK | 10.10 | Detects scale-only matrices |\n");
-    printf("| FR_sqrt | OK | 11.1, 11.2 | Digit-by-digit isqrt64; bit-exact floor; FR_DOMAIN_ERROR sentinel for negative |\n");
+    printf("| FR_sqrt | OK | 11.1, 11.2 | Digit-by-digit isqrt64; round-to-nearest (remainder > root → +1); FR_DOMAIN_ERROR sentinel for negative |\n");
+    printf("| FR_DIV / FR_DIV32 | OK | 4.6 | FR_DIV uses s64 intermediate (full Q16.16 range); FR_DIV32 is 32-bit only |\n");
     printf("| FR_hypot | OK | 11.4 | Direct sum-of-squares on int64 |\n");
     printf("| fr_wave_sqr / fr_wave_pwm | OK | 11.5 | Single-comparison pulse generators; ±32767 amplitude |\n");
     printf("| fr_wave_tri | OK | 11.6, 11.7 | Symmetric triangle, peaks clamped to ±32767 |\n");

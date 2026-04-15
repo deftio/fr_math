@@ -460,18 +460,20 @@ gives you two spellings of the same idea:
   same-radix-`r` values and return the product at
   radix `r`. Uses an `int64_t`
   intermediate so the 32-bit intermediate overflow trap
-  doesn't fire. **Truncates** on the way
-  down — no clamp, no rounding.
-- `FR_FixMulSat(a, b, r)` — same shape, but
+  doesn't fire. **Rounds to nearest** (adds
+  0.5 LSB before the shift) — no clamp.
+- `FR_FixMulSat(a, b, r)` — same shape with the
+  same round-to-nearest, but
   saturates to `FR_OVERFLOW_POS` /
   `FR_OVERFLOW_NEG` if the result wouldn't
   fit. Prefer this one by default unless you've proven
   the product stays in range.
 
-There's also a macro form `FR_MUL(a, ar, b, br, r)`
-that handles the mixed-radix case — you can multiply an
-`s11.4` by an `s9.6` and ask for the answer at
-radix 8 without doing any manual shifts.
+For the mixed-radix case — multiplying an
+`s11.4` by an `s9.6` and landing the answer at
+radix 8 — the same pattern applies: promote to `int64_t`,
+multiply, and shift by `(ar + br - r)` to reach the
+desired output radix.
 
 ### Division
 
@@ -530,11 +532,15 @@ Three things to watch for:
   `−b / 2` (for a negative numerator) to the pre-scaled numerator
   before the divide.
 
-FR_Math intentionally does not ship a division macro. Division is
-far less common than multiply in the kinds of pipelines the
-library targets, and every real use has slightly different
-constraints around the divisor check and the rounding mode. The
-pattern above inlines cleanly at the call site when it's needed.
+FR_Math provides `FR_DIV(x, xr, y, yr)` which expands to
+`((s64)(x) << (yr)) / (s32)(y)`. The numerator is promoted to
+a 64-bit intermediate before the shift, so the full Q16.16 range
+works correctly without overflow. For tiny targets where 64-bit
+ops are too expensive (PIC, AVR, 8051), `FR_DIV32(x, xr, y, yr)`
+is the 32-bit-only path — it requires `|x| < 2^(31 − yr)` to
+avoid overflow in the intermediate shift. For the complementary
+remainder, `FR_MOD(x, y)` expands to `(x) % (y)` with standard
+C truncation-toward-zero semantics.
 
 ### Changing radix
 
@@ -632,7 +638,7 @@ to engage for a given piece of code.
    `FR_FixMulSat` and `FR_FixAddSat` clamp
    the result to `FR_OVERFLOW_POS` (aliases
    `INT32_MAX`) or `FR_OVERFLOW_NEG`
-   (aliases `INT32_MIN + 1`) instead of wrapping.
+   (aliases `INT32_MIN`, i.e. `0x80000000`) instead of wrapping.
    Think of saturation as the DSP convention: if the answer
    won't fit, return the nearest value that will. Better to
    lose precision at the extremes than to wrap a big positive
@@ -642,9 +648,8 @@ to engage for a given piece of code.
    their domain: `FR_sqrt(-1)`, `FR_log2(0)`,
    `FR_asin(x)` with `|x| > 1`, and so
    on. These return `FR_DOMAIN_ERROR`
-   (`INT32_MIN`), which is a value that can never
-   occur as a valid result because it sits one step below the
-   saturation range. You check for it with a plain
+   (`INT32_MIN`, i.e. `0x80000000` — the same value as
+   `FR_OVERFLOW_NEG`). You check for it with a plain
    `if`.
 
 In practice: call the saturating variants by default, check for
@@ -856,7 +861,7 @@ generation of each symbol:
 
 | Prefix | What it is | Example |
 | --- | --- | --- |
-| `FR_XXX()` | `UPPERCASE` macro — inline, zero call overhead. | `FR_ADD`, `FR_MUL`, `FR_FR2I` |
+| `FR_XXX()` | `UPPERCASE` macro — inline, zero call overhead. | `FR_ADD`, `FR_ABS`, `FR2I` |
 | `FR_Xxx()` | Mixed-case C function — the classic v1 API. Integer-degree trig and related. | `FR_Sin`, `FR_log2`, `FR_sqrt` |
 | `fr_xxx()` | Lowercase C function — v2 additions (radian / BAM trig, wave generators, ADSR). | `fr_sin`, `fr_wave_tri`, `fr_adsr_step` |
 | `s8, s16, s32` | Signed integer typedefs (aliases for `int8_t`, `int16_t`, `int32_t`). | — |
@@ -871,13 +876,13 @@ worth knowing what they actually do:
   — take an integer, shift it up by `r` bits,
   and now it's a radix-`r` fixed-point value.
   `I2FR(3, 4)` is 48, i.e. 3.0 at s.4.
-- `FR_FR2I(x, r)` expands to
+- `FR2I(x, r)` expands to
   `(x) >> (r)` — the reverse. Careful:
   C's right shift on signed values truncates toward
-  −∞, so `FR_FR2I(-1, 4)` is
+  −∞, so `FR2I(-1, 4)` is
   `-1`, not `0`. If you want
   round-to-nearest (which is usually what you want for display),
-  use `FR_FR2Iround(x, r)`.
+  add half an LSB before shifting: `(x + (1 << (r - 1))) >> r`.
 
 ## Angle representations
 

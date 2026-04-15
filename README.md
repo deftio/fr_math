@@ -3,7 +3,7 @@
 [![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen.svg)](#building-and-testing)
 [![Tests](https://img.shields.io/badge/tests-42%20passing-brightgreen.svg)](#building-and-testing)
 [![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://deftio.github.io/fr_math/)
-[![Version](https://img.shields.io/badge/version-2.0.0-blue.svg)](release_notes.md)
+[![Version](https://img.shields.io/badge/version-2.0.1-blue.svg)](release_notes.md)
 
 # FR_Math: A C Language Fixed-Point Math Library for Embedded Systems
  
@@ -281,7 +281,7 @@ This library can be used freely in open source or commercial projects.
 
 ## Version
 
-Current version: 2.0.0 — see [release_notes.md](release_notes.md) for the
+Current version: 2.0.1 — see [release_notes.md](release_notes.md) for the
 v1 → v2 migration guide and the full list of numerical fixes and new
 functionality (radian-native trig, BAM macros, wave generators, ADSR,
 sqrt/hypot, fast approximate hypot).

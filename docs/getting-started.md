@@ -59,14 +59,14 @@ int main(void)
     s32 pi_fixed = pi_int + pi_frac;
     printf("pi as s15.16 = 0x%08x = %d.%06d\n",
            pi_fixed,
-           FR_FR2I(pi_fixed, radix),                /* integer part */
-           FR_FR2I((pi_fixed & ((1 << radix) - 1)) * 1000000, radix));
+           FR2I(pi_fixed, radix),                /* integer part */
+           FR2I((pi_fixed & ((1 << radix) - 1)) * 1000000, radix));
 
     /* Multiply pi by 2 at the same radix using FR_FixMuls. */
-    s32 two_pi = FR_FixMuls(pi_fixed, I2FR(2, radix), radix);
+    s32 two_pi = FR_FixMuls(pi_fixed, I2FR(2, radix));
     printf("2*pi ~= %d.%06d\n",
-           FR_FR2I(two_pi, radix),
-           FR_FR2I((two_pi & ((1 << radix) - 1)) * 1000000, radix));
+           FR2I(two_pi, radix),
+           FR2I((two_pi & ((1 << radix) - 1)) * 1000000, radix));
 
     return 0;
 }
@@ -152,7 +152,7 @@ int main(void)
      * Use FR_NUM for any value you know at compile time.              */
     s32 pi     = FR_NUM(3, 14159, 5, radix);   /* 3.14159  s15.16  */
     s32 two    = I2FR(2, radix);                /* 2.0      s15.16  */
-    s32 two_pi = FR_FixMuls(pi, two, radix);    /* 2 * pi   s15.16  */
+    s32 two_pi = FR_FixMuls(pi, two);            /* 2 * pi   s15.16  */
 
     /* ---- Runtime string parser: FR_numstr(string, radix) ----
      *
@@ -182,9 +182,9 @@ int main(void)
     emit("\r\n");
 
     /* Trig: cos(45 deg) printed as fixed-point and hex. */
-    s16 cos45 = FR_CosI(45);                         /* s0.15         */
+    s32 cos45 = FR_CosI(45);                         /* s15.16        */
     emit("cos(45) = ");
-    FR_printNumF(uart_putc, (s32)cos45, 15, 0, 5);   /* decimal       */
+    FR_printNumF(uart_putc, cos45, 16, 0, 5);        /* decimal       */
     emit(" (");
     FR_printNumH(uart_putc, cos45, 1);                /* hex           */
     emit(")\r\n");
@@ -248,17 +248,18 @@ Then pass `buf_putc` in place of `uart_putc`. After the call,
 
 int main(void)
 {
-    FR_Matrix2D_CP M;
-    M.setidentity();        /* identity at the default radix */
+    FR_Matrix2D_CPT M;
+    M.ID();                 /* identity at the default radix */
     M.setrotate(45);        /* rotate 45 degrees */
-    M.settranslate(I2FR(100, 16), I2FR(50, 16));
+    M.XlateI(100, 50);
 
-    FR_2DPoint p = { I2FR(10, 16), I2FR(0, 16) };
-    M.XformPt(&p);          /* p becomes ~(107, 57) */
+    s32 px = I2FR(10, 16), py = I2FR(0, 16);
+    s32 rx, ry;
+    M.XFormPtI(px, py, &rx, &ry);  /* result ~(107, 57) */
 
     printf("x=%d y=%d\n",
-           FR_FR2I(p.x, 16),
-           FR_FR2I(p.y, 16));
+           FR2I(rx, 16),
+           FR2I(ry, 16));
     return 0;
 }
 ```
@@ -273,7 +274,7 @@ make test           # build + run every test suite
 make coverage       # coverage report (requires gcov)
 ```
 
-As of v2.0.0, FR_Math ships with 42 passing tests and 99% line
+As of v2.0.1, FR_Math ships with 42 passing tests and 99% line
 coverage across the library sources.
 
 ## Next steps

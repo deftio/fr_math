@@ -29,7 +29,7 @@ mandatory.
   new leading-bit-position + 33-entry mantissa table with linear
   interpolation. v1 returned wrong values for non-power-of-2
   inputs.
-- `FR_pow2` / `FR_exp` / `FR_pow10`:
+- `FR_pow2` / `FR_EXP` / `FR_POW10`:
   corrected floor-toward-−∞ integer-part extraction.
   v1 gave wrong answers for negative non-integer inputs.
 - `FR_atan2`: v1 was a placeholder that returned

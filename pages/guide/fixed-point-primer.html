@@ -486,19 +486,21 @@ gives you two spellings of the same idea:</p>
       same-radix-<code>r</code> values and return the product at
       radix <code>r</code>. Uses an <code>int64_t</code>
       intermediate so the 32-bit intermediate overflow trap
-      doesn&rsquo;t fire. <strong>Truncates</strong> on the way
-      down &mdash; no clamp, no rounding.</li>
-  <li><code>FR_FixMulSat(a, b, r)</code> &mdash; same shape, but
-      saturates to <code>FR_OVERFLOW_POS</code> /
+      doesn&rsquo;t fire. <strong>Rounds to nearest</strong> &mdash;
+      adds 0.5&nbsp;LSB before the shift.</li>
+  <li><code>FR_FixMulSat(a, b, r)</code> &mdash; same shape with
+      the same round-to-nearest behaviour, but also saturates to
+      <code>FR_OVERFLOW_POS</code> /
       <code>FR_OVERFLOW_NEG</code> if the result wouldn&rsquo;t
       fit. Prefer this one by default unless you&rsquo;ve proven
       the product stays in range.</li>
 </ul>
 
-<p>There&rsquo;s also a macro form <code>FR_MUL(a, ar, b, br, r)</code>
-that handles the mixed-radix case &mdash; you can multiply an
-<code>s11.4</code> by an <code>s9.6</code> and ask for the answer at
-radix 8 without doing any manual shifts.</p>
+<p>For the mixed-radix case &mdash; multiplying an
+<code>s11.4</code> by an <code>s9.6</code> and landing the answer at
+radix 8 &mdash; the same pattern applies: promote to <code>int64_t</code>,
+multiply, and shift by <code>(ar + br - r)</code> to reach the
+desired output radix.</p>
 
 <h3>Division</h3>
 
@@ -559,12 +561,9 @@ s32 right = ((s64)a &lt;&lt; 4) / b;
       the pre-scaled numerator before the divide.</li>
 </ul>
 
-<p>FR_Math intentionally does not ship a division macro.
-Division is far less common than multiply in the kinds of
-pipelines the library targets, and every real use has slightly
-different constraints around the divisor check and the rounding
-mode. The pattern above inlines cleanly at the call site when
-it&rsquo;s needed.</p>
+<p>FR_Math provides <code>FR_DIV(x, xr, y, yr)</code> which expands to <code>((s64)(x) &lt;&lt; (yr)) / (s32)(y)</code>. The numerator is promoted to a 64-bit intermediate before the shift, so the full Q16.16 range works correctly without overflow. For the complementary remainder, <code>FR_MOD(x, y)</code> expands to <code>(x) % (y)</code> with standard C truncation-toward-zero semantics.</p>
+
+<p>On tiny targets (PIC, AVR, 8051) where 64-bit operations are too expensive, <code>FR_DIV32(x, xr, y, yr)</code> provides a 32-bit-only legacy path that expands to <code>((s32)(x) &lt;&lt; (yr)) / (s32)(y)</code>. Because the shift stays in 32&nbsp;bits, the numerator must satisfy <code>|x| &lt; 2<sup>(31 &minus; yr)</sup></code> or the left shift wraps before the divide.</p>
 
 <h3>Changing radix</h3>
 
@@ -664,7 +663,7 @@ to engage for a given piece of code.</p>
       <code>FR_FixMulSat</code> and <code>FR_FixAddSat</code> clamp
       the result to <code>FR_OVERFLOW_POS</code> (aliases
       <code>INT32_MAX</code>) or <code>FR_OVERFLOW_NEG</code>
-      (aliases <code>INT32_MIN + 1</code>) instead of wrapping.
+      (aliases <code>INT32_MIN</code>, i.e. <code>0x80000000</code>) instead of wrapping.
       Think of saturation as the DSP convention: if the answer
       won&rsquo;t fit, return the nearest value that will. Better to
       lose precision at the extremes than to wrap a big positive
@@ -674,9 +673,8 @@ to engage for a given piece of code.</p>
       their domain: <code>FR_sqrt(-1)</code>, <code>FR_log2(0)</code>,
       <code>FR_asin(x)</code> with <code>|x| &gt; 1</code>, and so
       on. These return <code>FR_DOMAIN_ERROR</code>
-      (<code>INT32_MIN</code>), which is a value that can never
-      occur as a valid result because it sits one step below the
-      saturation range. You check for it with a plain
+      (<code>INT32_MIN</code>, i.e. <code>0x80000000</code> &mdash; the same value as
+      <code>FR_OVERFLOW_NEG</code>). You check for it with a plain
       <code>if</code>.</li>
 </ol>
 
@@ -912,7 +910,7 @@ generation of each symbol:</p>
 <table>
 <thead><tr><th>Prefix</th><th>What it is</th><th>Example</th></tr></thead>
 <tbody>
-<tr><td><code>FR_XXX()</code></td><td><code>UPPERCASE</code> macro &mdash; inline, zero call overhead.</td><td><code>FR_ADD</code>, <code>FR_MUL</code>, <code>FR_FR2I</code></td></tr>
+<tr><td><code>FR_XXX()</code></td><td><code>UPPERCASE</code> macro &mdash; inline, zero call overhead.</td><td><code>FR_ADD</code>, <code>FR_ABS</code>, <code>FR2I</code></td></tr>
 <tr><td><code>FR_Xxx()</code></td><td>Mixed-case C function &mdash; the classic v1 API. Integer-degree trig and related.</td><td><code>FR_Sin</code>, <code>FR_log2</code>, <code>FR_sqrt</code></td></tr>
 <tr><td><code>fr_xxx()</code></td><td>Lowercase C function &mdash; v2 additions (radian / BAM trig, wave generators, ADSR).</td><td><code>fr_sin</code>, <code>fr_wave_tri</code>, <code>fr_adsr_step</code></td></tr>
 <tr><td><code>s8, s16, s32</code></td><td>Signed integer typedefs (aliases for <code>int8_t</code>, <code>int16_t</code>, <code>int32_t</code>).</td><td>&mdash;</td></tr>
@@ -930,13 +928,13 @@ worth knowing what they actually do:</p>
       &mdash; take an integer, shift it up by <code>r</code> bits,
       and now it&rsquo;s a radix-<code>r</code> fixed-point value.
       <code>I2FR(3, 4)</code> is 48, i.e. 3.0 at s.4.</li>
-  <li><code>FR_FR2I(x, r)</code> expands to
+  <li><code>FR2I(x, r)</code> expands to
       <code>(x) &gt;&gt; (r)</code> &mdash; the reverse. Careful:
       C&rsquo;s right shift on signed values truncates toward
-      &minus;&infin;, so <code>FR_FR2I(-1, 4)</code> is
+      &minus;&infin;, so <code>FR2I(-1, 4)</code> is
       <code>-1</code>, not <code>0</code>. If you want
       round-to-nearest (which is usually what you want for display),
-      use <code>FR_FR2Iround(x, r)</code>.</li>
+      add half an LSB before shifting: <code>(x + (1 &lt;&lt; (r - 1))) &gt;&gt; r</code>.</li>
 </ul>
 
 <h2>Angle representations</h2>

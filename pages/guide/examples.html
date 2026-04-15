@@ -78,42 +78,41 @@ input radix), and BAM-native <code>fr_sin_bam</code> /
 quadrant cosine table under the hood and should produce nearly
 identical results.</p>
 
-<p><em>Caveats:</em> the three output formats are <strong>not</strong>
-the same radix. <code>FR_Sin(deg, radix)</code> returns s0.15 (not
-at the radix you passed in &mdash; that radix is the radix of
-<code>deg</code>, not of the sine result). <code>fr_sin_bam</code>
-returns s0.15 too. The radian-native form returns s0.15 as well.
-So the raw values compared below are all in the same s0.15
-format.</p>
+<p><em>Caveats:</em> the <code>radix</code> parameter on
+<code>FR_Sin(deg, radix)</code> is the radix of the <em>degree
+input</em>, not the output. All sin/cos functions return
+<strong>s15.16</strong> &mdash; that is, <code>s32</code> at radix 16,
+where 1.0 = 65536 (<code>FR_TRIG_ONE</code>). The values compared
+below are all in the same s15.16 format.</p>
 
 <pre><code class="language-c">#include &lt;stdio.h&gt;
 #include "FR_math.h"
 
 int main(void)
 {
-    /* Integer-degree legacy API &mdash; returns s0.15 */
-    s16 s30_deg = FR_SinI(30);
-    s16 c60_deg = FR_CosI(60);
+    /* Integer-degree legacy API &mdash; returns s15.16 */
+    s32 s30_deg = FR_SinI(30);
+    s32 c60_deg = FR_CosI(60);
 
-    /* BAM-native core &mdash; same s0.15 output */
-    s16 s30_bam = fr_sin_bam(FR_DEG2BAM(30));
-    s16 c60_bam = fr_cos_bam(FR_DEG2BAM(60));
+    /* BAM-native core &mdash; same s15.16 output */
+    s32 s30_bam = fr_sin_bam(FR_DEG2BAM(30));
+    s32 c60_bam = fr_cos_bam(FR_DEG2BAM(60));
 
     /* Radian-native: input is radians at whatever radix you pass.
        Here we use FR_kPI at radix 16 to build pi/6 = 30 degrees. */
     s32 pi_over_6 = FR_kPI / 6;             /* radix 16 */
-    s16 s30_rad   = fr_sin(pi_over_6, 16);  /* s0.15 out */
+    s32 s30_rad   = fr_sin(pi_over_6, 16);  /* s15.16 out */
 
-    printf("FR_SinI(30)     = %d   (s0.15)\n", s30_deg);
-    printf("fr_sin_bam(30deg)= %d   (s0.15)\n", s30_bam);
-    printf("fr_sin(pi/6)    = %d   (s0.15)\n", s30_rad);
-    printf("FR_CosI(60)     = %d   (s0.15)\n", c60_deg);
-    printf("expected 0.5    = %d   (1 &lt;&lt; 14)\n", 1 &lt;&lt; 14);
+    printf("FR_SinI(30)     = %d   (s15.16)\n", s30_deg);
+    printf("fr_sin_bam(30deg)= %d   (s15.16)\n", s30_bam);
+    printf("fr_sin(pi/6)    = %d   (s15.16)\n", s30_rad);
+    printf("FR_CosI(60)     = %d   (s15.16)\n", c60_deg);
+    printf("expected 0.5    = %d   (1 &lt;&lt; 15)\n", 1 &lt;&lt; 15);
     return 0;
 }</code></pre>
 
 <p>All four answers should land within a couple of LSBs of
-<code>1 &lt;&lt; 14 = 16384</code>, which is 0.5 in s0.15.</p>
+<code>1 &lt;&lt; 15 = 32768</code>, which is 0.5 in s15.16.</p>
 
 <h2>3. Square root and hypotenuse</h2>
 

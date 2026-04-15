@@ -32,8 +32,8 @@
 #ifndef __FR_Math_h__
 #define __FR_Math_h__
 
-#define FR_MATH_VERSION     "2.0.0"
-#define FR_MATH_VERSION_HEX  0x020000  /* major << 16 | minor << 8 | patch */
+#define FR_MATH_VERSION     "2.0.1"
+#define FR_MATH_VERSION_HEX  0x020001  /* major << 16 | minor << 8 | patch */
 
 #ifdef __cplusplus
 extern "C"
@@ -129,6 +129,23 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 #define FR_ADD(x, xr, y, yr) ((x) += FR_CHRDX(y, yr, xr))
 #define FR_SUB(x, xr, y, yr) ((x) -= FR_CHRDX(y, yr, xr))
 
+/* Fixed-radix division: x (at radix xr) / y (at radix yr), result at radix xr.
+ * Uses a 64-bit intermediate so the full Q16.16 range works correctly. */
+#define FR_DIV(x, xr, y, yr) ((s32)(((s64)(x) << (yr)) / (s32)(y)))
+
+/* FR_DIV32: 32-bit-only division. Requires |x| < 2^(31-yr) to avoid
+ * overflow in the intermediate (x << yr). Use FR_DIV for full-range
+ * division with 64-bit intermediate. */
+#define FR_DIV32(x, xr, y, yr) (((s32)(x) << (yr)) / (s32)(y))
+
+/* Remainder: both operands should be at the same radix. */
+#define FR_MOD(x, y) ((x) % (y))
+
+/* min, max, clamp */
+#define FR_MIN(a, b)         (((a) < (b)) ? (a) : (b))
+#define FR_MAX(a, b)         (((a) > (b)) ? (a) : (b))
+#define FR_CLAMP(x, lo, hi)  (FR_MIN(FR_MAX((x), (lo)), (hi)))
+
 /* Check if x is a power of 2. */
 #define FR_ISPOW2(x) (!((x) & ((x) - 1)))
 
@@ -208,14 +225,20 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 
 /*================================================
  * Constants used in Trig tables, definitions
- FR_TRIG_PREC == the number of bits of precision of built-in trig functions
- FR_TRIG_MASK == masking of the lower FR_TRIG_PREC bits in internal operations
- FR_TRIG_MAXVAL == maximum fixed pt num returned by trig operations (e.g. Tan(90 deg))
- FR_TRIG_MINVAL == minumum fixed pt num returned by trig operations (e.g. Tan(270 deg))
+ *
+ * FR_TRIG_PREC     — internal table precision (s0.15, kept for table indexing)
+ * FR_TRIG_OUT_PREC — output precision of sin/cos/tan (s15.16 since v2.0.1)
+ * FR_TRIG_ONE      — exact 1.0 in output format (1 << 16 = 65536)
+ *
+ * sin/cos return s32 at radix 16 (s15.16). This matches libfixmath Q16.16
+ * precision and allows exact representation of 1.0 at the poles.
+ * tan returns s32 at radix 16 (s15.16). Saturates at ±FR_TRIG_MAXVAL.
  */
-#define FR_TRIG_PREC (15)
-#define FR_TRIG_MASK ((1 << (FR_TRIG_PREC)) - 1)
-#define FR_TRIG_MAXVAL (FR_TRIG_MASK)
+#define FR_TRIG_PREC     (15)
+#define FR_TRIG_OUT_PREC (16)
+#define FR_TRIG_MASK     ((1 << (FR_TRIG_PREC)) - 1)
+#define FR_TRIG_ONE      (1L << FR_TRIG_OUT_PREC)         /* 65536 = 1.0 */
+#define FR_TRIG_MAXVAL   ((s32)0x7fffffff)                 /* tan saturation */
 #define FR_TRIG_MINVAL (-FR_TRIG_MASK)
 
 /* Bit Shift Scaling macros.  Useful on some platforms with poor MUL performance.
@@ -324,30 +347,35 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
  */
 #define FR_RAD2BAM(rad, radix)  ((u16)(((s32)(rad) * 10430L) >> (radix)))
 
-/* Convert BAM -> radians at the requested output radix. */
-#define FR_BAM2RAD(bam, radix)  (((s32)(u16)(bam) * 6434L) >> (16 - (radix)))
+/* Convert BAM -> radians at the requested output radix.
+ * Derivation: rad = bam * 2π / 65536. At output radix r: bam * 2π * 2^r / 2^16
+ *           = bam * (2π * 2^10) / 2^(26 - r) = bam * 6434 >> (26 - r).
+ */
+#define FR_BAM2RAD(bam, radix)  (((s32)(u16)(bam) * 6434L) >> (26 - (radix)))
 
 /*===============================================
  * Radian-native and BAM-native trig (recommended)
  *
- *   fr_cos_bam(bam)         — cos of an angle in BAM units, s0.15 result
- *   fr_sin_bam(bam)         — sin of an angle in BAM units, s0.15 result
- *   fr_cos(rad, radix)      — cos of an angle in radians at given radix, s0.15
- *   fr_sin(rad, radix)      — sin of an angle in radians at given radix, s0.15
- *   fr_tan(rad, radix)      — tan of an angle in radians at given radix, s15.16
- *   fr_cos_deg(deg)         — cos of an angle in integer degrees, s0.15
- *   fr_sin_deg(deg)         — sin of an angle in integer degrees, s0.15
+ * All sin/cos functions return s32 at radix 16 (s15.16).
+ * 1.0 is represented exactly as FR_TRIG_ONE (65536).
+ * Poles (0, 90, 180, 270 deg) produce exact ±FR_TRIG_ONE or 0.
  *
- * All of these go through the same 129-entry quadrant table and use linear
- * interpolation. Worst-case absolute error: ~4e-5 (1.3 LSB in s0.15).
+ *   fr_cos_bam(bam)         — cos of a BAM angle,        s15.16 result
+ *   fr_sin_bam(bam)         — sin of a BAM angle,        s15.16 result
+ *   fr_cos(rad, radix)      — cos of radians at radix,   s15.16 result
+ *   fr_sin(rad, radix)      — sin of radians at radix,   s15.16 result
+ *   fr_tan(rad, radix)      — tan of radians at radix,   s15.16 result
+ *   fr_cos_deg(deg)         — cos of integer degrees,    s15.16 result
+ *   fr_sin_deg(deg)         — sin of integer degrees,    s15.16 result
  *
- * The deg/rad/BAM trio is provided as macros where possible so unused
- * variants dissolve at compile time.
+ * All go through the same 129-entry quadrant table with linear interpolation.
+ * Worst-case error: ~2 LSB in s15.16 (~3e-5 absolute), except at the four
+ * cardinal angles where the result is exact.
  */
-  s16 fr_cos_bam(u16 bam);
-  s16 fr_sin_bam(u16 bam);
-  s16 fr_cos(s32 rad, u16 radix);
-  s16 fr_sin(s32 rad, u16 radix);
+  s32 fr_cos_bam(u16 bam);
+  s32 fr_sin_bam(u16 bam);
+  s32 fr_cos(s32 rad, u16 radix);
+  s32 fr_sin(s32 rad, u16 radix);
   s32 fr_tan(s32 rad, u16 radix);
 
 #define fr_cos_deg(deg)  fr_cos_bam(FR_DEG2BAM(deg))
@@ -356,30 +384,30 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 /*===============================================
  * Integer-degree trig API (thin wrappers over the BAM-native path)
  *
- *   FR_CosI(deg)            — cos of integer degrees, s0.15 result
- *   FR_SinI(deg)            — sin of integer degrees, s0.15 result
- *   FR_TanI(deg)            — tan of integer degrees, s15.16 result
- *   FR_Cos(deg, radix)      — cos of fixed-radix degrees, s0.15 result
- *   FR_Sin(deg, radix)      — sin of fixed-radix degrees, s0.15 result
- *   FR_Tan(deg, radix)      — tan of fixed-radix degrees, s15.16 result
- *
- * The integer-degree variants are zero-cost macros over fr_cos_bam.
- * The fixed-radix variants use multiply-by-reciprocal to convert s.r
- * degrees to BAM with no division (8051-friendly).
+ *   FR_CosI(deg)            — cos of integer degrees,       s15.16 result
+ *   FR_SinI(deg)            — sin of integer degrees,       s15.16 result
+ *   FR_TanI(deg)            — tan of integer degrees,       s15.16 result
+ *   FR_Cos(deg, radix)      — cos of fixed-radix degrees,   s15.16 result
+ *   FR_Sin(deg, radix)      — sin of fixed-radix degrees,   s15.16 result
+ *   FR_Tan(deg, radix)      — tan of fixed-radix degrees,   s15.16 result
  */
 #define FR_CosI(deg)  fr_cos_bam(FR_DEG2BAM(deg))
 #define FR_SinI(deg)  fr_sin_bam(FR_DEG2BAM(deg))
 
-  s16 FR_Cos(s16 deg, u16 radix);
-  s16 FR_Sin(s16 deg, u16 radix);
+  s32 FR_Cos(s16 deg, u16 radix);
+  s32 FR_Sin(s16 deg, u16 radix);
   s32 FR_TanI(s16 deg);
   s32 FR_Tan(s16 deg, u16 radix);
 
-  /* Inverse trig (output in degrees, range [-180, 180] for atan2 / [-90, 90] for atan / [0, 180] for acos / [-90, 90] for asin) */
-  s16 FR_acos(s32 input, u16 radix);
-  s16 FR_asin(s32 input, u16 radix);
-  s16 FR_atan(s32 input, u16 radix);
-  s16 FR_atan2(s32 y, s32 x); /* full-circle arctan, returns degrees */
+  /* Inverse trig — output in radians at caller-specified radix (s32).
+   * FR_atan2 returns radians at radix 16 (s15.16).
+   * Range: acos [0, pi], asin [-pi/2, pi/2],
+   *        atan [-pi/2, pi/2], atan2 [-pi, pi].
+   */
+  s32 FR_acos(s32 input, u16 radix, u16 out_radix);
+  s32 FR_asin(s32 input, u16 radix, u16 out_radix);
+  s32 FR_atan(s32 input, u16 radix, u16 out_radix);
+  s32 FR_atan2(s32 y, s32 x, u16 out_radix);
 
 /* Logarithms */
 #define FR_LOG2MIN (-(32767 << 16)) /* returned instead of "negative infinity" */

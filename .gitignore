@@ -76,3 +76,6 @@ docs/html/
 __pycache__/
 *.pyc
 *.pyo
+
+
+.compare

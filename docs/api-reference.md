@@ -2,8 +2,8 @@
 
 Every public symbol, grouped by topic. Each entry lists the radix
 convention, the precision, and the error / saturation behaviour. All
-types are from `FR_defs.h`: `s8 s16 s32` for
-signed and `u8 u16 u32` for unsigned integers (these are
+types are from `FR_defs.h`: `s8 s16 s32 s64` for
+signed and `u8 u16 u32 u64` for unsigned integers (these are
 aliases for the `<stdint.h>` types).
 
 ## Reading this reference
@@ -49,10 +49,13 @@ A concrete example of the discipline:
 /* Good: all three values live at radix 16 until we commit. */
 s32 a   = I2FR(3, 16);                /* 3.0 at s15.16   */
 s32 b   = FR_sqrt(I2FR(2, 16), 16);   /* sqrt(2) at s15.16 */
-s32 sum = FR_ADD(a, 16, b, 16, 16);   /* still s15.16     */
+FR_ADD(a, 16, b, 16);                 /* a += b, both at radix 16  */
 
-/* Commit back to an integer count at the end. */
-int n = FR_FR2Iround(sum, 16);
+/* Commit back to an integer count at the end.
+ * FR2I truncates; for round-to-nearest, add half an LSB first:
+ *   a += (1 << (16 - 1));
+ */
+int n = FR2I(a, 16);
 ```
 
 You never see a *radix* field on any of these values. The
@@ -146,6 +149,17 @@ so call sites read as intent:
 | `FR_INTERP(x0, x1, delta, prec)` | `x0`, `x1`: endpoints (any radix, same radix as each other); `delta`: blend at radix `prec` in [0, 1]; `prec`: radix of `delta` | Same radix as `x0`/`x1` | `x0 + ((x1 - x0) * delta) >> prec`. Linear lerp. Extrapolates outside `[0, 1]`; you own the overflow check. |
 | `FR_INTERPI(x0, x1, delta, prec)` | as above, but `delta` is unsigned and masked into `[0, (1<<prec))` | as above | The "I" version forces `delta` into range, so it's safer when `delta` comes from an untrusted upstream (e.g. a running counter). |
 
+## Utility macros
+
+| Macro | Inputs | Output | Notes |
+| --- | --- | --- | --- |
+| `FR_MIN(a, b)` | Two values of the same type | The smaller of the two | Evaluates each argument once. |
+| `FR_MAX(a, b)` | Two values of the same type | The larger of the two | Evaluates each argument once. |
+| `FR_CLAMP(x, lo, hi)` | `x`: value; `lo`, `hi`: bounds | `x` clamped to `[lo, hi]` | Equivalent to `FR_MIN(FR_MAX(x, lo), hi)`. |
+| `FR_DIV(x, xr, y, yr)` | `x`: numerator at radix `xr`; `y`: denominator at radix `yr` | `s32` at radix `xr` | `((s64)(x) << (yr)) / (s32)(y)`. Pre-scales the numerator in a 64-bit intermediate to preserve fractional bits. Works correctly across the full Q16.16 range. |
+| `FR_DIV32(x, xr, y, yr)` | same as `FR_DIV` | `s32` at radix `xr` | `((s32)(x) << (yr)) / (s32)(y)`. 32-bit-only path — requires `|x| < 2^(31 − yr)` to avoid overflow in the intermediate shift. Use on tiny targets (PIC, AVR, 8051) where 64-bit ops pull in unwanted compiler runtime code. |
+| `FR_MOD(x, y)` | `x`, `y`: same radix | remainder at the same radix | `(x) % (y)`. Standard C remainder semantics. |
+
 ## Arithmetic
 
 FR_Math splits arithmetic into three flavours. The
@@ -198,8 +212,8 @@ thin wrapper.
 
 | Function | Inputs | Output | Precision / saturation |
 | --- | --- | --- | --- |
-| `s32 FR_FixMuls(s32 x, s32 y)` | `x`, `y`: s15.16 | `(x × y)` at s15.16 | Promotes to `int64_t`, shifts right by 16, truncates. **Wraps** on overflow — no clamp. Use when you have a formal bound on the product. |
-| `s32 FR_FixMulSat(s32 x, s32 y)` | as above | as above | Same, but clamps to `FR_OVERFLOW_POS` / `FR_OVERFLOW_NEG` on over/underflow. Prefer by default. |
+| `s32 FR_FixMuls(s32 x, s32 y)` | `x`, `y`: s15.16 | `(x × y)` at s15.16 | Promotes to `int64_t`, adds 0.5 LSB (`+0x8000`), shifts right by 16. **Rounds to nearest.** **Wraps** on overflow — no clamp. Use when you have a formal bound on the product. |
+| `s32 FR_FixMulSat(s32 x, s32 y)` | as above | as above | Same round-to-nearest, but clamps to `FR_OVERFLOW_POS` / `FR_OVERFLOW_NEG` on over/underflow. Prefer by default. |
 | `s32 FR_FixAddSat(s32 x, s32 y)` | `x`, `y`: any signed s32 at the same radix (radix is not rescaled) | saturated sum at the same radix | Classic sign-watching saturating add: returns `FR_OVERFLOW_POS` or `FR_OVERFLOW_NEG` if adding two same-sign values would flip the sign. |
 
 ## Shift-only scaling macros
@@ -345,14 +359,14 @@ rational arithmetic with the right denominator.
 #### Using the macros
 
 ```
-/* Sine of 42 degrees, result in s0.15. */
-s16 y = fr_sin_bam(FR_DEG2BAM(42));
+/* Sine of 42 degrees, result in s15.16. */
+s32 y = fr_sin_bam(FR_DEG2BAM(42));
 
 /* Phase accumulator at 440 Hz on a 48 kHz stream. */
 u16 phase = 0;
 u16 inc   = (u16)(((u32)440 << 16) / 48000u); /* BAM per sample  */
 for (int n = 0; n < nsamples; ++n) {
-    buf[n] = fr_sin_bam(phase);                /* s0.15 sine     */
+    buf[n] = fr_sin_bam(phase);                /* s15.16 sine    */
     phase += inc;                              /* wraps at 65536 */
 }
 
@@ -368,24 +382,27 @@ Every trig function in FR_Math — integer-degree, radian, or
 BAM — funnels through a single 129-entry quadrant cosine table,
 `gFR_COS_TAB_Q` (128 intervals plus a sentinel for the
 interpolation). Every wrapper converts its angle to BAM and calls the
-same core routine. Worst-case absolute error across the full circle
-is `≈ 4 × 10^−5`, about 1.3 LSB
-in the s0.15 output.
+same core routine. The internal table stores values in s0.15; the
+output functions shift the result to **s15.16** (radix 16), giving
+exact 1.0 representation. Cardinal angles (0°, 90°, 180°, 270°)
+produce exact results: `cos(0°) = 65536`, `cos(90°) = 0`,
+`sin(90°) = 65536`, etc. The constant `FR_TRIG_ONE` (65536)
+represents exactly 1.0 in the s15.16 output format.
 
 ### BAM-native (the core)
 
 | Function | Signature | Output |
 | --- | --- | --- |
-| `fr_cos_bam` | `s16 fr_cos_bam(u16 bam)` | s0.15, range [−32767, +32767]. |
-| `fr_sin_bam` | `s16 fr_sin_bam(u16 bam)` | s0.15. Defined as `fr_cos_bam(bam − FR_BAM_QUADRANT)`. |
+| `fr_cos_bam` | `s32 fr_cos_bam(u16 bam)` | s15.16, range [−65536, +65536]. Exact at cardinal angles. |
+| `fr_sin_bam` | `s32 fr_sin_bam(u16 bam)` | s15.16. Defined as `fr_cos_bam(bam − FR_BAM_QUADRANT)`. |
 
 ### Radian-native
 
 | Function | Signature | Notes |
 | --- | --- | --- |
-| `fr_cos` | `s16 fr_cos(s32 rad, u16 radix)` | `rad` is interpreted at the given radix. Result is s0.15. |
-| `fr_sin` | `s16 fr_sin(s32 rad, u16 radix)` | Same convention. |
-| `fr_tan` | `s32 fr_tan(s32 rad, u16 radix)` | Returns at **radix 15** (`FR_TRIG_PREC`). Computed as `(sin << 15) / cos`; saturates to `FR_OVERFLOW_POS` / `FR_OVERFLOW_NEG` near π/2 + kπ where cos → 0. |
+| `fr_cos` | `s32 fr_cos(s32 rad, u16 radix)` | `rad` is interpreted at the given radix. Result is s15.16. |
+| `fr_sin` | `s32 fr_sin(s32 rad, u16 radix)` | Same convention. |
+| `fr_tan` | `s32 fr_tan(s32 rad, u16 radix)` | Returns at **radix 16** (`FR_TRIG_OUT_PREC`). Computed as `(sin << 16) / cos`; saturates to `±INT32_MAX` (`FR_TRIG_MAXVAL`) near π/2 + kπ where cos → 0. |
 
 ### Integer-degree wrappers (legacy API)
 
@@ -400,12 +417,12 @@ accept a `radix` argument and treat the degree value as
 
 | Symbol | Signature | Kind |
 | --- | --- | --- |
-| `FR_SinI` | `FR_SinI(deg)` → `s16` (s0.15) | Macro: `fr_sin_bam(FR_DEG2BAM(deg))`. Zero-cost inline. |
-| `FR_CosI` | `FR_CosI(deg)` → `s16` (s0.15) | Macro: `fr_cos_bam(FR_DEG2BAM(deg))`. |
-| `FR_TanI` | `s32 FR_TanI(s16 deg)` | Function. Returns at radix 15; saturates near 90° / 270°. |
-| `FR_Sin` | `s16 FR_Sin(s16 deg, u16 radix)` | `deg` is fixed-point at `radix`. Returns s0.15. |
-| `FR_Cos` | `s16 FR_Cos(s16 deg, u16 radix)` | Same. |
-| `FR_Tan` | `s32 FR_Tan(s16 deg, u16 radix)` | Returns at radix 15; saturates near 90° / 270°. |
+| `FR_SinI` | `FR_SinI(deg)` → `s32` (s15.16) | Macro: `fr_sin_bam(FR_DEG2BAM(deg))`. Zero-cost inline. |
+| `FR_CosI` | `FR_CosI(deg)` → `s32` (s15.16) | Macro: `fr_cos_bam(FR_DEG2BAM(deg))`. |
+| `FR_TanI` | `s32 FR_TanI(s16 deg)` | Function. Returns at radix 16; saturates to `±INT32_MAX` near 90° / 270°. |
+| `FR_Sin` | `s32 FR_Sin(s16 deg, u16 radix)` | `deg` is fixed-point at `radix`. Returns s15.16. |
+| `FR_Cos` | `s32 FR_Cos(s16 deg, u16 radix)` | Same. |
+| `FR_Tan` | `s32 FR_Tan(s16 deg, u16 radix)` | Returns at radix 16; saturates to `±INT32_MAX` near 90° / 270°. |
 
 ### Degree wrappers on the BAM path
 
@@ -420,18 +437,21 @@ radix entirely, two convenience macros cover pure integer degrees:
 ## Inverse trigonometry
 
 Every inverse-trig function in FR_Math returns the angle *in
-degrees* as `s16`, consistent with the legacy
-input-side convention and small enough to live in a register. The
-result of any inverse function can be fed straight back into
-`FR_SinI` / `FR_CosI` without a radix
-conversion.
+radians* as an `s32` at a caller-specified output radix. This
+makes the inverse functions symmetric with the forward trig
+functions, which also work in radians. The `out_radix` parameter
+lets you choose the precision of the returned angle independently
+from the input.
 
 | Function | Signature | Output range |
 | --- | --- | --- |
-| `FR_atan` | `s16 FR_atan(s32 input, u16 radix)` | [−90°, +90°]. `input` interpreted at radix. |
-| `FR_atan2` | `s16 FR_atan2(s32 y, s32 x)` | Full-circle [−180°, +180°]. |
-| `FR_asin` | `s16 FR_asin(s32 input, u16 radix)` | [−90°, +90°]. Returns `FR_DOMAIN_ERROR` for |input| > 1. |
-| `FR_acos` | `s16 FR_acos(s32 input, u16 radix)` | [0°, +180°]. Same domain check as `FR_asin`. |
+| `FR_atan` | `s32 FR_atan(s32 input, u16 radix, u16 out_radix)` | [−π/2, +π/2] radians at `out_radix`. `input` interpreted at `radix`. |
+| `FR_atan2` | `s32 FR_atan2(s32 y, s32 x, u16 out_radix)` | Full-circle [−π, +π] radians at `out_radix`. |
+| `FR_asin` | `s32 FR_asin(s32 input, u16 radix, u16 out_radix)` | [−π/2, +π/2] radians at `out_radix`. Returns `FR_DOMAIN_ERROR` for |input| > 1. |
+| `FR_acos` | `s32 FR_acos(s32 input, u16 radix, u16 out_radix)` | [0, +π] radians at `out_radix`. Same domain check as `FR_asin`. |
+
+To convert the radian result to degrees, use `FR_RAD2DEG`:
+`s32 deg = FR_RAD2DEG(FR_atan2(y, x, 16));`
 
 ## Logarithm and exponential
 
@@ -514,7 +534,7 @@ free, so the exponential wrappers can be macros and skip a call.
 
 | Function | Inputs | Output | Notes |
 | --- | --- | --- | --- |
-| `FR_sqrt` | `s32 input` at `radix`<br>`u16 radix` | `s32` at the **same radix**. | Domain: `input ≥ 0`. Returns `FR_DOMAIN_ERROR` for negative input. Digit-by-digit integer isqrt on an `int64_t` accumulator — deterministic 32-iteration cost, no floating point anywhere. Worst-case error is ±1 LSB at the input radix. |
+| `FR_sqrt` | `s32 input` at `radix`<br>`u16 radix` | `s32` at the **same radix**. | Domain: `input ≥ 0`. Returns `FR_DOMAIN_ERROR` for negative input. Digit-by-digit integer isqrt on an `int64_t` accumulator — deterministic 32-iteration cost, no floating point anywhere. **Rounds to nearest** (remainder > root → +1). Worst-case error is ±0.5 LSB at the input radix. |
 | `FR_hypot` | `s32 x`, `s32 y` both at `radix`<br>`u16 radix` | `s32` at the **same radix**. | Overflow-safe magnitude: computes `sqrt(x² + y²)` without an intermediate 32-bit overflow by promoting the sum of squares to `int64_t`. Accepts the full `s32` input range; output saturates at `FR_OVERFLOW_POS` only if the true hypot exceeds `2^31−1` at the given radix. |
 | `FR_hypot_fast` | `s32 x`, `s32 y` (any radix) | `s32` at the same radix. | Fast approximate magnitude using 4-segment piecewise-linear shift-only arithmetic. ~0.4% peak error. No multiply, no 64-bit, no ROM table. Based on the method of US Patent 6,567,777 B1 (public domain). No `radix` parameter needed — the algorithm is scale-invariant. |
 | `FR_hypot_fast8` | `s32 x`, `s32 y` (any radix) | `s32` at the same radix. | 8-segment variant. ~0.14% peak error. Same shift-only approach, more branches. |

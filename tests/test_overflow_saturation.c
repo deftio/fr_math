@@ -100,28 +100,28 @@ int test_mul_radix() {
 
 /* Test edge cases for trigonometric functions */
 int test_trig_edge_cases() {
-    s16 result;
-    
-    /* Test cos(0) = 1.0 in s0.15 format */
+    s32 result;
+
+    /* Test cos(0) = 1.0 in s15.16 format (FR_TRIG_ONE = 65536) */
     result = FR_CosI(0);
-    ASSERT_EQ(32767, result, "cos(0) should be 1.0 (32767 in s0.15)");
-    
+    ASSERT_EQ(FR_TRIG_ONE, result, "cos(0) should be 1.0 (65536 in s15.16)");
+
     /* Test cos(90) = 0 */
     result = FR_CosI(90);
     ASSERT_EQ(0, result, "cos(90) should be 0");
-    
+
     /* Test cos(180) = -1.0 */
     result = FR_CosI(180);
-    ASSERT_EQ(-32767, result, "cos(180) should be -1.0");
-    
+    ASSERT_EQ(-FR_TRIG_ONE, result, "cos(180) should be -1.0");
+
     /* Test cos(360) = cos(0) = 1.0 */
     result = FR_CosI(360);
-    ASSERT_EQ(32767, result, "cos(360) should be 1.0");
-    
+    ASSERT_EQ(FR_TRIG_ONE, result, "cos(360) should be 1.0");
+
     /* Test large angle (should wrap) */
     result = FR_CosI(720);  /* 720 = 2*360 */
-    ASSERT_EQ(32767, result, "cos(720) should be 1.0 (wrapped)");
-    
+    ASSERT_EQ(FR_TRIG_ONE, result, "cos(720) should be 1.0 (wrapped)");
+
     /* Test negative angle */
     result = FR_CosI(-90);
     ASSERT_EQ(0, result, "cos(-90) should be 0");

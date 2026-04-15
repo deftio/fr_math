@@ -59,12 +59,20 @@
  * gives unambiguous round-half-up. Max error vs the true cos is ~1 LSB of
  * s0.15 (~3e-5 absolute); mean error ~0 (no bias).
  */
-s16 fr_cos_bam(u16 bam)
+s32 fr_cos_bam(u16 bam)
 {
 	u32 q     = ((u32)bam >> 14) & 0x3;                /* top 2 bits = quadrant */
 	u32 inq   = (u32)bam & (FR_TRIG_QUADRANT - 1);     /* bottom 14 bits        */
 	u32 idx, frac;
 	s32 lo, hi, d, v;
+
+	/* Exact cardinal angles: bam=0 → 1.0, bam=16384 → 0, etc. */
+	if (inq == 0)
+	{
+		if (q == 0) return  FR_TRIG_ONE;   /*   0° →  1.0 */
+		if (q == 2) return -FR_TRIG_ONE;   /* 180° → -1.0 */
+		return 0;                          /*  90° or 270° → 0 */
+	}
 
 	if (q == 1 || q == 3)
 		inq = FR_TRIG_QUADRANT - inq;                  /* mirror across pi/2    */
@@ -76,10 +84,13 @@ s16 fr_cos_bam(u16 bam)
 	d  = lo - hi;                                      /* >= 0: cos monotonic   */
 	v  = lo - (((d * (s32)frac) + FR_TRIG_FRAC_HALF) >> FR_TRIG_FRAC_BITS);
 
-	return (q == 1 || q == 2) ? (s16)(-v) : (s16)v;
+	/* Shift s0.15 → s15.16 */
+	v <<= 1;
+
+	return (q == 1 || q == 2) ? -v : v;
 }
 
-s16 fr_sin_bam(u16 bam)
+s32 fr_sin_bam(u16 bam)
 {
 	/* sin(x) = cos(x - pi/2) = cos(bam - 16384). The u16 wraparound makes
 	 * this completely free.
@@ -100,26 +111,25 @@ static u16 fr_rad_to_bam(s32 rad, u16 radix)
 	return (u16)((u32)scaled & 0xffff);
 }
 
-s16 fr_cos(s32 rad, u16 radix)
+s32 fr_cos(s32 rad, u16 radix)
 {
 	return fr_cos_bam(fr_rad_to_bam(rad, radix));
 }
 
-s16 fr_sin(s32 rad, u16 radix)
+s32 fr_sin(s32 rad, u16 radix)
 {
 	return fr_sin_bam(fr_rad_to_bam(rad, radix));
 }
 
-/* fr_tan: returns sin/cos at s15.16. Saturates if cos is near zero. */
+/* fr_tan: returns sin/cos at s15.16 (radix 16). Saturates if cos is near zero. */
 s32 fr_tan(s32 rad, u16 radix)
 {
 	u16 bam = fr_rad_to_bam(rad, radix);
 	s32 s   = fr_sin_bam(bam);
 	s32 c   = fr_cos_bam(bam);
 	if (c == 0)
-		return (s >= 0) ? (FR_TRIG_MAXVAL << FR_TRIG_PREC)
-		                : -(FR_TRIG_MAXVAL << FR_TRIG_PREC);
-	return (s << FR_TRIG_PREC) / c;
+		return (s >= 0) ? FR_TRIG_MAXVAL : -FR_TRIG_MAXVAL;
+	return (s32)(((int64_t)s << FR_TRIG_OUT_PREC) / c);
 }
 
 /*=======================================================
@@ -145,12 +155,12 @@ static u16 fr_deg_radix_to_bam(s16 deg, u16 radix)
 	return (u16)((u32)(v >> radix) & 0xffff);
 }
 
-s16 FR_Cos(s16 deg, u16 radix)
+s32 FR_Cos(s16 deg, u16 radix)
 {
 	return fr_cos_bam(fr_deg_radix_to_bam(deg, radix));
 }
 
-s16 FR_Sin(s16 deg, u16 radix)
+s32 FR_Sin(s16 deg, u16 radix)
 {
 	return fr_sin_bam(fr_deg_radix_to_bam(deg, radix));
 }
@@ -161,9 +171,8 @@ s32 FR_TanI(s16 deg)
 	s32 s   = fr_sin_bam(bam);
 	s32 c   = fr_cos_bam(bam);
 	if (c == 0)
-		return (s >= 0) ? (FR_TRIG_MAXVAL << FR_TRIG_PREC)
-		                : -(FR_TRIG_MAXVAL << FR_TRIG_PREC);
-	return (s << FR_TRIG_PREC) / c;
+		return (s >= 0) ? FR_TRIG_MAXVAL : -FR_TRIG_MAXVAL;
+	return (s32)(((int64_t)s << FR_TRIG_OUT_PREC) / c);
 }
 
 s32 FR_Tan(s16 deg, u16 radix)
@@ -172,34 +181,36 @@ s32 FR_Tan(s16 deg, u16 radix)
 	s32 s   = fr_sin_bam(bam);
 	s32 c   = fr_cos_bam(bam);
 	if (c == 0)
-		return (s >= 0) ? (FR_TRIG_MAXVAL << FR_TRIG_PREC)
-		                : -(FR_TRIG_MAXVAL << FR_TRIG_PREC);
-	return (s << FR_TRIG_PREC) / c;
+		return (s >= 0) ? FR_TRIG_MAXVAL : -FR_TRIG_MAXVAL;
+	return (s32)(((int64_t)s << FR_TRIG_OUT_PREC) / c);
 }
 
 /*=======================================================
- * FR_FixMuls (x*y signed, NOT saturated)
+ * FR_FixMuls (x*y signed, NOT saturated, round-to-nearest)
  *
  * Treats x and y as fixed-point values at the same radix r and returns
  * (x*y) >> r at radix r. The user is responsible for tracking the radix
  * point and for guaranteeing the product fits in 32 bits.
+ *
+ * Adds 0.5 LSB (0x8000) before the shift so the result rounds to
+ * nearest instead of truncating toward zero.
  */
 s32 FR_FixMuls(s32 x, s32 y)
 {
 	int64_t v = (int64_t)x * (int64_t)y;
-	return (s32)(v >> 16);
+	return (s32)((v + 0x8000) >> 16);
 }
 
 /*=======================================================
- * FR_FixMulSat (x*y signed, SATURATED)
+ * FR_FixMulSat (x*y signed, SATURATED, round-to-nearest)
  *
  * Same semantics as FR_FixMuls but clamps to [INT32_MIN, INT32_MAX] on
  * overflow instead of wrapping. The fixed-point radix is fixed at 16 bits
- * (sM.16 inputs and output).
+ * (sM.16 inputs and output). Rounds to nearest (adds 0.5 LSB before shift).
  */
 s32 FR_FixMulSat(s32 x, s32 y)
 {
-	int64_t v = ((int64_t)x * (int64_t)y) >> 16;
+	int64_t v = ((int64_t)x * (int64_t)y + 0x8000) >> 16;
 	if (v >  (int64_t)0x7fffffff) return  FR_OVERFLOW_POS;
 	if (v < -(int64_t)0x80000000) return  FR_OVERFLOW_NEG;
 	return (s32)v;
@@ -232,7 +243,10 @@ s32 FR_FixAddSat(s32 x, s32 y)
  * cos table for the table entry closest to |input|. Apply quadrant mirror
  * if input was negative.
  */
-s16 FR_acos(s32 input, u16 radix)
+/* FR_acos — returns radians at out_radix.
+ * Range: [0, pi].  Input is a cosine value at the given radix.
+ */
+s32 FR_acos(s32 input, u16 radix, u16 out_radix)
 {
 	s32 v;
 	s16 sign;
@@ -242,9 +256,9 @@ s16 FR_acos(s32 input, u16 radix)
 
 	v = FR_CHRDX(input, radix, FR_TRIG_PREC); /* to s0.15 */
 
-	/* Clamp range. */
+	/* Clamp range: acos(1.0) = 0, acos(-1.0) = pi */
 	if (v >=  32767) return 0;
-	if (v <= -32767) return 180;
+	if (v <= -32767) return FR_BAM2RAD(FR_BAM_HALF, out_radix); /* pi */
 
 	sign = (v < 0) ? 1 : 0;
 	if (v < 0) v = -v;
@@ -279,19 +293,24 @@ s16 FR_acos(s32 input, u16 radix)
 		if (right < best_err) { best_err = right; best_idx = best_idx + 1; }
 	}
 
-	/* best_idx is in [0, FR_TRIG_TABLE_SIZE]. Convert to degrees:
-	 * the table covers [0, 90] degrees in FR_TRIG_TABLE_SIZE steps.
-	 * deg = best_idx * 90 / FR_TRIG_TABLE_SIZE.
+	/* best_idx is in [0, FR_TRIG_TABLE_SIZE]. Convert to BAM:
+	 * the table covers one quadrant (16384 BAM) in FR_TRIG_TABLE_SIZE-1 steps.
+	 * bam = best_idx << FR_TRIG_FRAC_BITS.
 	 */
 	{
-		s16 deg = (s16)((best_idx * 90 + (FR_TRIG_TABLE_SIZE >> 1)) / FR_TRIG_TABLE_SIZE);
-		return sign ? (s16)(180 - deg) : deg;
+		u16 bam = (u16)((u32)best_idx << FR_TRIG_FRAC_BITS);
+		if (sign)
+			bam = (u16)(FR_BAM_HALF - bam);  /* mirror: pi - angle */
+		return FR_BAM2RAD(bam, out_radix);
 	}
 }
 
-s16 FR_asin(s32 input, u16 radix)
+/* FR_asin — returns radians at out_radix. Range: [-pi/2, pi/2]. */
+s32 FR_asin(s32 input, u16 radix, u16 out_radix)
 {
-	return 90 - FR_acos(input, radix);
+	/* asin(x) = pi/2 - acos(x) */
+	s32 half_pi = FR_BAM2RAD(FR_BAM_QUADRANT, out_radix);
+	return half_pi - FR_acos(input, radix, out_radix);
 }
 
 /* arctan table: gFR_ATAN_TAB[i] = atan(i/32) in degrees, scaled by 64
@@ -313,53 +332,51 @@ static const s16 gFR_ATAN_TAB[33] = {
     2880
 };
 
-/* helper: arctan(t) for t in [0,1] in radix-16 input, returning degrees s16.
- * Uses the table above with linear interpolation.
+/* helper: arctan(t) for t in [0,1] in radix-16 input, returning BAM (u16).
+ * Uses the gFR_ATAN_TAB table with linear interpolation.
  *
  * t is in s.16. The table indexes into [0,1] in 32 steps, so the table
  * step in s.16 units is (1<<16)/32 = 2048.
+ *
+ * The atan table stores degrees*64 (s.6). We convert to BAM internally:
+ * bam = deg64 * 65536 / (360 * 64) = deg64 * (65536 / 23040).
+ * Approximation: bam ≈ (deg64 * 182) >> 6, matching FR_DEG2BAM precision.
  */
-static s16 fr_atan_unit_q1_deg(s32 t_s16)
+static u16 fr_atan_unit_q1_bam(s32 t_s16)
 {
 	s32 idx, frac, lo, hi, deg64;
 	if (t_s16 <= 0) return 0;
-	if (t_s16 >= (1L << 16)) return 45;
+	if (t_s16 >= (1L << 16)) return FR_BAM_QUADRANT >> 1; /* 45° in BAM */
 	idx  = t_s16 >> 11;        /* 2048 = 1<<11 */
 	frac = t_s16 & ((1L << 11) - 1);
 	lo = gFR_ATAN_TAB[idx];
 	hi = gFR_ATAN_TAB[idx + 1];
 	deg64 = lo + (((hi - lo) * frac) >> 11);
-	/* deg64 is degrees * 64; round to nearest integer degree */
-	return (s16)((deg64 + 32) >> 6);
+	/* Convert degrees*64 → BAM: bam = deg64 * (65536/360) / 64
+	 *                              ≈ (deg64 * 182 + 32) >> 6
+	 */
+	return (u16)(((s32)deg64 * 182L + 32) >> 6);
 }
 
-/* FR_atan2(y, x) — full-circle arctangent, returns degrees as s16.
+/* FR_atan2(y, x, out_radix) — full-circle arctangent, returns radians
+ * at the specified output radix (s32).
  *
- * Computes a ratio y/x so the result is independent of the input radix.
- *
- * Algorithm:
- *   1. Special-case the four axis directions.
- *   2. Reduce |y|/|x| to [0,1] (swap so the smaller magnitude is on top).
- *   3. Look up arctan in the table with linear interpolation.
- *   4. Apply quadrant / swap corrections to get the final angle.
- *
- * Range: [-180, 180] degrees. Returns 0 for atan2(0,0) (consistent with
- * IEEE 754 atan2 even though that case is mathematically undefined).
+ * Range: [-pi, pi]. Returns 0 for atan2(0,0).
  */
-s16 FR_atan2(s32 y, s32 x)
+s32 FR_atan2(s32 y, s32 x, u16 out_radix)
 {
 	s32 ay, ax, ratio;
-	s16 a;
+	u16 bam;
 
-	/* Axis cases first — these also avoid the divide. */
+	/* Axis cases — exact angles, no divide. */
 	if (x == 0)
 	{
-		if (y > 0) return  90;
-		if (y < 0) return -90;
-		return 0; /* atan2(0,0) — undefined; return 0 */
+		if (y > 0) return  FR_BAM2RAD(FR_BAM_QUADRANT, out_radix);     /*  pi/2 */
+		if (y < 0) return -FR_BAM2RAD(FR_BAM_QUADRANT, out_radix);     /* -pi/2 */
+		return 0;
 	}
 	if (y == 0)
-		return (x > 0) ? 0 : 180;
+		return (x > 0) ? 0 : FR_BAM2RAD(FR_BAM_HALF, out_radix);      /* 0 or pi */
 
 	ax = (x < 0) ? -x : x;
 	ay = (y < 0) ? -y : y;
@@ -368,29 +385,32 @@ s16 FR_atan2(s32 y, s32 x)
 	if (ay <= ax)
 	{
 		ratio = (s32)(((int64_t)ay << 16) / ax);
-		a = fr_atan_unit_q1_deg(ratio);          /* [0..45] */
+		bam = fr_atan_unit_q1_bam(ratio);                  /* [0..45°] BAM */
 	}
 	else
 	{
 		ratio = (s32)(((int64_t)ax << 16) / ay);
-		a = (s16)(90 - fr_atan_unit_q1_deg(ratio)); /* [45..90] */
+		bam = (u16)(FR_BAM_QUADRANT - fr_atan_unit_q1_bam(ratio)); /* [45..90°] BAM */
 	}
 
-	/* Apply quadrant sign. */
-	if (x > 0)
-		return (y > 0) ? a : (s16)(-a);
-	/* x < 0 */
-	return (y > 0) ? (s16)(180 - a) : (s16)(a - 180);
+	/* Apply quadrant sign and convert BAM → radians. */
+	{
+		s32 rad = FR_BAM2RAD(bam, out_radix);
+		s32 pi  = FR_BAM2RAD(FR_BAM_HALF, out_radix);
+		if (x > 0)
+			return (y > 0) ? rad : -rad;
+		/* x < 0 */
+		return (y > 0) ? (pi - rad) : (rad - pi);
+	}
 }
 
-/* FR_atan(input, radix) — arctangent of a single argument.
- *
- * `input` is at the given radix. Returns degrees as s16, range [-90, 90].
+/* FR_atan(input, radix, out_radix) — arctangent of a single argument.
+ * Returns radians at out_radix, range [-pi/2, pi/2].
  */
-s16 FR_atan(s32 input, u16 radix)
+s32 FR_atan(s32 input, u16 radix, u16 out_radix)
 {
 	s32 one = (s32)1 << radix;
-	return FR_atan2(input, one);
+	return FR_atan2(input, one, out_radix);
 }
 
 /* 2^f table for f in [0, 1] in 17 entries, output in s.16 fixed point.
@@ -881,6 +901,9 @@ static u32 fr_isqrt64(uint64_t n)
 		}
 		bit >>= 2;
 	}
+	/* round to nearest: if remainder > root, (root+1)^2 is closer */
+	if (n > root)
+		root++;
 	return (u32)root;
 }
 

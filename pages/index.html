@@ -42,16 +42,17 @@ shipped on processors that predate MMX and is still maintained today.</p>
 <table>
 <thead><tr><th>Area</th><th>Functions</th></tr></thead>
 <tbody>
-<tr><td>Arithmetic</td><td><code>FR_ADD</code>, <code>FR_SUB</code>, <code>FR_MUL</code>, <code>FR_FixMuls</code>, <code>FR_FixMulSat</code>, <code>FR_CHRDX</code></td></tr>
+<tr><td>Arithmetic</td><td><code>FR_ADD</code>, <code>FR_SUB</code>, <code>FR_DIV</code>, <code>FR_DIV32</code>, <code>FR_MOD</code>, <code>FR_FixMuls</code>, <code>FR_FixMulSat</code>, <code>FR_CHRDX</code></td></tr>
+<tr><td>Utility</td><td><code>FR_MIN</code>, <code>FR_MAX</code>, <code>FR_CLAMP</code>, <code>FR_ABS</code>, <code>FR_SGN</code></td></tr>
 <tr><td>Trig (integer deg)</td><td><code>FR_Sin</code>, <code>FR_Cos</code>, <code>FR_Tan</code>, <code>FR_SinI</code>, <code>FR_CosI</code>, <code>FR_TanI</code></td></tr>
 <tr><td>Trig (radian/BAM)</td><td><code>fr_sin</code>, <code>fr_cos</code>, <code>fr_tan</code>, <code>fr_sin_bam</code>, <code>fr_cos_bam</code>, <code>fr_sin_deg</code>, <code>fr_cos_deg</code></td></tr>
 <tr><td>Inverse trig</td><td><code>FR_atan</code>, <code>FR_atan2</code>, <code>FR_asin</code>, <code>FR_acos</code></td></tr>
-<tr><td>Log / exp</td><td><code>FR_log2</code>, <code>FR_ln</code>, <code>FR_log10</code>, <code>FR_pow2</code>, <code>FR_exp</code>, <code>FR_pow10</code></td></tr>
-<tr><td>Roots</td><td><code>FR_sqrt</code>, <code>FR_hypot</code></td></tr>
+<tr><td>Log / exp</td><td><code>FR_log2</code>, <code>FR_ln</code>, <code>FR_log10</code>, <code>FR_pow2</code>, <code>FR_EXP</code>, <code>FR_POW10</code></td></tr>
+<tr><td>Roots</td><td><code>FR_sqrt</code>, <code>FR_hypot</code>, <code>FR_hypot_fast</code>, <code>FR_hypot_fast8</code></td></tr>
 <tr><td>Wave generators</td><td><code>fr_wave_sqr</code>, <code>fr_wave_pwm</code>, <code>fr_wave_tri</code>, <code>fr_wave_saw</code>, <code>fr_wave_tri_morph</code>, <code>fr_wave_noise</code></td></tr>
 <tr><td>Envelope</td><td><code>fr_adsr_init</code>, <code>fr_adsr_trigger</code>, <code>fr_adsr_release</code>, <code>fr_adsr_step</code></td></tr>
-<tr><td>2D transforms</td><td><code>FR_Matrix2D_CP</code> (mul, add, sub, det, inv, setrotate, XformPt, XformPtI)</td></tr>
-<tr><td>Formatted output</td><td><code>FR_printNumD</code>, <code>FR_printNumF</code>, <code>FR_printNumH</code></td></tr>
+<tr><td>2D transforms</td><td><code>FR_Matrix2D_CPT</code> (mul, add, sub, det, inv, setrotate, XFormPtI, XFormPtI16)</td></tr>
+<tr><td>Formatted output</td><td><code>FR_printNumD</code>, <code>FR_printNumF</code>, <code>FR_printNumH</code>, <code>FR_numstr</code></td></tr>
 </tbody>
 </table>
 
@@ -92,15 +93,15 @@ generic <code>float</code> replacement.</p>
 /* Compute 3.5 * 2.25 at radix 4 (s?.4 format). */
 s32 a = I2FR(3, 4) | (1 &lt;&lt; 3);   /* 3.5  = 0x38 */
 s32 b = I2FR(2, 4) | (1 &lt;&lt; 2);   /* 2.25 = 0x24 */
-s32 c = FR_MUL(a, 4, b, 4, 4);   /* c = 7.875, also at radix 4 */
+s32 c = (s32)(((int64_t)a * b) &gt;&gt; 4);   /* c = 7.875, also at radix 4 */
 
 /* Rotate a point 30&deg; around the origin. */
 #include "FR_math_2D.h"
-FR_Matrix2D_CP R;
-R.setidentity();
+FR_Matrix2D_CPT R;
+R.ID();
 R.setrotate(30);                 /* 30 degrees */
-FR_2DPoint p = { I2FR(100, 8), I2FR(0, 8) };
-R.XformPt(&amp;p);                   /* p is now ~(86.6, 50.0) at radix 8 */</code></pre>
+s32 px = I2FR(100, 8), py = I2FR(0, 8);
+s32 rx, ry; R.XFormPtI(px, py, &amp;rx, &amp;ry);   /* rx,ry is now ~(86.6, 50.0) at radix 8 */</code></pre>
 
 <p>See <a href="guide/getting-started.html">Getting Started</a> for a
 complete walkthrough, or jump straight to the
@@ -113,7 +114,7 @@ want to understand <em>how</em> the radix notation works first.</p>
 built for graphics transforms on 16&nbsp;MHz 68k Palm Pilots (it
 shipped inside Trumpetsoft&rsquo;s <em>Inkstorm</em>), then ported
 forward to ARM, x86, MIPS, RISC-V, and various 8/16-bit embedded
-targets. v2.0.0 is the first major revision with a full test suite,
+targets. v2.0.1 is the current release with a full test suite,
 bit-exact numerical specification, and CI on every push.</p>
 
 <h2>License</h2>
