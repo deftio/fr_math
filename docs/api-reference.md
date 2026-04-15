@@ -467,8 +467,8 @@ leading bit position of the input (that gives you the integer part
 of `log2`), then interpolate a 33-entry mantissa table for
 the fractional part, then scale the result to the requested output
 radix. `FR_ln` and `FR_log10` multiply the
-`log2` result by the appropriate constant
-(`FR_krLOG2E` or `FR_krLOG2_10`) before
+`log2` result by the appropriate radix-28 constant via
+`FR_MULK28` (`FR_krLOG2E_28` or `FR_krLOG2_10_28`) before
 returning.
 
 ### Logarithms
@@ -498,18 +498,20 @@ suits your downstream math.
 
 ### Exponentials
 
-The inverse functions use a single core routine
-(`FR_pow2`) plus two shift-only macros that rescale the
-input to the natural log base. Because those macros are pure shifts,
-the exponential wrappers (`FR_EXP`, `FR_POW10`)
-are macros, not functions — they inline directly into the
-caller.
+The exponential functions use a single core routine (`FR_pow2`) plus
+base-conversion macros that rescale the input. `FR_EXP` and `FR_POW10`
+use `FR_MULK28` (a radix-28 constant multiply via 64-bit intermediate)
+for high accuracy. Shift-only variants (`FR_EXP_FAST`, `FR_POW10_FAST`)
+are available for targets where 32×32→64 multiply is expensive.
 
 | Symbol | Kind | Inputs | Output | Notes |
 | --- | --- | --- | --- | --- |
-| `FR_pow2` | Function | `s32 input` at `radix` (exponent)<br>`u16 radix` | `s32` at the **same radix**. | Domain: input up to `30 << radix`; above that, saturates to `FR_OVERFLOW_POS`. Negative inputs are floored toward −∞ before splitting into integer + fractional parts. |
-| `FR_EXP` | Macro | Same as `FR_pow2`. | `s32` at `radix`. | Expands to `FR_pow2(FR_SLOG2E(input), radix)`. `FR_SLOG2E` is a shift-only multiply by `log2(e)`, which is why this is a macro and not a function call. |
-| `FR_POW10` | Macro | Same as `FR_pow2`. | `s32` at `radix`. | Expands to `FR_pow2(FR_SLOG2_10(input), radix)`. Saturates around `input ≥ 9 << radix`. |
+| `FR_pow2` | Function | `s32 input` at `radix` (exponent)<br>`u16 radix` | `s32` at the **same radix**. | Domain: input up to `30 << radix`; above that, saturates to `FR_OVERFLOW_POS`. Negative inputs are floored toward −∞ before splitting into integer + fractional parts. Uses a 65-entry lookup table (260 bytes) with linear interpolation. |
+| `FR_EXP` | Macro | Same as `FR_pow2`. | `s32` at `radix`. | Expands to `FR_pow2(FR_MULK28(input, FR_kLOG2E_28), radix)`. Uses a radix-28 constant for ~9 digits of precision in the base conversion. |
+| `FR_POW10` | Macro | Same as `FR_pow2`. | `s32` at `radix`. | Expands to `FR_pow2(FR_MULK28(input, FR_kLOG2_10_28), radix)`. Saturates around `input ≥ 9 << radix`. |
+| `FR_EXP_FAST` | Macro | Same as `FR_pow2`. | `s32` at `radix`. | Shift-only variant: `FR_pow2(FR_SLOG2E(input), radix)`. No multiply instruction. Lower accuracy (~5–10 LSB at Q16.16). |
+| `FR_POW10_FAST` | Macro | Same as `FR_pow2`. | `s32` at `radix`. | Shift-only variant: `FR_pow2(FR_SLOG2_10(input), radix)`. No multiply instruction. |
+| `FR_MULK28` | Macro | `s32 x`, radix-28 constant `k` | `s32` at the same radix as `x`. | Multiplies a fixed-point value by a radix-28 constant using a 64-bit intermediate. Rounds to nearest. Used internally by `FR_EXP`, `FR_POW10`, `FR_ln`, `FR_log10`. |
 
 **Worked example.** Compute `e^1.5`
 at radix 16:
@@ -519,16 +521,14 @@ s32 x = FR_NUM(1, 5, 1, 16);   /* 1.5 at radix 16 */
 s32 y = FR_EXP(x, 16);          /* ≈ 4.4817 at radix 16 */
 ```
 
-**Why both `FR_log2` and `FR_pow2`
-exist but `FR_exp` / `FR_pow10` don't.**
-Logarithms can't be reduced to a pure shift — they need
-the leading-bit and mantissa-table pipeline, so they must be
-functions. Exponentials, on the other hand, reduce to
-`FR_pow2` after a single multiply, and that multiply
-happens to be expressible as a shift-only sum (the
-`FR_SLOG2E` / `FR_SLOG2_10` macros in the
-shift-only scaling section above). That makes the whole rescale
-free, so the exponential wrappers can be macros and skip a call.
+**`FR_EXP` vs `FR_EXP_FAST`.**
+`FR_EXP` uses `FR_MULK28` which requires a single 32×32→64 multiply
+(available on all Cortex-M, RISC-V RV32IM, x86, etc.). The radix-28
+constant has ~9 decimal digits of precision, so the base conversion
+adds negligible error. `FR_EXP_FAST` uses the shift-only macro
+`FR_SLOG2E` which avoids all multiply instructions but introduces
+~5–10 LSB of extra error at Q16.16. Use `FR_EXP_FAST` on 8-bit
+targets (AVR, 8051) where 64-bit multiply is very expensive.
 
 ## Roots
 

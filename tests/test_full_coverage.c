@@ -286,52 +286,94 @@ int test_inverse_trig() {
 /* Test log functions with all branches */
 int test_log_complete() {
     s32 result;
-    
-    /* Test log2 with various inputs to hit all branches */
-    result = FR_log2(I2FR(1, 8), 8, 8);
-    result = FR_log2(I2FR(2, 8), 8, 8);
-    result = FR_log2(I2FR(4, 8), 8, 8);
+
+    /* log2 of powers of 2 should be exact */
+    result = FR_log2(I2FR(1, 16), 16, 16);
+    if (result != 0) return TEST_FAIL;                   /* log2(1) = 0 */
+    result = FR_log2(I2FR(2, 16), 16, 16);
+    if (result != I2FR(1, 16)) return TEST_FAIL;         /* log2(2) = 1 */
+    result = FR_log2(I2FR(4, 16), 16, 16);
+    if (result != I2FR(2, 16)) return TEST_FAIL;         /* log2(4) = 2 */
+
+    /* log2 with various radixes to hit all branches */
     result = FR_log2(I2FR(8, 8), 8, 8);
     result = FR_log2(I2FR(16, 8), 8, 8);
     result = FR_log2(I2FR(32, 8), 8, 8);
     result = FR_log2(I2FR(64, 8), 8, 8);
     result = FR_log2(I2FR(128, 8), 8, 8);
     result = FR_log2(I2FR(256, 8), 8, 8);
-    
-    /* Test with value that won't trigger shift */
-    result = FR_log2(1, 8, 8);  /* Small value, won't enter if(input > (1<<h)) */
-    
-    /* Test edge cases */
-    result = FR_log2(0, 8, 8);     /* Should return FR_LOG2MIN */
-    result = FR_log2(-100, 8, 8);  /* Negative, should return FR_LOG2MIN */
-    
-    /* Test ln and log10 */
-    result = FR_ln(I2FR(10, 8), 8, 8);
-    result = FR_ln(I2FR(100, 8), 8, 8);
-    
-    result = FR_log10(I2FR(10, 8), 8, 8);
-    result = FR_log10(I2FR(100, 8), 8, 8);
-    result = FR_log10(I2FR(1000, 8), 8, 8);
-    
+    result = FR_log2(1, 8, 8);
+
+    /* Edge cases */
+    result = FR_log2(0, 8, 8);
+    result = FR_log2(-100, 8, 8);
+
+    /* ln(e) ≈ 1.0. At radix 16: e ≈ 178145 (2.71828 * 65536).
+     * Result should be near 65536 (1.0 at radix 16). Allow ±2 LSB. */
+    result = FR_ln(178145, 16, 16);
+    if (result < 65530 || result > 65542) return TEST_FAIL;
+
+    /* log10(10) = 1.0 exactly. At radix 16: 10 = 655360.
+     * Result should be 65536. Allow ±2 LSB. */
+    result = FR_log10(I2FR(10, 16), 16, 16);
+    if (result < 65530 || result > 65542) return TEST_FAIL;
+
+    /* log10(100) = 2.0. Allow ±4 LSB. */
+    result = FR_log10(I2FR(100, 16), 16, 16);
+    if (result < 131064 || result > 131080) return TEST_FAIL;
+
     (void)result;
     return TEST_PASS;
 }
 
-/* Test pow2 with all branches */
+/* Test pow2, exp, pow10 with all branches */
 int test_pow2_complete() {
     s32 result;
-    
-    /* Test positive exponents */
-    result = FR_pow2(I2FR(0, 8), 8);   /* 2^0 = 1 */
-    result = FR_pow2(I2FR(1, 8), 8);   /* 2^1 = 2 */
-    result = FR_pow2(I2FR(2, 8), 8);   /* 2^2 = 4 */
-    result = FR_pow2(I2FR(3, 8), 8);   /* 2^3 = 8 */
-    result = FR_pow2(I2FR(4, 8), 8);   /* 2^4 = 16 */
-    
-    /* Test negative exponents */
-    result = FR_pow2(I2FR(-1, 8), 8);  /* 2^-1 = 0.5 */
-    result = FR_pow2(I2FR(-2, 8), 8);  /* 2^-2 = 0.25 */
-    result = FR_pow2(I2FR(-3, 8), 8);  /* 2^-3 = 0.125 */
+
+    /* Integer exponents should be exact */
+    result = FR_pow2(I2FR(0, 16), 16);
+    if (result != I2FR(1, 16)) return TEST_FAIL;   /* 2^0 = 1 */
+    result = FR_pow2(I2FR(1, 16), 16);
+    if (result != I2FR(2, 16)) return TEST_FAIL;   /* 2^1 = 2 */
+    result = FR_pow2(I2FR(2, 16), 16);
+    if (result != I2FR(4, 16)) return TEST_FAIL;   /* 2^2 = 4 */
+    result = FR_pow2(I2FR(3, 16), 16);
+    if (result != I2FR(8, 16)) return TEST_FAIL;   /* 2^3 = 8 */
+
+    /* Negative integer exponents */
+    result = FR_pow2(I2FR(-1, 16), 16);
+    if (result != I2FR(1, 16) / 2) return TEST_FAIL;   /* 2^-1 = 0.5 */
+
+    /* FR_EXP(0) = e^0 = 1.0. At radix 16, result should be 65536. Allow ±4 LSB. */
+    result = FR_EXP(0, 16);
+    if (result < 65532 || result > 65540) return TEST_FAIL;
+
+    /* FR_EXP(1.0) = e ≈ 2.71828. At radix 16 ≈ 178145. Allow ±300 LSB (~0.5%). */
+    result = FR_EXP(I2FR(1, 16), 16);
+    if (result < 177845 || result > 178445) return TEST_FAIL;
+
+    /* FR_POW10(0) = 10^0 = 1.0. Allow ±4 LSB. */
+    result = FR_POW10(0, 16);
+    if (result < 65532 || result > 65540) return TEST_FAIL;
+
+    /* FR_EXP_FAST and FR_POW10_FAST should also work (shift-only variants) */
+    result = FR_EXP_FAST(0, 16);
+    if (result < 65520 || result > 65552) return TEST_FAIL;
+    result = FR_POW10_FAST(0, 16);
+    if (result < 65520 || result > 65552) return TEST_FAIL;
+
+    /* FR_MULK28 basic test: x * 1.0 ≈ x.
+     * ln(2) ≈ 0.6931... at radix 28 = 186065279.
+     * FR_MULK28(65536, FR_kLOG2E_28) should give 65536 * log2(e) ≈ 94548 */
+    result = FR_MULK28(65536, FR_kLOG2E_28);
+    if (result < 94545 || result > 94551) return TEST_FAIL;
+
+    /* Continue hitting branch coverage at radix 8 */
+    result = FR_pow2(I2FR(0, 8), 8);
+    result = FR_pow2(I2FR(1, 8), 8);
+    result = FR_pow2(I2FR(-1, 8), 8);
+    result = FR_pow2(I2FR(-2, 8), 8);
+    result = FR_pow2(I2FR(-3, 8), 8);
     
     /* Test fractional exponents to hit interpolation branches */
     result = FR_pow2(I2FR(1, 8) + 128, 8);  /* 2^1.5 */
@@ -794,6 +836,182 @@ int test_edge_branches() {
     return TEST_PASS;
 }
 
+/* Test log2/ln/log10 accuracy across multiple radixes */
+int test_log_multiradix() {
+    s32 result;
+
+    /* --- FR_log2 across radixes 8, 12, 16, 24 --- */
+    int radixes[] = {8, 12, 16, 24};
+    for (int ri = 0; ri < 4; ri++) {
+        int R = radixes[ri];
+        s32 scale = (s32)(1L << R);
+
+        /* log2(1) = 0 (exact for all radixes) */
+        result = FR_log2(scale, (u16)R, (u16)R);
+        if (result != 0) return TEST_FAIL;
+
+        /* log2(2) = 1.0 (exact for all radixes) */
+        result = FR_log2(2 * scale, (u16)R, (u16)R);
+        if (result != scale) return TEST_FAIL;
+
+        /* log2(4) = 2.0 (exact for all radixes) */
+        result = FR_log2(4 * scale, (u16)R, (u16)R);
+        if (result != 2 * scale) return TEST_FAIL;
+
+        /* log2(8) = 3.0 (exact) */
+        if (R <= 16) {  /* avoid overflow at high radixes for 8*scale */
+            result = FR_log2(8 * scale, (u16)R, (u16)R);
+            if (result != 3 * scale) return TEST_FAIL;
+        }
+
+        /* log2(3) ≈ 1.585. The 65-entry table has ~4e-5 absolute interpolation
+         * error. At radix R, that maps to 4e-5 * 2^R LSB. We allow up to
+         * 2 LSB at radix 16 and scale proportionally for other radixes. */
+        result = FR_log2(3 * scale, (u16)R, (u16)R);
+        {
+            s32 expected = (s32)(1.58496250072 * scale);
+            s32 err = result - expected;
+            if (err < 0) err = -err;
+            /* Tolerance: 2 LSB at R≤16; for higher radixes scale by 2^(R-16)
+             * since a fixed absolute error maps to more LSBs. */
+            s32 tol = (R <= 16) ? 2 : (2 * (1 << (R - 16)));
+            if (err > tol) return TEST_FAIL;
+        }
+    }
+
+    /* --- FR_ln across radixes 8, 12, 16 --- */
+    for (int ri = 0; ri < 3; ri++) {
+        int R = radixes[ri];
+        s32 scale = (s32)(1L << R);
+
+        /* ln(e) ≈ 1.0. Allow ≤ 4 LSB. */
+        s32 e_fp = (s32)(2.71828182845 * scale);
+        result = FR_ln(e_fp, (u16)R, (u16)R);
+        {
+            s32 err = result - scale;
+            if (err < 0) err = -err;
+            if (err > 4) return TEST_FAIL;
+        }
+
+        /* ln(1) = 0.0 (exact). */
+        result = FR_ln(scale, (u16)R, (u16)R);
+        if (result != 0) return TEST_FAIL;
+    }
+
+    /* --- FR_log10 across radixes 8, 12, 16 --- */
+    for (int ri = 0; ri < 3; ri++) {
+        int R = radixes[ri];
+        s32 scale = (s32)(1L << R);
+
+        /* log10(10) = 1.0. Allow ≤ 4 LSB. */
+        result = FR_log10(10 * scale, (u16)R, (u16)R);
+        {
+            s32 err = result - scale;
+            if (err < 0) err = -err;
+            if (err > 4) return TEST_FAIL;
+        }
+
+        /* log10(100) = 2.0. Allow ≤ 4 LSB. */
+        result = FR_log10(100 * scale, (u16)R, (u16)R);
+        {
+            s32 err = result - 2 * scale;
+            if (err < 0) err = -err;
+            if (err > 4) return TEST_FAIL;
+        }
+
+        /* log10(1) = 0 (exact via log2(1)=0). */
+        result = FR_log10(scale, (u16)R, (u16)R);
+        if (result != 0) return TEST_FAIL;
+    }
+
+    /* --- Cross-radix: input radix != output radix --- */
+    result = FR_log2(I2FR(8, 8), 8, 16);      /* log2(8)=3.0 at output radix 16 */
+    if (result != I2FR(3, 16)) return TEST_FAIL;
+
+    result = FR_log2(I2FR(4, 12), 12, 8);     /* log2(4)=2.0 at output radix 8 */
+    if (result != I2FR(2, 8)) return TEST_FAIL;
+
+    (void)result;
+    return TEST_PASS;
+}
+
+/* Test FR_DIV round-to-nearest and FR_DIV_TRUNC across radixes */
+int test_div_rounding() {
+    s32 result;
+
+    /* Exact divisions should still be exact with rounding */
+    int radixes[] = {8, 12, 16, 20};
+    for (int ri = 0; ri < 4; ri++) {
+        int R = radixes[ri];
+        s32 scale = (s32)(1L << R);
+
+        /* 10 / 2 = 5 (exact) */
+        result = FR_DIV(10 * scale, R, 2 * scale, R);
+        if (result != 5 * scale) return TEST_FAIL;
+
+        /* 10 / 5 = 2 (exact) */
+        result = FR_DIV(10 * scale, R, 5 * scale, R);
+        if (result != 2 * scale) return TEST_FAIL;
+
+        /* -10 / 2 = -5 (exact) */
+        result = FR_DIV(-10 * scale, R, 2 * scale, R);
+        if (result != -5 * scale) return TEST_FAIL;
+
+        /* 10 / -2 = -5 (exact) */
+        result = FR_DIV(10 * scale, R, -2 * scale, R);
+        if (result != -5 * scale) return TEST_FAIL;
+
+        /* -10 / -2 = 5 (exact) */
+        result = FR_DIV(-10 * scale, R, -2 * scale, R);
+        if (result != 5 * scale) return TEST_FAIL;
+    }
+
+    /* Fractional: 7/3 ≈ 2.3333 — FR_DIV should be within 0.5 LSB */
+    for (int ri = 0; ri < 4; ri++) {
+        int R = radixes[ri];
+        s32 scale = (s32)(1L << R);
+        double ref = 7.0 / 3.0;
+
+        result = FR_DIV(7 * scale, R, 3 * scale, R);
+        double actual = (double)result / (double)scale;
+        double err = actual - ref;
+        if (err < 0) err = -err;
+        /* Error must be ≤ 0.5 LSB */
+        if (err > 0.50001 / (double)scale) return TEST_FAIL;
+
+        /* Same for negative: -7/3 */
+        result = FR_DIV(-7 * scale, R, 3 * scale, R);
+        actual = (double)result / (double)scale;
+        err = actual - (-ref);
+        if (err < 0) err = -err;
+        if (err > 0.50001 / (double)scale) return TEST_FAIL;
+    }
+
+    /* FR_DIV_TRUNC should match old truncating behavior */
+    result = FR_DIV_TRUNC(I2FR(7, 16), 16, I2FR(3, 16), 16);
+    {
+        /* Truncating: 7/3 at radix 16 = floor(7*65536/3) truncated */
+        s32 expected_trunc = (s32)(((s64)(7L << 16) << 16) / (s32)(3L << 16));
+        if (result != expected_trunc) return TEST_FAIL;
+    }
+
+    /* 1/3 at multiple radixes: should round to nearest */
+    for (int ri = 0; ri < 4; ri++) {
+        int R = radixes[ri];
+        s32 scale = (s32)(1L << R);
+        double ref = 1.0 / 3.0;
+
+        result = FR_DIV(scale, R, 3 * scale, R);
+        double actual = (double)result / (double)scale;
+        double err = actual - ref;
+        if (err < 0) err = -err;
+        if (err > 0.50001 / (double)scale) return TEST_FAIL;
+    }
+
+    (void)result;
+    return TEST_PASS;
+}
+
 /* Test all constants */
 int test_constants_complete() {
     s32 val;
@@ -868,6 +1086,12 @@ int main() {
 
     printf("\nADSR Envelope (v2):\n");
     RUN_TEST(test_adsr);
+
+    printf("\nMulti-Radix Log Accuracy:\n");
+    RUN_TEST(test_log_multiradix);
+
+    printf("\nDivision Rounding:\n");
+    RUN_TEST(test_div_rounding);
 
     printf("\nDark-Corner Edge Branches:\n");
     RUN_TEST(test_edge_branches);

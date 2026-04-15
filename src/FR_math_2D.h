@@ -1,7 +1,7 @@
 /**
- *	@FR_mathroutines.h - header definition file for fixed radix 2D coordinate transforms
+ *	@file FR_math_2D.h - header definition file for fixed radix 2D coordinate transforms
  *
- *	@copy Copyright (C) <2001-2012>  <M. A. Chatterjee>
+ *	@copy Copyright (C) <2001-2026>  <M. A. Chatterjee>
  *  @author M A Chatterjee <deftio [at] deftio [dot] com>
  *	@version 2.0.1 M. A. Chatterjee, cleaned up naming
  *

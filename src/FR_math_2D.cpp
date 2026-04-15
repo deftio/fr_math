@@ -3,7 +3,7 @@
  *	@file FR_math_2D.cpp - c++ implementation file for fixed radix math
  *                       - 2D simple matrices
  *
- *	@copy Copyright (C) <2001-2014>  <M. A. Chatterjee>
+ *	@copy Copyright (C) <2001-2026>  <M. A. Chatterjee>
  *  @author M A Chatterjee <deftio [at] deftio [dot] com>
  *	@version 2.0.1 M. A. Chatterjee, cleaned up naming
  *

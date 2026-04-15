@@ -39,15 +39,15 @@
  *
  * Internal model: every angle is reduced to a u16 BAM value. The top 2 bits
  * select the quadrant, the bottom 14 bits are the in-quadrant position. Odd
- * quadrants (1, 3) are mirrored across pi/4 so we only ever look up the
- * first quadrant of cos. Quadrants 1 and 2 get their sign flipped at the
+ * quadrants (1, 3) reverse the in-quadrant index so the table is always read
+ * in the same direction. Quadrants 1 and 2 get their sign flipped at the
  * end.
  *
  * Within each quadrant, the upper FR_TRIG_TABLE_BITS bits of the
  * in-quadrant value index the table; the lower FR_TRIG_FRAC_BITS bits drive
  * round-to-nearest linear interpolation between adjacent table entries.
  *
- * The (FR_TRIG_TABLE_SIZE)-th entry (table[last] = 0) means the
+ * The last entry (table[FR_TRIG_TABLE_SIZE-1] = 0) means the
  * interpolation at the very edge of the quadrant never reads out of bounds.
  *
  * Rounding: we interpolate as
@@ -413,28 +413,21 @@ s32 FR_atan(s32 input, u16 radix, u16 out_radix)
 	return FR_atan2(input, one, out_radix);
 }
 
-/* 2^f table for f in [0, 1] in 17 entries, output in s.16 fixed point.
+/* 2^f table for f in [0, 1] in 65 entries (64 segments), output in s.16
+ * fixed point. Entry i = round(2^(i/64) * 65536).  Size: 260 bytes.
  * Used by FR_pow2 to look up the fractional power of 2 with linear
  * interpolation.
  */
-static const u32 gFR_POW2_FRAC_TAB[17] = {
-     65536,  /* 2^0      = 1.000000 */
-     68438,  /* 2^0.0625 = 1.044274 */
-     71468,  /* 2^0.125  = 1.090508 */
-     74632,  /* 2^0.1875 = 1.138789 */
-     77936,  /* 2^0.25   = 1.189207 */
-     81386,  /* 2^0.3125 = 1.241858 */
-     84990,  /* 2^0.375  = 1.296840 */
-     88752,  /* 2^0.4375 = 1.354256 */
-     92682,  /* 2^0.5    = 1.414214 */
-     96785,  /* 2^0.5625 = 1.476826 */
-    101070,  /* 2^0.625  = 1.542211 */
-    105545,  /* 2^0.6875 = 1.610490 */
-    110218,  /* 2^0.75   = 1.681793 */
-    115098,  /* 2^0.8125 = 1.756252 */
-    120194,  /* 2^0.875  = 1.834008 */
-    125515,  /* 2^0.9375 = 1.915207 */
-    131072   /* 2^1      = 2.000000 */
+static const u32 gFR_POW2_FRAC_TAB[65] = {
+     65536,  66250,  66971,  67700,  68438,  69183,  69936,  70698,
+     71468,  72246,  73032,  73828,  74632,  75444,  76266,  77096,
+     77936,  78785,  79642,  80510,  81386,  82273,  83169,  84074,
+     84990,  85915,  86851,  87796,  88752,  89719,  90696,  91684,
+     92682,  93691,  94711,  95743,  96785,  97839,  98905,  99982,
+    101070, 102171, 103283, 104408, 105545, 106694, 107856, 109031,
+    110218, 111418, 112631, 113858, 115098, 116351, 117618, 118899,
+    120194, 121502, 122825, 124163, 125515, 126882, 128263, 129660,
+    131072
 };
 
 /* FR_pow2(input, radix) — computes 2^(input/2^radix), result at same radix.
@@ -486,12 +479,12 @@ s32 FR_pow2(s32 input, u16 radix)
 		frac_full <<= (16 - radix);
 	/* now frac_full is in [0, 65536) representing fractional in s.16. */
 
-	/* Top 4 bits index the table; bottom 12 are the interpolation fraction. */
-	idx     = frac_full >> 12;
-	frac_lo = frac_full & ((1L << 12) - 1);
+	/* Top 6 bits index the table; bottom 10 are the interpolation fraction. */
+	idx     = frac_full >> 10;
+	frac_lo = frac_full & ((1L << 10) - 1);
 	lo = (s32)gFR_POW2_FRAC_TAB[idx];
 	hi = (s32)gFR_POW2_FRAC_TAB[idx + 1];
-	mant = lo + (((hi - lo) * frac_lo) >> 12);  /* mant in s.16, in [1.0, 2.0) */
+	mant = lo + (((hi - lo) * frac_lo) >> 10);  /* mant in s.16, in [1.0, 2.0) */
 
 	/* Apply integer shift. mant is at radix 16. We want output at `radix`.
 	 * If radix == 16: just shift mant.
@@ -516,15 +509,20 @@ s32 FR_pow2(s32 input, u16 radix)
 	}
 }
 
-/* log2 mantissa table for m in [1, 2), m = 1 + i/32, returning log2(m)
- * in s.16 fixed point. 33 entries (last is log2(2) = 1.0 = 65536) so the
+/* log2 mantissa table for m in [1, 2), m = 1 + i/64, returning log2(m)
+ * in s.16 fixed point. 65 entries (last is log2(2) = 1.0 = 65536) so the
  * interpolation between idx and idx+1 never reads out of bounds.
+ * Size: 260 bytes.  Entry i = round(log2(1 + i/64) * 65536).
  */
-static const u32 gFR_LOG2_MANT_TAB[33] = {
-        0,  2909,  5732,  8473, 11136, 13727, 16248, 18704,
-    21098, 23433, 25711, 27936, 30109, 32234, 34312, 36346,
-    38336, 40286, 42196, 44068, 45904, 47705, 49472, 51207,
-    52911, 54584, 56229, 57845, 59434, 60997, 62534, 64047,
+static const u32 gFR_LOG2_MANT_TAB[65] = {
+        0,  1466,  2909,  4331,  5732,  7112,  8473,  9814,
+    11136, 12440, 13727, 14996, 16248, 17484, 18704, 19909,
+    21098, 22272, 23433, 24579, 25711, 26830, 27936, 29029,
+    30109, 31178, 32234, 33279, 34312, 35334, 36346, 37346,
+    38336, 39316, 40286, 41246, 42196, 43137, 44068, 44990,
+    45904, 46809, 47705, 48593, 49472, 50344, 51207, 52063,
+    52911, 53751, 54584, 55410, 56229, 57040, 57845, 58643,
+    59434, 60219, 60997, 61769, 62534, 63294, 64047, 64794,
     65536
 };
 
@@ -542,14 +540,14 @@ static const u32 gFR_LOG2_MANT_TAB[33] = {
  *      log2(input) = p + log2(input / 2^p), where the second term is in
  *      [0, 1) because (input / 2^p) is in [1, 2).
  *   2. Normalize the mantissa to s1.31 by shifting `input` so its top bit
- *      sits at bit 31 (so bits 30..26 are the upper 5 bits of m-1).
- *   3. Look up log2(m) in the 33-entry table with linear interpolation
- *      across the next 11 bits. Result is in s.16.
+ *      sits at bit 31 (so bits 30..25 are the upper 6 bits of m-1).
+ *   3. Look up log2(m) in the 65-entry table with linear interpolation
+ *      across the next 24 bits. Result is in s.16.
  *   4. integer_part = (p - radix), then result = (integer_part << 16) +
  *      mantissa_log2.
  *   5. Re-radix to the requested output_radix via FR_CHRDX.
  *
- * Worst-case absolute error: ~5e-4 in log2 units.
+ * Worst-case absolute error: ~6e-5 in log2 units (65-entry table).
  */
 s32 FR_log2(s32 input, u16 radix, u16 output_radix)
 {
@@ -579,15 +577,15 @@ s32 FR_log2(s32 input, u16 radix, u16 output_radix)
 		m = (u32)input << (30 - p);
 
 	/* m is now in [2^30, 2^31). Subtract 2^30 to get the fractional part
-	 * (m_frac in [0, 2^30)). Index into the 32-entry table is the top 5
-	 * bits of m_frac; the lower 25 bits are the interpolation fraction.
+	 * (m_frac in [0, 2^30)). Index into the 64-entry table is the top 6
+	 * bits of m_frac; the lower 24 bits are the interpolation fraction.
 	 */
 	m -= (1u << 30);
-	idx  = (s32)(m >> 25);                    /* 5 bits  */
-	frac = (s32)(m & ((1u << 25) - 1));       /* 25 bits */
+	idx  = (s32)(m >> 24);                    /* 6 bits  */
+	frac = (s32)(m & ((1u << 24) - 1));       /* 24 bits */
 	lo = (s32)gFR_LOG2_MANT_TAB[idx];
 	hi = (s32)gFR_LOG2_MANT_TAB[idx + 1];
-	mant_log2 = lo + (s32)(((int64_t)(hi - lo) * frac) >> 25);
+	mant_log2 = lo + (s32)(((int64_t)(hi - lo) * frac) >> 24);
 
 	/* Step 3: assemble. integer_part = p - radix. */
 	integer_part = p - (s32)radix;
@@ -600,13 +598,13 @@ s32 FR_log2(s32 input, u16 radix, u16 output_radix)
 s32 FR_ln(s32 input, u16 radix, u16 output_radix)
 {
 	s32 r = FR_log2(input, radix, output_radix);
-	return FR_SrLOG2E(r); /* Note: return FR_SrLOG2E(FR_log2()) would be a very ugly macro expansion! */
+	return FR_MULK28(r, FR_krLOG2E_28);
 }
 
 s32 FR_log10(s32 input, u16 radix, u16 output_radix)
 {
 	s32 r = FR_log2(input, radix, output_radix);
-	return FR_SrLOG2_10(r); /* Note: return FR_SrLOG2_10(FR_log2()) would be a very ugly macro expansion! */
+	return FR_MULK28(r, FR_krLOG2_10_28);
 }
 
 /***************************************
@@ -878,9 +876,9 @@ s32 FR_numstr(const char *s, u16 radix)
  * Square root and hypot
  *
  * fr_isqrt64 is a private helper implementing the digit-by-digit
- * ("shift-and-subtract") integer square root. The algorithm is bit-exact
- * (returns floor(sqrt(n))) and uses no division. Iteration count is fixed:
- * 32 iterations.
+ * ("shift-and-subtract") integer square root. The core loop computes
+ * floor(sqrt(n)), then a final remainder check rounds to nearest.
+ * Uses no division. At most 32 iterations.
  */
 static u32 fr_isqrt64(uint64_t n)
 {
@@ -919,8 +917,8 @@ static u32 fr_isqrt64(uint64_t n)
  * so we compute isqrt(input_fp << radix) on a 64-bit accumulator. This
  * works for any input that fits in s32 and any radix in [0, 30].
  *
- * Precision: bit-exact floor(sqrt). Worst-case absolute error is < 1
- * LSB at the requested radix (the truncation of the floor operation).
+ * Precision: round-to-nearest sqrt. Worst-case absolute error is
+ * <= 0.5 LSB at the requested radix.
  * Always non-negative for non-negative input. Result is monotone in
  * input.
  *
@@ -954,7 +952,7 @@ s32 FR_sqrt(s32 input, u16 radix)
  * u64 accumulator can hold (INT32_MAX^2)*2 = ~2^63, so (x*x + y*y) never
  * overflows for any s32 inputs.
  *
- * Precision: bit-exact floor(hypot). Worst-case absolute error < 1 LSB
+ * Precision: round-to-nearest. Worst-case absolute error <= 0.5 LSB
  * at the requested radix.
  *
  * Side effects: none. Pure function.

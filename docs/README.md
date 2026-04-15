@@ -33,6 +33,19 @@ or any tooling. If you want the browser version, look in
 | [building.md](building.md) | Makefile, scripts, test suite, coverage, cross-compilation. |
 | [releases.md](releases.md) | Release history with per-version highlights and breaking changes. |
 
+## Measured accuracy (Q16.16 unless noted)
+
+| Function | Max error | Note |
+|---|---|---|
+| sin / cos | 5 LSB (~7.7e-5) | Exact at 0, 90, 180, 270 |
+| sqrt | ≤ 0.5 LSB | Round-to-nearest |
+| log2 | ≤ 4 LSB | 65-entry mantissa table |
+| pow2 | ≤ 1 LSB (integers exact) | 65-entry fraction table |
+| ln, log10 | ≤ 4 LSB | Via FR_MULK28 from log2 |
+| hypot (exact) | ≤ 0.5 LSB | 64-bit intermediate |
+| hypot_fast (4-seg) | 0.34% | Shift-only, no multiply |
+| hypot_fast8 (8-seg) | 0.10% | Shift-only, no multiply |
+
 ## What's in the box
 
 | Area | Functions |
@@ -42,7 +55,7 @@ or any tooling. If you want the browser version, look in
 | Trig (integer deg) | `FR_Sin`, `FR_Cos`, `FR_Tan`, `FR_SinI`, `FR_CosI`, `FR_TanI` |
 | Trig (radian/BAM) | `fr_sin`, `fr_cos`, `fr_tan`, `fr_sin_bam`, `fr_cos_bam`, `fr_sin_deg`, `fr_cos_deg` |
 | Inverse trig | `FR_atan`, `FR_atan2`, `FR_asin`, `FR_acos` |
-| Log / exp | `FR_log2`, `FR_ln`, `FR_log10`, `FR_pow2`, `FR_EXP`, `FR_POW10` |
+| Log / exp | `FR_log2`, `FR_ln`, `FR_log10`, `FR_pow2`, `FR_EXP`, `FR_POW10`, `FR_EXP_FAST`, `FR_POW10_FAST`, `FR_MULK28` |
 | Roots | `FR_sqrt`, `FR_hypot`, `FR_hypot_fast`, `FR_hypot_fast8` |
 | Wave generators | `fr_wave_sqr`, `fr_wave_pwm`, `fr_wave_tri`, `fr_wave_saw`, `fr_wave_tri_morph`, `fr_wave_noise` |
 | Envelope | `fr_adsr_init`, `fr_adsr_trigger`, `fr_adsr_release`, `fr_adsr_step` |
@@ -75,27 +88,33 @@ generic `float` replacement.
 ## Quick taste
 
 ```c
-#include "FR_defs.h"
 #include "FR_math.h"
 
-/* Compute 3.5 * 2.25 at radix 4 (s?.4 format). */
-s32 a = I2FR(3, 4) | (1 << 3);   /* 3.5  = 0x38 */
-s32 b = I2FR(2, 4) | (1 << 2);   /* 2.25 = 0x24 */
-s32 c = (s32)(((int64_t)a * b) >> 4); /* c ≈ 7.875, also at radix 4 */
+#define R 16  /* work at radix 16 (s15.16) throughout */
 
-/* Rotate a point 30° around the origin. */
-#include "FR_math_2D.h"
-FR_Matrix2D_CPT R;
-R.ID();
-R.setrotate(30);                 /* 30 degrees */
-s32 px = I2FR(100, 8), py = I2FR(0, 8);
-s32 rx, ry; R.XFormPtI(px, py, &rx, &ry); /* result ~(86.6, 50.0) at radix 8 */
+s32 pi    = FR_NUM(3, 14159, 5, R);       /* pi at radix 16             */
+s32 c45   = FR_CosI(45);                  /* cos 45 deg = 0.7071 (s15.16) */
+s32 root2 = FR_sqrt(I2FR(2, R), R);       /* sqrt(2)    = 1.4142        */
+s32 lg    = FR_log2(I2FR(1000, R), R, R); /* log2(1000) ~ 9.97          */
+s32 ex    = FR_EXP(I2FR(1, R), R);        /* e^1        ~ 2.7183        */
 ```
 
 See [getting-started.md](getting-started.md) for a complete
 walkthrough, or jump straight to
 [fixed-point-primer.md](fixed-point-primer.md) if you want to
 understand *how* the radix notation works first.
+
+## Comparison
+
+| Feature | libfixmath | CMSIS-DSP | FR_Math |
+|---|---|---|---|
+| Fixed format | Q16.16 only | Q31 / Q15 | Any radix |
+| Angle input | Radians (Q16.16) | Radians (float) | BAM (u16), degrees, or radians |
+| Exact cardinal angles | No | N/A | Yes |
+| Multiply-free path | No | No | Yes (shift macros) |
+| Wave generators | No | No | 6 shapes + ADSR |
+| Dependencies | None | ARM only | None |
+| Code size (Cortex-M4, -Os) | ~8 KB | ~40 KB+ | 3.6 KB |
 
 ## History
 

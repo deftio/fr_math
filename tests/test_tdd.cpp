@@ -813,7 +813,7 @@ static void section_pow_log(void) {
 
     md_h3("8.3 FR_log2 — empirical behavior on integer powers of 2");
     printf("> Implementation: leading-bit-position → normalize the remainder to s1.30 →\n");
-    printf("> 33-entry mantissa lookup with linear interpolation.\n\n");
+    printf("> 65-entry mantissa lookup with linear interpolation.\n\n");
     printf("| input | radix | out_radix | FR_log2 | as double | log2(x) |\n");
     printf("|---:|---:|---:|---:|---:|---:|\n");
     struct { s32 in; u16 r; u16 or_; double ref; } log2_cases[] = {
@@ -845,8 +845,8 @@ static void section_pow_log(void) {
     printf("\n");
     table_header_stats();
     table_row_stats("FR_log2 vs log2()", &log2_stats);
-    printf("\n> v2: `FR_log2` rewritten — leading-bit-position → normalize to s1.30 → 33-entry\n");
-    printf("> mantissa LUT with linear interpolation. Error is now table-limited (~1e-4).\n\n");
+    printf("\n> v2: `FR_log2` rewritten — leading-bit-position → normalize to s1.30 → 65-entry\n");
+    printf("> mantissa LUT with linear interpolation. Error is now table-limited.\n\n");
 
     md_h3("8.4 FR_ln — derived from FR_log2 (v2: fixed by inheritance)");
     printf("| input | FR_ln(in,16,16) | as double | ln(input) |\n|---:|---:|---:|---:|\n");
@@ -1448,13 +1448,263 @@ static void section_v2_new(void) {
 }
 
 /* ============================================================
- * Section 12: Summary of Findings
+ * Section 12: Multi-Radix Accuracy Sweeps (log, div)
+ * ============================================================ */
+
+static void section_multiradix(void) {
+    md_h2("12. Multi-Radix Accuracy Sweeps");
+
+    /* ----------------------------------------------------------
+     * 12.1 FR_log2 fine sweep at radixes 8, 12, 16, 24
+     * ---------------------------------------------------------- */
+    md_h3("12.1 FR_log2 fine sweep at multiple radixes");
+    printf("| Radix | N | Max err (LSB) | Mean err (LSB) | Max abs err | Worst input |\n");
+    printf("|---:|---:|---:|---:|---:|---:|\n");
+
+    int log2_radixes[] = {8, 12, 16, 24};
+    for (int ri = 0; ri < 4; ri++) {
+        int R = log2_radixes[ri];
+        double scale = (double)(1L << R);
+        double max_val = (double)((1L << (30 - R)));  /* stay well within s32 */
+        stats_t st; stats_reset(&st);
+
+        /* Sweep from 0.125 to max representable value */
+        double inputs[] = {0.125, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 2.5, 3.0,
+                           M_E, M_PI, 4.0, 5.0, 7.0, 8.0, 10.0, 16.0, 32.0,
+                           64.0, 100.0, 256.0, 1000.0};
+        int ninp = (int)(sizeof(inputs)/sizeof(inputs[0]));
+
+        for (int i = 0; i < ninp; i++) {
+            if (inputs[i] > max_val) continue;   /* would overflow s32 */
+            s32 fr = (s32)(inputs[i] * scale);
+            if (fr <= 0) continue;
+            s32 r = FR_log2(fr, (u16)R, (u16)R);
+            double rd = frd(r, R);
+            double ref = log2(inputs[i]);
+            stats_add(&st, inputs[i], rd, ref);
+        }
+
+        /* Fine-grained sweep in [1, min(100, max_val)] */
+        double sweep_max = max_val < 100.0 ? max_val : 100.0;
+        for (int i = 1; i <= 500; i++) {
+            double x = 1.0 + ((sweep_max - 1.0) * i / 500.0);
+            s32 fr = (s32)(x * scale);
+            if (fr <= 0) continue;
+            s32 r = FR_log2(fr, (u16)R, (u16)R);
+            double rd = frd(r, R);
+            double ref = log2(x);
+            stats_add(&st, x, rd, ref);
+        }
+
+        double lsb = 1.0 / scale;
+        printf("| %d | %d | %.2f | %.2f | %.6g | %.4g |\n",
+               R, st.n,
+               st.max_abs_err / lsb, stats_mean(&st) / lsb,
+               st.max_abs_err, st.worst_input);
+    }
+    printf("\n");
+
+    /* ----------------------------------------------------------
+     * 12.2 FR_ln fine sweep at radixes 8, 12, 16, 24
+     * ---------------------------------------------------------- */
+    md_h3("12.2 FR_ln fine sweep at multiple radixes");
+    printf("| Radix | N | Max err (LSB) | Mean err (LSB) | Max abs err | Worst input |\n");
+    printf("|---:|---:|---:|---:|---:|---:|\n");
+
+    for (int ri = 0; ri < 4; ri++) {
+        int R = log2_radixes[ri];
+        double scale = (double)(1L << R);
+        double max_val = (double)((1L << (30 - R)));
+        double sweep_max = max_val < 100.0 ? max_val : 100.0;
+        stats_t st; stats_reset(&st);
+
+        for (int i = 1; i <= 500; i++) {
+            double x = 0.5 + ((sweep_max - 0.5) * i / 500.0);
+            s32 fr = (s32)(x * scale);
+            if (fr <= 0) continue;
+            s32 r = FR_ln(fr, (u16)R, (u16)R);
+            double rd = frd(r, R);
+            double ref = log(x);
+            stats_add(&st, x, rd, ref);
+        }
+
+        double lsb = 1.0 / scale;
+        printf("| %d | %d | %.2f | %.2f | %.6g | %.4g |\n",
+               R, st.n,
+               st.max_abs_err / lsb, stats_mean(&st) / lsb,
+               st.max_abs_err, st.worst_input);
+    }
+    printf("\n");
+
+    /* ----------------------------------------------------------
+     * 12.3 FR_log10 fine sweep at radixes 8, 12, 16, 24
+     * ---------------------------------------------------------- */
+    md_h3("12.3 FR_log10 fine sweep at multiple radixes");
+    printf("| Radix | N | Max err (LSB) | Mean err (LSB) | Max abs err | Worst input |\n");
+    printf("|---:|---:|---:|---:|---:|---:|\n");
+
+    for (int ri = 0; ri < 4; ri++) {
+        int R = log2_radixes[ri];
+        double scale = (double)(1L << R);
+        double max_val = (double)((1L << (30 - R)));
+        double sweep_max = max_val < 1000.0 ? max_val : 1000.0;
+        stats_t st; stats_reset(&st);
+
+        for (int i = 1; i <= 500; i++) {
+            double x = 0.5 + ((sweep_max - 0.5) * i / 500.0);
+            s32 fr = (s32)(x * scale);
+            if (fr <= 0) continue;
+            s32 r = FR_log10(fr, (u16)R, (u16)R);
+            double rd = frd(r, R);
+            double ref = log10(x);
+            stats_add(&st, x, rd, ref);
+        }
+
+        double lsb = 1.0 / scale;
+        printf("| %d | %d | %.2f | %.2f | %.6g | %.4g |\n",
+               R, st.n,
+               st.max_abs_err / lsb, stats_mean(&st) / lsb,
+               st.max_abs_err, st.worst_input);
+    }
+    printf("\n");
+
+    /* ----------------------------------------------------------
+     * 12.4 FR_DIV (round-to-nearest) vs FR_DIV_TRUNC across radixes
+     * ---------------------------------------------------------- */
+    md_h3("12.4 FR_DIV (round-to-nearest) vs FR_DIV_TRUNC across radixes");
+    printf("| Radix | N | FR_DIV max err (LSB) | FR_DIV mean err (LSB) | TRUNC max err (LSB) | TRUNC mean err (LSB) |\n");
+    printf("|---:|---:|---:|---:|---:|---:|\n");
+
+    int div_radixes[] = {8, 12, 16, 20};
+    for (int ri = 0; ri < 4; ri++) {
+        int R = div_radixes[ri];
+        double scale = (double)(1L << R);
+        double max_val = (double)(1L << (30 - R));  /* stay within s32 */
+        stats_t st_rnd, st_trunc;
+        stats_reset(&st_rnd);
+        stats_reset(&st_trunc);
+
+        /* Sweep a variety of x/y combinations */
+        double xvals[] = {1.0, 2.5, 7.0, 10.0, 100.0, 0.5, -3.0, -10.0, 1000.0, 0.125};
+        double yvals[] = {3.0, 7.0, 0.3, 1.7, -3.0, 9.0, 11.0, 0.125};
+        int nx = (int)(sizeof(xvals)/sizeof(xvals[0]));
+        int ny = (int)(sizeof(yvals)/sizeof(yvals[0]));
+
+        for (int xi = 0; xi < nx; xi++) {
+            for (int yi = 0; yi < ny; yi++) {
+                double x = xvals[xi], y = yvals[yi];
+                double ax = x < 0 ? -x : x;
+                double ay = y < 0 ? -y : y;
+                double aq = ay > 0 ? ax / ay : 1e30;
+                /* Skip if inputs or quotient would overflow s32 at this radix */
+                if (ax >= max_val || ay >= max_val || aq >= max_val) continue;
+                s32 xfp = (s32)(x * scale);
+                s32 yfp = (s32)(y * scale);
+                if (yfp == 0) continue;
+                double ref = x / y;
+
+                s32 d_rnd   = FR_DIV(xfp, R, yfp, R);
+                s32 d_trunc = FR_DIV_TRUNC(xfp, R, yfp, R);
+                double rd_rnd   = frd(d_rnd, R);
+                double rd_trunc = frd(d_trunc, R);
+
+                stats_add(&st_rnd,   x / y, rd_rnd,   ref);
+                stats_add(&st_trunc, x / y, rd_trunc, ref);
+            }
+        }
+
+        double lsb = 1.0 / scale;
+        printf("| %d | %d | %.2f | %.2f | %.2f | %.2f |\n",
+               R, st_rnd.n,
+               st_rnd.max_abs_err / lsb, stats_mean(&st_rnd) / lsb,
+               st_trunc.max_abs_err / lsb, stats_mean(&st_trunc) / lsb);
+    }
+    printf("\n");
+
+    /* ----------------------------------------------------------
+     * 12.5 FR_DIV sign combinations — round-to-nearest correctness
+     * ---------------------------------------------------------- */
+    md_h3("12.5 FR_DIV sign combinations");
+    printf("| x | y | radix | FR_DIV | expected | err (LSB) | correct? |\n");
+    printf("|---:|---:|---:|---:|---:|---:|---:|\n");
+
+    struct { double x, y; int r; } sign_cases[] = {
+        { 7,  3, 16}, {-7,  3, 16}, { 7, -3, 16}, {-7, -3, 16},
+        { 1,  3,  8}, {-1,  3,  8}, { 1, -3,  8}, {-1, -3,  8},
+        {10,  7, 12}, {-10, 7, 12}, {10, -7, 12}, {-10,-7, 12},
+        { 1,  6, 20}, {-1,  6, 20}, { 1, -6, 20}, {-1, -6, 20},
+    };
+    for (int i = 0; i < (int)(sizeof(sign_cases)/sizeof(sign_cases[0])); i++) {
+        int R = sign_cases[i].r;
+        double scale = (double)(1L << R);
+        s32 xfp = (s32)(sign_cases[i].x * scale);
+        s32 yfp = (s32)(sign_cases[i].y * scale);
+        s32 d = FR_DIV(xfp, R, yfp, R);
+        double rd = frd(d, R);
+        double ref = sign_cases[i].x / sign_cases[i].y;
+        double err_lsb = (rd - ref) * scale;
+        if (err_lsb < 0) err_lsb = -err_lsb;
+        const char *ok = err_lsb <= 0.5001 ? "YES" : "no";
+        printf("| %.0f | %.0f | %d | %ld | %.6f | %.3f | %s |\n",
+               sign_cases[i].x, sign_cases[i].y, R,
+               (long)d, ref, err_lsb, ok);
+    }
+    printf("\n");
+
+    /* ----------------------------------------------------------
+     * 12.6 FR_EXP / FR_POW10 multi-radix sweep
+     * ---------------------------------------------------------- */
+    md_h3("12.6 FR_EXP and FR_POW10 multi-radix sweep");
+    printf("| Radix | N | FR_EXP max err (LSB) | FR_EXP mean err (LSB) | FR_POW10 max err (LSB) | FR_POW10 mean err (LSB) |\n");
+    printf("|---:|---:|---:|---:|---:|---:|\n");
+
+    int exp_radixes[] = {8, 12, 16, 20};
+    for (int ri = 0; ri < 4; ri++) {
+        int R = exp_radixes[ri];
+        double scale = (double)(1L << R);
+        stats_t st_exp, st_pow10;
+        stats_reset(&st_exp);
+        stats_reset(&st_pow10);
+
+        /* Sweep exp(x) for x in [-4, 4] in steps of 0.05 */
+        for (int i = -80; i <= 80; i++) {
+            double x = i / 20.0;
+            s32 fr = (s32)(x * scale);
+            s32 r = FR_EXP(fr, R);
+            double rd = frd(r, R);
+            double ref = exp(x);
+            if (r != FR_OVERFLOW_POS && ref < (double)(1L << (31 - R)))
+                stats_add(&st_exp, x, rd, ref);
+        }
+
+        /* Sweep pow10(x) for x in [-2, 2] in steps of 0.05 */
+        for (int i = -40; i <= 40; i++) {
+            double x = i / 20.0;
+            s32 fr = (s32)(x * scale);
+            s32 r = FR_POW10(fr, R);
+            double rd = frd(r, R);
+            double ref = pow(10.0, x);
+            if (r != FR_OVERFLOW_POS && ref < (double)(1L << (31 - R)))
+                stats_add(&st_pow10, x, rd, ref);
+        }
+
+        double lsb = 1.0 / scale;
+        printf("| %d | %d/%d | %.2f | %.2f | %.2f | %.2f |\n",
+               R, st_exp.n, st_pow10.n,
+               st_exp.max_abs_err / lsb, stats_mean(&st_exp) / lsb,
+               st_pow10.max_abs_err / lsb, stats_mean(&st_pow10) / lsb);
+    }
+    printf("\n");
+}
+
+/* ============================================================
+ * Section 13: Summary of Findings
  * ============================================================ */
 
 static void section_summary(void) {
-    md_h2("12. Summary of Findings");
+    md_h2("13. Summary of Findings");
 
-    md_h3("12.1 Status by Function (empirical, this run)");
+    md_h3("13.1 Status by Function (empirical, this run)");
     printf("| Function / Macro | Status | Evidence (section) | Notes |\n");
     printf("|---|:---:|:---:|---|\n");
     printf("| Type sizes (s32 = 4 bytes) | OK | 0 | `FR_defs.h` uses `<stdint.h>`; `s32` is exactly 4 bytes on LP64 and ILP32 alike |\n");
@@ -1477,10 +1727,10 @@ static void section_summary(void) {
     printf("| FR_atan | OK | 7.3 | `FR_atan(x, radix)` calls `FR_atan2(x, 1<<radix)` |\n");
     printf("| FR_pow2 (positive integer x) | OK | 8.1 | Bit-exact for integer exponents in test range |\n");
     printf("| FR_pow2 (positive fractional x) | OK | 8.1, 8.2 | ~1e-6 error |\n");
-    printf("| FR_pow2 (negative fractional x) | OK | 8.1, 8.2 | Mathematical floor (toward −∞); 17-entry fraction table with linear interp |\n");
-    printf("| FR_log2 | OK | 8.3 | Leading-bit-position → normalize to s1.30 → 33-entry mantissa lookup with linear interp |\n");
-    printf("| FR_ln, FR_log10 | OK | 8.4, 8.5 | Constant multiply of FR_log2 |\n");
-    printf("| FR_EXP, FR_POW10 | OK | 8.6 | Wrap FR_pow2 |\n");
+    printf("| FR_pow2 (negative fractional x) | OK | 8.1, 8.2 | Mathematical floor (toward −∞); 65-entry fraction table with linear interp |\n");
+    printf("| FR_log2 | OK | 8.3, 12.1 | Leading-bit-position → normalize to s1.30 → 65-entry mantissa lookup with linear interp |\n");
+    printf("| FR_ln, FR_log10 | OK | 8.4, 8.5, 12.2, 12.3 | FR_MULK28 constant multiply of FR_log2 |\n");
+    printf("| FR_EXP, FR_POW10 | OK | 8.6, 12.6 | FR_MULK28 scaling + FR_pow2 |\n");
     printf("| FR_LOG2MIN sentinel | OK | 8.7 | Returned for input <= 0 |\n");
     printf("| FR_printNumD | OK | 9.1 | Works in unsigned magnitude; returns real byte count |\n");
     printf("| FR_printNumH | OK | 9.2 | Casts to unsigned before shifting |\n");
@@ -1493,7 +1743,7 @@ static void section_summary(void) {
     printf("| FR_Matrix2D_CPT::add, sub, +=, -=, *= | OK | 10.9 | Return void |\n");
     printf("| FR_Matrix2D_CPT::checkfast | OK | 10.10 | Detects scale-only matrices |\n");
     printf("| FR_sqrt | OK | 11.1, 11.2 | Digit-by-digit isqrt64; round-to-nearest (remainder > root → +1); FR_DOMAIN_ERROR sentinel for negative |\n");
-    printf("| FR_DIV / FR_DIV32 | OK | 4.6 | FR_DIV uses s64 intermediate (full Q16.16 range); FR_DIV32 is 32-bit only |\n");
+    printf("| FR_DIV / FR_DIV_TRUNC / FR_DIV32 | OK | 4.6, 12.4, 12.5 | FR_DIV rounds to nearest (≤0.5 LSB); FR_DIV_TRUNC truncates; FR_DIV32 is 32-bit only |\n");
     printf("| FR_hypot | OK | 11.4 | Direct sum-of-squares on int64 |\n");
     printf("| fr_wave_sqr / fr_wave_pwm | OK | 11.5 | Single-comparison pulse generators; ±32767 amplitude |\n");
     printf("| fr_wave_tri | OK | 11.6, 11.7 | Symmetric triangle, peaks clamped to ±32767 |\n");
@@ -1504,7 +1754,7 @@ static void section_summary(void) {
     printf("| fr_adsr_t / init / trigger / release / step | OK | 11.11 | Linear ADSR; s1.30 internal level; s0.15 output |\n");
     printf("\n");
 
-    md_h3("12.2 Coverage");
+    md_h3("13.2 Coverage");
     printf("- `FR_math.c`: this TDD suite exercises every public function. Uncovered lines that remain are deep saturation branches inside `FR_FixMulSat` that need very specific intermediate overflow patterns.\n");
     printf("- `FR_math_2D.cpp`: covered by sections 10.1–10.10. The `inv()` failure path is exercised in 10.8.\n");
     printf("- `FR_math_2D.h`: inline transform helpers covered.\n");
@@ -1530,6 +1780,7 @@ int main(void) {
     section_print();
     section_matrix2d();
     section_v2_new();
+    section_multiradix();
     section_summary();
 
     return 0;

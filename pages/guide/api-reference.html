@@ -693,9 +693,9 @@ leading bit position of the input (that gives you the integer part
 of <code>log2</code>), then interpolate a 33-entry mantissa table for
 the fractional part, then scale the result to the requested output
 radix. <code>FR_ln</code> and <code>FR_log10</code> multiply the
-<code>log2</code> result by the appropriate constant
-(<code>FR_krLOG2E</code> or <code>FR_krLOG2_10</code>) before
-returning.</p>
+<code>log2</code> result by the appropriate radix-28 constant via
+<code>FR_MULK28</code> (<code>FR_krLOG2E_28</code> or
+<code>FR_krLOG2_10_28</code>) before returning.</p>
 
 <h3>Logarithms</h3>
 
@@ -751,12 +751,14 @@ suits your downstream math.</p>
 
 <h3>Exponentials</h3>
 
-<p>The inverse functions use a single core routine
-(<code>FR_pow2</code>) plus two shift-only macros that rescale the
-input to the natural log base. Because those macros are pure shifts,
-the exponential wrappers (<code>FR_EXP</code>, <code>FR_POW10</code>)
-are macros, not functions &mdash; they inline directly into the
-caller.</p>
+<p>The exponential functions use a single core routine
+(<code>FR_pow2</code>) plus base-conversion macros that rescale
+the input. <code>FR_EXP</code> and <code>FR_POW10</code> use
+<code>FR_MULK28</code> (a radix-28 constant multiply via 64-bit
+intermediate) for high accuracy. Shift-only variants
+(<code>FR_EXP_FAST</code>, <code>FR_POW10_FAST</code>) are
+available for targets where 32&times;32&rarr;64 multiply is
+expensive.</p>
 
 <table>
 <thead>
@@ -778,25 +780,51 @@ caller.</p>
   <td>Domain: input up to <code>30 &lt;&lt; radix</code>; above that,
       saturates to <code>FR_OVERFLOW_POS</code>. Negative inputs are
       floored toward &minus;&infin; before splitting into integer +
-      fractional parts.</td>
+      fractional parts. Uses a 65-entry lookup table (260 bytes) with
+      linear interpolation.</td>
 </tr>
 <tr>
   <td><code>FR_EXP</code></td>
   <td>Macro</td>
   <td>Same as <code>FR_pow2</code>.</td>
   <td><code>s32</code> at <code>radix</code>.</td>
-  <td>Expands to <code>FR_pow2(FR_SLOG2E(input), radix)</code>.
-      <code>FR_SLOG2E</code> is a shift-only multiply by
-      <code>log<sub>2</sub>(e)</code>, which is why this is a macro
-      and not a function call.</td>
+  <td>Expands to <code>FR_pow2(FR_MULK28(input, FR_kLOG2E_28), radix)</code>.
+      Uses a radix-28 constant for ~9 digits of precision in the base
+      conversion.</td>
 </tr>
 <tr>
   <td><code>FR_POW10</code></td>
   <td>Macro</td>
   <td>Same as <code>FR_pow2</code>.</td>
   <td><code>s32</code> at <code>radix</code>.</td>
-  <td>Expands to <code>FR_pow2(FR_SLOG2_10(input), radix)</code>.
+  <td>Expands to <code>FR_pow2(FR_MULK28(input, FR_kLOG2_10_28), radix)</code>.
       Saturates around <code>input &ge; 9 &lt;&lt; radix</code>.</td>
+</tr>
+<tr>
+  <td><code>FR_EXP_FAST</code></td>
+  <td>Macro</td>
+  <td>Same as <code>FR_pow2</code>.</td>
+  <td><code>s32</code> at <code>radix</code>.</td>
+  <td>Shift-only variant: <code>FR_pow2(FR_SLOG2E(input), radix)</code>.
+      No multiply instruction. Lower accuracy (~5&ndash;10 LSB at Q16.16).</td>
+</tr>
+<tr>
+  <td><code>FR_POW10_FAST</code></td>
+  <td>Macro</td>
+  <td>Same as <code>FR_pow2</code>.</td>
+  <td><code>s32</code> at <code>radix</code>.</td>
+  <td>Shift-only variant: <code>FR_pow2(FR_SLOG2_10(input), radix)</code>.
+      No multiply instruction.</td>
+</tr>
+<tr>
+  <td><code>FR_MULK28</code></td>
+  <td>Macro</td>
+  <td><code>s32 x</code>, radix-28 constant <code>k</code></td>
+  <td><code>s32</code> at the same radix as <code>x</code>.</td>
+  <td>Multiplies a fixed-point value by a radix-28 constant using a
+      64-bit intermediate. Rounds to nearest. Used internally by
+      <code>FR_EXP</code>, <code>FR_POW10</code>, <code>FR_ln</code>,
+      <code>FR_log10</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -807,16 +835,15 @@ at radix 16:</p>
 <pre><code class="language-c">s32 x = FR_NUM(1, 5, 1, 16);   /* 1.5 at radix 16 */
 s32 y = FR_EXP(x, 16);          /* ≈ 4.4817 at radix 16 */</code></pre>
 
-<p><strong>Why both <code>FR_log2</code> and <code>FR_pow2</code>
-exist but <code>FR_exp</code> / <code>FR_pow10</code> don&rsquo;t.</strong>
-Logarithms can&rsquo;t be reduced to a pure shift &mdash; they need
-the leading-bit and mantissa-table pipeline, so they must be
-functions. Exponentials, on the other hand, reduce to
-<code>FR_pow2</code> after a single multiply, and that multiply
-happens to be expressible as a shift-only sum (the
-<code>FR_SLOG2E</code> / <code>FR_SLOG2_10</code> macros in the
-shift-only scaling section above). That makes the whole rescale
-free, so the exponential wrappers can be macros and skip a call.</p>
+<p><strong><code>FR_EXP</code> vs <code>FR_EXP_FAST</code>.</strong>
+<code>FR_EXP</code> uses <code>FR_MULK28</code> which requires a single
+32&times;32&rarr;64 multiply (available on all Cortex-M, RISC-V RV32IM,
+x86, etc.). The radix-28 constant has ~9 decimal digits of precision,
+so the base conversion adds negligible error. <code>FR_EXP_FAST</code>
+uses the shift-only macro <code>FR_SLOG2E</code> which avoids all
+multiply instructions but introduces ~5&ndash;10 LSB of extra error
+at Q16.16. Use <code>FR_EXP_FAST</code> on 8-bit targets (AVR, 8051)
+where 64-bit multiply is very expensive.</p>
 
 <h2>Roots</h2>
 

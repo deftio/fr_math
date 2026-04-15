@@ -129,9 +129,20 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 #define FR_ADD(x, xr, y, yr) ((x) += FR_CHRDX(y, yr, xr))
 #define FR_SUB(x, xr, y, yr) ((x) -= FR_CHRDX(y, yr, xr))
 
-/* Fixed-radix division: x (at radix xr) / y (at radix yr), result at radix xr.
- * Uses a 64-bit intermediate so the full Q16.16 range works correctly. */
-#define FR_DIV(x, xr, y, yr) ((s32)(((s64)(x) << (yr)) / (s32)(y)))
+/* Fixed-radix division with round-to-nearest: x (at radix xr) / y (at radix yr),
+ * result at radix xr. Uses a 64-bit intermediate so the full Q16.16 range works
+ * correctly. Adds half the divisor before truncation to achieve ≤ 0.5 LSB error. */
+static inline s32 FR_div_rnd(s64 num, s32 den) {
+    if ((num ^ den) >= 0)                   /* same sign: positive quotient */
+        return (s32)((num + den / 2) / den);
+    else                                     /* negative quotient */
+        return (s32)((num - den / 2) / den);
+}
+#define FR_DIV(x, xr, y, yr) FR_div_rnd((s64)(x) << (yr), (s32)(y))
+
+/* FR_DIV_TRUNC: truncating division (old FR_DIV behavior). Useful when the
+ * caller knows the quotient is exact or truncation is acceptable. */
+#define FR_DIV_TRUNC(x, xr, y, yr) ((s32)(((s64)(x) << (yr)) / (s32)(y)))
 
 /* FR_DIV32: 32-bit-only division. Requires |x| < 2^(31-yr) to avoid
  * overflow in the intermediate (x << yr). Use FR_DIV for full-range
@@ -206,6 +217,22 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 #define FR_kLOG2_10 (217706) /* 3.32192809489 */
 #define FR_krLOG2_10 (19728) /* 0.30102999566 */
 
+/* High-precision scaling constants at radix 28.
+ * Used by FR_EXP, FR_ln, FR_log10 for base conversion.
+ * At radix 28 these have ~9 decimal digits of precision, far exceeding
+ * the ~4.8 digits of Q16.16.
+ */
+#define FR_kLOG2E_28    (387270501)   /* log2(e)   = 1.4426950408889634  */
+#define FR_krLOG2E_28   (186065279)   /* ln(2)     = 0.6931471805599453  */
+#define FR_kLOG2_10_28  (891723283)   /* log2(10)  = 3.3219280948873622  */
+#define FR_krLOG2_10_28  (80807124)   /* log10(2)  = 0.3010299956639812  */
+
+/* Multiply fixed-point value x (any radix) by a radix-28 constant k.
+ * Result stays at x's radix. Uses 64-bit intermediate.
+ * Rounds to nearest (adds 0.5 LSB before shift).
+ */
+#define FR_MULK28(x, k) ((s32)((((int64_t)(x) * (int64_t)(k)) + (1 << 27)) >> 28))
+
 // common sqrts
 #define FR_kSQRT2 (92682)   /* 1.414213562373 */
 #define FR_krSQRT2 (46341)  /* 0.707106781186 */
@@ -219,9 +246,9 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
   /*===============================================
    * Arithmetic operations
    */
-  s32 FR_FixMuls(s32 x, s32 y);   // mul signed/unsigned NOT Saturated
-  s32 FR_FixMulSat(s32 x, s32 y); // mul signed/unsigned AND Saturated
-  s32 FR_FixAddSat(s32 x, s32 y); // add signed/unsigned AND Saturated
+  s32 FR_FixMuls(s32 x, s32 y);   // mul signed, round-to-nearest, NOT saturated
+  s32 FR_FixMulSat(s32 x, s32 y); // mul signed, round-to-nearest, saturated
+  s32 FR_FixAddSat(s32 x, s32 y); // add signed, saturated
 
 /*================================================
  * Constants used in Trig tables, definitions
@@ -418,8 +445,15 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 
   /* Power */
   s32 FR_pow2(s32 input, u16 radix);
-#define FR_EXP(input, radix) (FR_pow2(FR_SLOG2E(input), radix))
-#define FR_POW10(input, radix) (FR_pow2(FR_SLOG2_10(input), radix))
+#define FR_EXP(input, radix)   (FR_pow2(FR_MULK28((input), FR_kLOG2E_28), (radix)))
+#define FR_POW10(input, radix) (FR_pow2(FR_MULK28((input), FR_kLOG2_10_28), (radix)))
+
+/* Shift-only (multiply-free) base-conversion variants.
+ * Lower accuracy (~5-10 LSB at Q16.16) but no multiply instruction.
+ * Use these on targets where 32x32->64 multiply is expensive.
+ */
+#define FR_EXP_FAST(input, radix)   (FR_pow2(FR_SLOG2E(input), radix))
+#define FR_POW10_FAST(input, radix) (FR_pow2(FR_SLOG2_10(input), radix))
 
   /* printing family of functions */
   int FR_printNumF(int (*f)(char), s32 n, int radix, int pad, int prec); /* print fixed radix num as floating point e.g.  -12.34" */
@@ -434,7 +468,7 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
  *
  * Both take fixed-radix inputs and return a result at the same radix.
  * Algorithm: digit-by-digit isqrt on a 64-bit accumulator (no division,
- * deterministic 32-iteration cost).
+ * at most 32 iterations). Rounds to nearest.
  *
  * Domain error sentinel: input < 0 (sqrt) returns FR_DOMAIN_ERROR. Caller
  * can check `result == FR_DOMAIN_ERROR` to detect domain errors.
@@ -444,7 +478,7 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 
   /* Fast approximate magnitude — shift-only, no multiply, no 64-bit.
    * Based on piecewise-linear approximation of sqrt(x*x + y*y).
-   * See US Patent 6,567,777 B1 (Chatterjee, public domain).
+   * See US Patent 6,567,777 B1 (Chatterjee, expired).
    *
    *   FR_hypot_fast(x, y)   4-segment, ~0.4% peak error
    *   FR_hypot_fast8(x, y)  8-segment, ~0.14% peak error

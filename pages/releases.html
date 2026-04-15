@@ -21,6 +21,106 @@
 <a href="https://github.com/deftio/fr_math/blob/master/release_notes.md">release_notes.md</a>
 in the repo.</p>
 
+<h2>v2.0.1 &mdash; 2026</h2>
+
+<p>Precision and accuracy release. All changes are backward-compatible
+with v2.0.0 except where noted.</p>
+
+<h3>Trig output precision</h3>
+<ul>
+  <li><code>fr_cos_bam</code> / <code>fr_sin_bam</code> now return
+      <strong>s15.16</strong> (was s0.15). Exact values at cardinal angles:
+      <code>cos(0&deg;) = 65536</code>, <code>cos(90&deg;) = 0</code>.
+      <code>FR_TRIG_ONE = 65536</code>.</li>
+  <li><code>FR_TanI</code> / <code>fr_tan</code> return s15.16 (was s16.15).
+      Saturation is now <code>&pm;INT32_MAX</code>.</li>
+  <li>All wrappers updated: <code>FR_Cos</code>, <code>FR_Sin</code>,
+      <code>FR_CosI</code>, <code>FR_SinI</code>, <code>FR_TanI</code>,
+      <code>FR_Tan</code>.</li>
+</ul>
+
+<h3>Inverse trig now returns radians</h3>
+<ul>
+  <li><code>FR_acos</code>, <code>FR_asin</code>, <code>FR_atan</code>
+      gain an <code>out_radix</code> parameter and return radians at that
+      radix (was degrees as <code>s16</code>).</li>
+  <li><code>FR_atan2(y, x, out_radix)</code> also returns radians.</li>
+  <li><code>FR_BAM2RAD</code> macro corrected (was off by a factor of
+      1024).</li>
+</ul>
+
+<h3>Rounding improvements</h3>
+<ul>
+  <li><code>FR_FixMuls</code> / <code>FR_FixMulSat</code>: add 0.5 LSB
+      (<code>+0x8000</code>) before the <code>&gt;&gt;16</code> shift. Both
+      now <strong>round to nearest</strong> instead of truncating.</li>
+  <li><code>FR_sqrt</code> / <code>FR_hypot</code>: the internal
+      <code>fr_isqrt64</code> now rounds to nearest (remainder &gt; root
+      &rarr; +1). Worst-case error drops from &lt;1 LSB to
+      <strong>&le; 0.5 LSB</strong>.</li>
+</ul>
+
+<h3>Improved exp / log accuracy</h3>
+<ul>
+  <li><strong><code>FR_pow2</code> table expanded</strong> from 17 entries
+      (16 segments) to 65 entries (64 segments, 260 bytes). Interpolation
+      error drops by ~16&times;.</li>
+  <li><strong><code>FR_MULK28</code> macro</strong> added: multiplies any
+      fixed-point value by a radix-28 constant using a 64-bit intermediate
+      with round-to-nearest. ~9 decimal digits of precision.</li>
+  <li><code>FR_EXP</code> and <code>FR_POW10</code> now use
+      <code>FR_MULK28</code> for the base conversion instead of shift-only
+      macros. Much lower error.</li>
+  <li><code>FR_ln</code> and <code>FR_log10</code> also use
+      <code>FR_MULK28</code> internally.</li>
+  <li><strong><code>FR_EXP_FAST</code></strong> and
+      <strong><code>FR_POW10_FAST</code></strong> added as shift-only
+      alternatives for 8-bit targets where 64-bit multiply is expensive.</li>
+  <li>Four radix-28 constants added: <code>FR_kLOG2E_28</code>,
+      <code>FR_krLOG2E_28</code>, <code>FR_kLOG2_10_28</code>,
+      <code>FR_krLOG2_10_28</code>.</li>
+</ul>
+
+<h3>New utility macros</h3>
+<ul>
+  <li><code>FR_MIN</code>, <code>FR_MAX</code>, <code>FR_CLAMP</code>
+      &mdash; standard min/max/clamp.</li>
+  <li><code>FR_DIV(x, xr, y, yr)</code> &mdash; fixed-point division with
+      64-bit pre-scaling. <code>FR_DIV32</code> is the 32-bit-only legacy
+      path.</li>
+  <li><code>FR_MOD(x, xr, y, yr)</code> &mdash; fixed-point modulus.</li>
+</ul>
+
+<h3>Infrastructure</h3>
+<ul>
+  <li>Docker cross-compile size report (9 targets).</li>
+  <li><code>sync_version.sh</code> rewrite &mdash;
+      <code>FR_MATH_VERSION_HEX</code> is the single source of truth for
+      version numbers.</li>
+  <li>CI auto-release job, Dependabot config.</li>
+  <li>Documentation audit: 14 errors fixed across header, source, markdown,
+      and HTML docs.</li>
+</ul>
+
+<h3>Breaking changes from v2.0.0</h3>
+<table>
+<thead>
+<tr><th>Change</th><th>v2.0.0</th><th>v2.0.1</th></tr>
+</thead>
+<tbody>
+<tr><td>sin/cos return type</td><td><code>s16</code> (s0.15)</td><td><code>s32</code> (s15.16)</td></tr>
+<tr><td>sin/cos 1.0 value</td><td>32767</td><td>65536 (exact)</td></tr>
+<tr><td>tan return format</td><td>s16.15 (radix 15)</td><td>s15.16 (radix 16)</td></tr>
+<tr><td>tan saturation</td><td><code>&pm;(32767 &lt;&lt; 15)</code></td><td><code>&pm;INT32_MAX</code></td></tr>
+<tr><td>FR_acos/asin signature</td><td><code>(input, radix)</code> &rarr; s16 degrees</td><td><code>(input, radix, out_radix)</code> &rarr; s32 radians</td></tr>
+<tr><td>FR_atan signature</td><td><code>(input, radix)</code> &rarr; s16 degrees</td><td><code>(input, radix, out_radix)</code> &rarr; s32 radians</td></tr>
+<tr><td>FR_atan2 signature</td><td><code>(y, x)</code> &rarr; s16 degrees</td><td><code>(y, x, out_radix)</code> &rarr; s32 radians</td></tr>
+<tr><td>FR_BAM2RAD</td><td>off by 1024&times; (bug)</td><td>correct</td></tr>
+</tbody>
+</table>
+
+<hr>
+
 <h2>v2.0.0 &mdash; 2026</h2>
 
 <p>The first major revision in more than twenty years. v2 is a

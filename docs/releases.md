@@ -4,6 +4,86 @@ Release highlights. For the full per-symbol change log, see
 [release_notes.md](https://github.com/deftio/fr_math/blob/master/release_notes.md)
 in the repo.
 
+## v2.0.1 — 2026
+
+Precision and accuracy release. All changes are backward-compatible
+with v2.0.0 except where noted.
+
+### Trig output precision
+
+- `fr_cos_bam` / `fr_sin_bam` now return **s15.16** (was s0.15).
+  Exact values at cardinal angles: `cos(0°) = 65536`, `cos(90°) = 0`.
+  `FR_TRIG_ONE = 65536`.
+- `FR_TanI` / `fr_tan` return s15.16 (was s16.15). Saturation
+  is now `±INT32_MAX`.
+- All wrappers updated: `FR_Cos`, `FR_Sin`, `FR_CosI`, `FR_SinI`,
+  `FR_TanI`, `FR_Tan`.
+
+### Inverse trig now returns radians
+
+- `FR_acos`, `FR_asin`, `FR_atan` gain an `out_radix` parameter
+  and return radians at that radix (was degrees as `s16`).
+- `FR_atan2(y, x, out_radix)` also returns radians.
+- `FR_BAM2RAD` macro corrected (was off by a factor of 1024).
+
+### Rounding improvements
+
+- `FR_FixMuls` / `FR_FixMulSat`: add 0.5 LSB (`+0x8000`) before
+  the `>>16` shift. Both now **round to nearest** instead of
+  truncating.
+- `FR_sqrt` / `FR_hypot`: the internal `fr_isqrt64` now rounds to
+  nearest (remainder > root → +1). Worst-case error drops from
+  <1 LSB to **≤ 0.5 LSB**.
+
+### Improved exp / log accuracy
+
+- **`FR_pow2` table expanded** from 17 entries (16 segments) to
+  65 entries (64 segments, 260 bytes). Interpolation error drops
+  by ~16×.
+- **`FR_MULK28` macro** added: multiplies any fixed-point value
+  by a radix-28 constant using a 64-bit intermediate with
+  round-to-nearest. ~9 decimal digits of precision in the
+  constant.
+- `FR_EXP` and `FR_POW10` now use `FR_MULK28` for the base
+  conversion instead of shift-only macros. Much lower error.
+- `FR_ln` and `FR_log10` also use `FR_MULK28` internally.
+- **`FR_EXP_FAST`** and **`FR_POW10_FAST`** added as shift-only
+  alternatives for 8-bit targets where 64-bit multiply is
+  expensive.
+- Four radix-28 constants added: `FR_kLOG2E_28`,
+  `FR_krLOG2E_28`, `FR_kLOG2_10_28`, `FR_krLOG2_10_28`.
+
+### New utility macros
+
+- `FR_MIN`, `FR_MAX`, `FR_CLAMP` — standard min/max/clamp.
+- `FR_DIV(x, xr, y, yr)` — fixed-point division with 64-bit
+  pre-scaling. `FR_DIV32` is the 32-bit-only legacy path.
+- `FR_MOD(x, xr, y, yr)` — fixed-point modulus.
+
+### Infrastructure
+
+- Docker cross-compile size report (9 targets).
+- `sync_version.sh` rewrite — `FR_MATH_VERSION_HEX` is the
+  single source of truth for version numbers.
+- CI auto-release job, Dependabot config.
+- Documentation audit: 14 errors fixed across header, source,
+  markdown, and HTML docs.
+
+### Breaking changes from v2.0.0
+
+| Change | v2.0.0 | v2.0.1 |
+|--------|--------|--------|
+| sin/cos return type | `s16` (s0.15) | `s32` (s15.16) |
+| sin/cos 1.0 value | 32767 | 65536 (exact) |
+| tan return format | s16.15 (radix 15) | s15.16 (radix 16) |
+| tan saturation | `±(32767 << 15)` | `±INT32_MAX` |
+| FR_acos/asin signature | `(input, radix)` → s16 degrees | `(input, radix, out_radix)` → s32 radians |
+| FR_atan signature | `(input, radix)` → s16 degrees | `(input, radix, out_radix)` → s32 radians |
+| FR_atan2 signature | `(y, x)` → s16 degrees | `(y, x, out_radix)` → s32 radians |
+| FR_BAM2RAD | off by 1024× (bug) | correct |
+
+---
+
 ## v2.0.0 — 2026
 
 The first major revision in more than twenty years. v2 is a
