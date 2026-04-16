@@ -170,6 +170,7 @@ header. You do <em>not</em> need a floating-point unit, and you do
 <tr><td>ARM Cortex-M0/M3/M4/M7</td><td><code>arm-none-eabi-gcc</code>, IAR, Keil</td><td>Manual.</td></tr>
 <tr><td>RISC-V rv32imc</td><td><code>riscv32-unknown-elf-gcc</code></td><td>Manual.</td></tr>
 <tr><td>AVR (ATmega328P, etc.)</td><td><code>avr-gcc</code></td><td>Manual.</td></tr>
+<tr><td>Arduino (AVR, SAMD, etc.)</td><td><code>arduino-cli</code></td><td>Manual.</td></tr>
 <tr><td>MSP430</td><td><code>msp430-elf-gcc</code></td><td>Manual.</td></tr>
 <tr><td>8051</td><td><code>sdcc</code></td><td>Manual.</td></tr>
 </tbody>
@@ -189,6 +190,10 @@ riscv32-unknown-elf-size FR_math.o</code></pre>
   -Isrc -c src/FR_math.c -o FR_math.avr.o
 
 avr-size FR_math.avr.o</code></pre>
+
+<h3>Example: Arduino</h3>
+
+<pre><code class="language-bash">arduino-cli compile --fqbn arduino:avr:uno examples/arduino_smoke</code></pre>
 
 <p>Expect the whole integer-only library to land around a few
 kilobytes of flash. The wave, trig, and log modules can be compiled

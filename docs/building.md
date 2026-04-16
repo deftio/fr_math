@@ -149,6 +149,7 @@ header. You do *not* need a floating-point unit, and you do
 | ARM Cortex-M0/M3/M4/M7 | `arm-none-eabi-gcc`, IAR, Keil | Manual. |
 | RISC-V rv32imc | `riscv32-unknown-elf-gcc` | Manual. |
 | AVR (ATmega328P, etc.) | `avr-gcc` | Manual. |
+| Arduino (AVR, SAMD, etc.) | `arduino-cli` | Manual. |
 | MSP430 | `msp430-elf-gcc` | Manual. |
 | 8051 | `sdcc` | Manual. |
 
@@ -169,6 +170,12 @@ avr-gcc -Os -mmcu=atmega328p \
   -Isrc -c src/FR_math.c -o FR_math.avr.o
 
 avr-size FR_math.avr.o
+```
+
+### Example: Arduino
+
+```bash
+arduino-cli compile --fqbn arduino:avr:uno examples/arduino_smoke
 ```
 
 Expect the whole integer-only library to land around a few

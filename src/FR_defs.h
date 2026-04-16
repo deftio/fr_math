@@ -36,9 +36,26 @@
  * are on a pre-C99 toolchain, FR_Math 1.0.x is the version for you.
  */
 #include <stdint.h>
+
+/*
+ * Arduino's USBAPI.h typedefs u8 and u16 as unsigned char / unsigned short.
+ * On AVR, uint8_t/uint16_t resolve to unsigned int types, which are the same
+ * width but different C++ types — causing a redefinition error.  Skip those
+ * two typedefs when building in an Arduino environment; the Arduino-provided
+ * types are the same width and work identically.
+ *
+ * The guard checks __cplusplus too because Arduino.h (which pulls in
+ * USBAPI.h) is only auto-included in .ino/.cpp translation units.
+ * Plain-C files (.c) compiled by the Arduino build system need our
+ * typedefs even though the ARDUINO macro is defined for them.
+ */
+#if defined(ARDUINO) && defined(__cplusplus)
+  /* Arduino C++ TU — USBAPI.h already provides u8 and u16 */
+#else
 typedef uint8_t  u8;
-typedef int8_t   s8;
 typedef uint16_t u16;
+#endif
+typedef int8_t   s8;
 typedef int16_t  s16;
 typedef uint32_t u32;
 typedef int32_t  s32;

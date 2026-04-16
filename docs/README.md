@@ -2,19 +2,19 @@
 
 **A C language fixed-point math library for embedded systems.**
 
-FR_Math is an integer-only C99 math library that has shipped on targets
-from 16 MHz 68k processors to ARM Cortex-M to RISC-V — anywhere
-fractional math is needed without a floating-point unit. It covers
-trig, log/exp, square root, 2D transforms, wave generators, and an ADSR
-envelope in 4.2 KB on a Cortex-M0 (6.5 KB on RISC-V, 20 KB on 8051).
-Use cases include sensor fusion, audio/DSP, and graphics transforms on
-constrained systems where determinism and speed matter more than IEEE
-float precision. Every function takes a caller-chosen binary-point
-(radix), so you pick the precision you need per call instead of being
-locked to one fixed format.
+FR_Math is a compact, integer-only fixed-point math library built for
+systems where floating point is too slow, too big, or unavailable. Designed for embedded targets ranging from
+legacy 16 MHz 68k processors to modern Cortex-M and RISC-V cores, it
+provides a full suite of math primitives — trigonometry, logarithms,
+roots, transforms, and signal generators — while remaining
+deterministic, portable, and small. Unlike traditional fixed-point
+libraries, FR_Math lets the caller choose the binary point per
+operation, trading precision and range explicitly instead of locking
+into a single format.
 
-- Works on any C99 toolchain — gcc, clang, MSVC, IAR, Keil, sdcc,
-  AVR-gcc, MSP430-gcc, RISC-V.
+- Pure C (C99/C11/C17) with an optional C++ 2D-transform wrapper.
+  Tested on gcc, clang, MSVC, IAR, Keil, sdcc, AVR-gcc, MSP430-gcc,
+  RISC-V toolchains, and Arduino.
 - Zero dependencies beyond `<stdint.h>`.
 - Parameterised radix: every function takes the binary point as an
   argument, so you choose how many fractional bits you need per call.
