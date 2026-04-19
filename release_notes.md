@@ -1,5 +1,36 @@
 # FR_Math Release Notes
 
+## Version 2.0.2 (2026)
+
+Embedded library publishing support. No functional changes to the
+math library itself — this release adds package manager integration
+and improves example organization.
+
+### Library publishing
+
+- Added `library.properties` for Arduino Library Manager
+- Added `library.json` for PlatformIO Registry
+- Added `idf_component.yml` + `CMakeLists.txt` for ESP-IDF Component Registry
+- Added `keywords.txt` for Arduino IDE syntax highlighting
+- Added `.github/workflows/release.yml` for tag-triggered release validation
+
+### Examples reorganized
+
+- New focused Arduino sketches: `basic-math`, `trig-functions`, `wave-generators`
+- Moved `FR_Math_Example1.cpp` to `examples/posix-example/`
+- Removed symlinks from `examples/arduino_smoke/` (Arduino forbids symlinks)
+- Added `examples/README.md`
+
+### Documentation
+
+- Added `llms.txt` — machine-readable API summary for AI coding agents
+- Added `agents.md` — coding agent conventions and contribution guide
+- Added `dev/misc/` publish checklists for Arduino, PlatformIO, and ESP-IDF
+- Updated `scripts/sync_version.sh` to sync version across all new metadata files
+- Added release step 11: verify `llms.txt` and `agents.md` are current
+
+---
+
 ## Version 2.0.1 (2026)
 
 Precision and accuracy release. All changes are backward-compatible

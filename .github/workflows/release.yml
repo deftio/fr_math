@@ -1,0 +1,104 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from FR_MATH_VERSION_HEX
+        id: version
+        run: |
+          RAW=$(grep '#define FR_MATH_VERSION_HEX' src/FR_math.h | awk '{print $3}')
+          if [ -z "$RAW" ]; then
+            echo "ERROR: FR_MATH_VERSION_HEX not found in src/FR_math.h"
+            exit 1
+          fi
+          HEX=$((RAW))
+          MAJ=$(( (HEX >> 16) & 0xff ))
+          MIN=$(( (HEX >> 8)  & 0xff ))
+          PAT=$(( HEX & 0xff ))
+          VER="${MAJ}.${MIN}.${PAT}"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VER" >> "$GITHUB_OUTPUT"
+          echo "Detected FR_MATH_VERSION_HEX=$RAW → v$VER"
+
+      - name: Verify tag matches FR_MATH_VERSION_HEX
+        run: |
+          SRC_VER="${{ steps.version.outputs.version }}"
+          TAG_VER="${GITHUB_REF#refs/tags/v}"
+          echo "Source version: $SRC_VER"
+          echo "Tag version:    $TAG_VER"
+          if [ "$SRC_VER" != "$TAG_VER" ]; then
+            echo "ERROR: Tag v$TAG_VER does not match FR_MATH_VERSION_HEX $SRC_VER in src/FR_math.h"
+            exit 1
+          fi
+
+      - name: Verify version sync across metadata files
+        run: bash scripts/sync_version.sh --check
+
+      - name: Build and run tests
+        run: make test
+
+      - name: Check for compiler warnings
+        run: |
+          BUILD_LOG=$(make clean 2>&1 && make test 2>&1)
+          WARNINGS=$(echo "$BUILD_LOG" | grep -E "^[^:]+\.(c|h):[0-9]+:[0-9]+: warning:" || true)
+          if [ -n "$WARNINGS" ]; then
+            echo "ERROR: Compiler warnings detected:"
+            echo "$WARNINGS"
+            exit 1
+          fi
+          echo "Zero warnings."
+
+      - name: Coverage check
+        run: |
+          make coverage
+          echo "--- Coverage Summary ---"
+          gcov src/FR_math.c 2>/dev/null | grep -A 1 "File.*FR_math.c"
+
+  release:
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          RAW=$(grep '#define FR_MATH_VERSION_HEX' src/FR_math.h | awk '{print $3}')
+          HEX=$((RAW))
+          MAJ=$(( (HEX >> 16) & 0xff ))
+          MIN=$(( (HEX >> 8)  & 0xff ))
+          PAT=$(( HEX & 0xff ))
+          VER="${MAJ}.${MIN}.${PAT}"
+          TAG="${GITHUB_REF#refs/tags/}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+
+      - name: Extract release notes
+        id: notes
+        run: |
+          VER="${{ steps.version.outputs.version }}"
+          if [ -f release_notes.md ]; then
+            cp release_notes.md /tmp/release_notes.md
+          else
+            echo "FR_Math release $VER. See CHANGELOG.md for details." > /tmp/release_notes.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: FR_Math ${{ steps.version.outputs.version }}
+          body_path: /tmp/release_notes.md
+          draft: false
+          prerelease: false

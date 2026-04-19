@@ -176,6 +176,11 @@ avr-size FR_math.avr.o
 
 ```bash
 arduino-cli compile --fqbn arduino:avr:uno examples/arduino_smoke
+
+# Or try the focused examples:
+arduino-cli compile --fqbn arduino:avr:uno examples/basic-math
+arduino-cli compile --fqbn arduino:avr:uno examples/trig-functions
+arduino-cli compile --fqbn arduino:avr:uno examples/wave-generators
 ```
 
 Expect the whole integer-only library to land around a few

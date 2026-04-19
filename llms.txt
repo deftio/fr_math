@@ -1,0 +1,177 @@
+# FR_Math
+
+> A C language fixed-point math library for embedded systems.
+
+FR_Math provides integer-only math operations using caller-selectable fixed
+radix (binary point) representations. It requires no floating-point hardware
+or libraries. Pure C99, zero dependencies beyond `<stdint.h>`.
+
+- Repository: https://github.com/deftio/fr_math
+- Documentation: https://deftio.github.io/fr_math/
+- License: BSD-2-Clause
+- Version: 2.0.2
+
+## Key concept: radix parameter
+
+Most functions take a `radix` parameter (often called `R`) that specifies how
+many of the 32 bits are fractional. For example, radix 16 means s15.16 format:
+15 integer bits + 16 fractional bits, giving range ±32767 with resolution ~1.5e-5.
+
+Common radix choices:
+- R=8:  range ±8M,   resolution ~0.004  (sensor data, coarse control)
+- R=12: range ±512K,  resolution ~0.0002 (general purpose)
+- R=16: range ±32K,   resolution ~1.5e-5 (high precision)
+
+## Source files
+
+- `src/FR_math.h`   — all public declarations, macros, constants
+- `src/FR_math.c`   — all function implementations (~42KB)
+- `src/FR_defs.h`   — type aliases: s8, s16, s32, u8, u16, u32
+- `src/FR_trig_table.h` — precomputed sine table (256 entries)
+- `src/FR_math_2D.h` / `src/FR_math_2D.cpp` — optional 2D transform class (C++)
+
+## Types
+
+Use the library's typedefs, not raw C types:
+- `s8`, `s16`, `s32` — signed 8/16/32-bit integers
+- `u8`, `u16`, `u32` — unsigned 8/16/32-bit integers
+
+## Core macros (all UPPERCASE)
+
+```c
+I2FR(x, r)              // integer to fixed-point: x << r
+FR2I(x, r)              // fixed-point to integer: x >> r
+FR_NUM(i, f, d, r)      // build from integer + fractional digits: FR_NUM(3, 14159, 5, 16) = pi
+FR_INT(x, r)            // extract integer part (sign-aware)
+FR_FRAC(x, r)           // extract fractional bits
+FR_CHRDX(x, r_cur, r_new) // change radix
+
+FR_ADD(x, xr, y, yr)    // x += y (auto-aligns radix), modifies x in place
+FR_SUB(x, xr, y, yr)    // x -= y (auto-aligns radix), modifies x in place
+FR_DIV(x, xr, y, yr)    // divide with round-to-nearest (64-bit intermediate)
+FR_MOD(x, y)             // modulo
+
+FR_ABS(x)               // absolute value
+FR_SGN(x)               // sign (-1 or 0)
+FR_MIN(a, b)            // minimum
+FR_MAX(a, b)            // maximum
+FR_CLAMP(x, lo, hi)     // clamp to range
+FR_INTERP(x0, x1, d, p) // linear interpolation
+```
+
+## Functions
+
+### Multiplication (saturating)
+```c
+s32 FR_FixMuls(s32 x, s32 y);    // signed multiply, round-to-nearest
+s32 FR_FixMulSat(s32 x, s32 y);  // signed multiply, saturating
+s32 FR_FixAddSat(s32 x, s32 y);  // signed add, saturating
+```
+
+### Trigonometry
+```c
+// Integer-degree shortcuts (output is s15.16):
+FR_CosI(deg)            // macro: cos(degrees) -> s15.16
+FR_SinI(deg)            // macro: sin(degrees) -> s15.16
+
+// Radian API at any radix:
+s32 fr_cos(s32 rad, u16 radix);
+s32 fr_sin(s32 rad, u16 radix);
+s32 fr_tan(s32 rad, u16 radix);
+
+// BAM (Binary Angle Measurement) — u16 where 65536 = 360 degrees:
+s32 fr_cos_bam(u16 bam);
+s32 fr_sin_bam(u16 bam);
+
+// Degree API at any radix:
+s32 FR_Cos(s16 deg, u16 radix);
+s32 FR_Sin(s16 deg, u16 radix);
+s32 FR_Tan(s16 deg, u16 radix);
+
+// Inverse trig:
+s32 FR_atan2(s32 y, s32 x, u16 out_radix);
+s32 FR_acos(s32 input, u16 radix, u16 out_radix);
+s32 FR_asin(s32 input, u16 radix, u16 out_radix);
+s32 FR_atan(s32 input, u16 radix, u16 out_radix);
+
+// Angle conversion macros (shift-only, no multiply):
+FR_DEG2RAD(x)   FR_RAD2DEG(x)
+FR_DEG2BAM(deg) FR_BAM2DEG(bam)
+FR_RAD2BAM(rad, radix) FR_BAM2RAD(bam, radix)
+```
+
+### Logarithms and exponentials
+```c
+s32 FR_log2(s32 input, u16 radix, u16 output_radix);
+s32 FR_ln(s32 input, u16 radix, u16 output_radix);
+s32 FR_log10(s32 input, u16 radix, u16 output_radix);
+s32 FR_pow2(s32 input, u16 radix);
+FR_EXP(input, radix)      // e^x via pow2
+FR_POW10(input, radix)    // 10^x via pow2
+FR_EXP_FAST(input, radix) // shift-only approximation
+FR_POW10_FAST(input, radix)
+```
+
+### Roots and distance
+```c
+s32 FR_sqrt(s32 input, u16 radix);
+s32 FR_hypot(s32 x, s32 y, u16 radix);       // exact, 64-bit intermediate
+s32 FR_hypot_fast(s32 x, s32 y);              // 4-segment, 0.34% error, no multiply
+s32 FR_hypot_fast8(s32 x, s32 y);             // 8-segment, 0.10% error, no multiply
+```
+
+### Wave generators
+All wave generators use u16 phase (BAM: 0-65535 = one full cycle) and return s16.
+```c
+s16 fr_wave_sqr(u16 phase);
+s16 fr_wave_pwm(u16 phase, u16 duty);
+s16 fr_wave_tri(u16 phase);
+s16 fr_wave_saw(u16 phase);
+s16 fr_wave_tri_morph(u16 phase, u16 break_point);
+s16 fr_wave_noise(u32 *state);
+FR_HZ2BAM_INC(hz, sample_rate)   // convert Hz to phase increment
+```
+
+### ADSR envelope
+```c
+void fr_adsr_init(fr_adsr_t *env, u16 attack, u16 decay, s16 sustain, u16 release);
+void fr_adsr_trigger(fr_adsr_t *env);
+void fr_adsr_release(fr_adsr_t *env);
+s16  fr_adsr_step(fr_adsr_t *env);
+```
+
+### Formatted output
+```c
+int FR_printNumF(int (*f)(char), s32 n, int radix, int pad, int prec);
+int FR_printNumD(int (*f)(char), int n, int pad);
+int FR_printNumH(int (*f)(char), int n, int showPrefix);
+s32 FR_numstr(const char *s, u16 radix);  // parse "3.14" -> fixed-point
+```
+
+## Typical usage pattern
+
+```c
+#include "FR_math.h"
+
+#define R 16  // work at radix 16 throughout
+
+s32 pi    = FR_NUM(3, 14159, 5, R);       // pi at radix 16
+s32 c45   = FR_CosI(45);                  // cos(45 deg)
+s32 root2 = FR_sqrt(I2FR(2, R), R);       // sqrt(2)
+s32 lg    = FR_log2(I2FR(1000, R), R, R); // log2(1000)
+s32 ex    = FR_EXP(I2FR(1, R), R);        // e^1
+```
+
+## Building
+
+```bash
+make lib       # build static library objects
+make test      # run all test suites
+make examples  # build example program
+make clean     # remove build artifacts
+```
+
+## Platform support
+
+Tested on: AVR (Arduino), ARM Cortex-M0/M4, ESP32 (Xtensa), RISC-V,
+x86/x64, MSP430, 68k, 8051. Code size is 4-8KB at -Os on 32-bit targets.

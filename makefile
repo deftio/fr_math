@@ -52,7 +52,7 @@ $(BUILD_DIR)/FR_math_2D.o: $(SRC_DIR)/FR_math_2D.cpp $(HEADERS)
 .PHONY: examples
 examples: dirs $(BUILD_DIR)/fr_example
 
-$(BUILD_DIR)/fr_example: $(EXAMPLE_DIR)/FR_Math_Example1.cpp $(BUILD_DIR)/FR_math.o $(BUILD_DIR)/FR_math_2D.o
+$(BUILD_DIR)/fr_example: $(EXAMPLE_DIR)/posix-example/FR_Math_Example1.cpp $(BUILD_DIR)/FR_math.o $(BUILD_DIR)/FR_math_2D.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 # Build and run tests

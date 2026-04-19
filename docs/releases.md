@@ -4,6 +4,20 @@ Release highlights. For the full per-symbol change log, see
 [release_notes.md](https://github.com/deftio/fr_math/blob/master/release_notes.md)
 in the repo.
 
+## v2.0.2 — 2026
+
+Embedded library publishing support. No functional changes to the
+math library — adds Arduino, PlatformIO, and ESP-IDF package manager
+integration.
+
+- Arduino Library Manager, PlatformIO Registry, and ESP-IDF Component
+  Registry metadata files
+- Reorganized examples with focused Arduino `.ino` sketches
+- Added `llms.txt` and `agents.md` for AI coding agents
+- Tag-triggered release workflow (`.github/workflows/release.yml`)
+
+---
+
 ## v2.0.1 — 2026
 
 Precision and accuracy release. All changes are backward-compatible

@@ -2,7 +2,7 @@
 [![CI](https://github.com/deftio/fr_math/actions/workflows/ci.yml/badge.svg)](https://github.com/deftio/fr_math/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen.svg)](#building-and-testing)
 [![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://deftio.github.io/fr_math/)
-[![Version](https://img.shields.io/badge/version-2.0.1-blue.svg)](release_notes.md)
+[![Version](https://img.shields.io/badge/version-2.0.2-blue.svg)](release_notes.md)
 
 # FR_Math: A C Language Fixed-Point Math Library for Embedded Systems
 
@@ -111,7 +111,7 @@ The full docs ship in two forms — pick whichever fits how you read.
 FR_Math has been in service since 2000, originally built for graphics
 transforms on 16 MHz 68k Palm Pilots. It shipped inside Trumpetsoft's
 *Inkstorm* on PalmOS, then moved forward through ARM, x86, MIPS,
-RISC-V, and various 8/16-bit embedded targets. v2.0.1 is the current
+RISC-V, and various 8/16-bit embedded targets. v2.0.2 is the current
 release with a full test suite, bit-exact numerical specification, and
 CI on every push.
 
@@ -120,7 +120,12 @@ CI on every push.
 BSD-2-Clause — see [LICENSE.txt](LICENSE.txt).
 (c) 2000-2026 M. Chatterjee
 
+## For AI coding agents
+
+- [llms.txt](llms.txt) — machine-readable API summary
+- [agents.md](agents.md) — conventions, build commands, and contribution guide for coding agents
+
 ## Version
 
-2.0.1 — see [release_notes.md](release_notes.md) for the v1 → v2
+2.0.2 — see [release_notes.md](release_notes.md) for the v1 → v2
 migration guide, numerical fixes, and new functionality.

@@ -138,7 +138,7 @@ script.
 FR_Math has been in service since **2000**, originally built for
 graphics transforms on 16 MHz 68k Palm Pilots (it shipped inside
 Trumpetsoft's *Inkstorm*), then ported forward to ARM, x86, MIPS,
-RISC-V, and various 8/16-bit embedded targets. v2.0.1 is the current
+RISC-V, and various 8/16-bit embedded targets. v2.0.2 is the current
 release with a full test suite, bit-exact numerical
 specification, and CI on every push.
 

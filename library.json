@@ -1,0 +1,46 @@
+{
+    "name": "FR_Math",
+    "version": "2.0.2",
+    "description": "Compact fixed-point math library for embedded systems. Integer-only with caller-selectable radix. Trig, log/exp, sqrt, hypot, wave generators, ADSR, and 2D transforms in 4KB of flash. Zero dependencies.",
+    "keywords": [
+        "fixed-point",
+        "math",
+        "dsp",
+        "trigonometry",
+        "integer-math",
+        "embedded",
+        "signal-processing",
+        "waveform",
+        "no-float",
+        "radix"
+    ],
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/deftio/fr_math.git"
+    },
+    "authors": [
+        {
+            "name": "M. A. Chatterjee",
+            "email": "deftio@deftio.com",
+            "url": "https://www.deftio.com",
+            "maintainer": true
+        }
+    ],
+    "license": "BSD-2-Clause",
+    "homepage": "https://github.com/deftio/fr_math",
+    "frameworks": "*",
+    "platforms": "*",
+    "build": {
+        "srcFilter": ["+<FR_math.c>"],
+        "includeDir": "src"
+    },
+    "export": {
+        "include": [
+            "src/*",
+            "examples/*",
+            "LICENSE.txt",
+            "README.md",
+            "library.properties"
+        ]
+    }
+}

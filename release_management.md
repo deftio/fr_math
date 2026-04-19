@@ -163,6 +163,10 @@ Steps, in order:
 10. **Working tree status** — `git status --porcelain`; warns if the
     tree is dirty (it can legitimately be dirty from the badge update
     in step 7).
+11. **AI agent docs** — verify that `llms.txt` and `agents.md` reflect
+    any API changes made in this release (new functions, changed
+    signatures, removed features). These files are consumed by coding
+    agents and must stay current.
 
 Final output is a summary (branch, commit, tests passed, coverage) plus
 a squash-merge checklist showing the exact `git` / `gh` commands to
@@ -187,7 +191,7 @@ Run from the repo root.
 | `make` / `make all` | Create `build/` + `coverage/` dirs, build library, build examples |
 | `make dirs` | Create `build/` and `coverage/` directories |
 | `make lib` | Compile `build/FR_math.o` and `build/FR_math_2D.o` |
-| `make examples` | Build `build/fr_example` from `examples/FR_Math_Example1.cpp` |
+| `make examples` | Build `build/fr_example` from `examples/posix-example/FR_Math_Example1.cpp` |
 
 ### Test
 

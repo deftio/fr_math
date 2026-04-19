@@ -193,7 +193,12 @@ avr-size FR_math.avr.o</code></pre>
 
 <h3>Example: Arduino</h3>
 
-<pre><code class="language-bash">arduino-cli compile --fqbn arduino:avr:uno examples/arduino_smoke</code></pre>
+<pre><code class="language-bash">arduino-cli compile --fqbn arduino:avr:uno examples/arduino_smoke
+
+# Or try the focused examples:
+arduino-cli compile --fqbn arduino:avr:uno examples/basic-math
+arduino-cli compile --fqbn arduino:avr:uno examples/trig-functions
+arduino-cli compile --fqbn arduino:avr:uno examples/wave-generators</code></pre>
 
 <p>Expect the whole integer-only library to land around a few
 kilobytes of flash. The wave, trig, and log modules can be compiled
