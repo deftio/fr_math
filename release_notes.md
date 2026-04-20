@@ -1,5 +1,21 @@
 # FR_Math Release Notes
 
+## Version 2.0.4 (2026)
+
+CI fix release. No functional changes to the math library.
+
+- Fixed `release.yml` coverage step failing due to stale gcov invocation
+- Release pipeline (`tools/make_release.sh`) now auto-commits
+  pipeline-generated changes (badge updates, version sync) instead of
+  failing on a dirty working tree
+- Removed conflicting auto-release job from `ci.yml` (replaced by
+  tag-triggered `release.yml`)
+- Documentation updated: `release_management.md`, `docs/building.md`,
+  and `pages/guide/building.html` now accurately describe the 17-step
+  guided release pipeline
+
+---
+
 ## Version 2.0.3 (2026)
 
 CI and release pipeline cleanup. No functional changes to the math

@@ -4,6 +4,14 @@ Release highlights. For the full per-symbol change log, see
 [release_notes.md](https://github.com/deftio/fr_math/blob/master/release_notes.md)
 in the repo.
 
+## v2.0.4 — 2026
+
+CI fix release. Fixed `release.yml` coverage step, release pipeline
+auto-commits badge/version changes, removed conflicting auto-release
+job from `ci.yml`.
+
+---
+
 ## v2.0.3 — 2026
 
 CI and release pipeline cleanup. Guided release script
