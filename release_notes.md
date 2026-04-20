@@ -1,18 +1,29 @@
 # FR_Math Release Notes
 
+## Version 2.0.5 (2026)
+
+Release pipeline fixes. No functional changes to the math library.
+
+- Fixed `tools/make_release.sh` failing after squash-merge: local master
+  diverges from origin (squash creates a new commit), so `git pull
+  --ff-only` fails. Now detects divergence and resets to origin/master.
+- Fixed on-master release path: script now pushes master to origin and
+  waits for CI before tagging (previously skipped both, causing tags to
+  point at commits not yet on the remote).
+- Release pipeline auto-commits pipeline-generated changes (badge
+  updates, version sync) instead of failing on a dirty working tree.
+  Unexpected dirty files still block the release.
+
 ## Version 2.0.4 (2026)
 
 CI fix release. No functional changes to the math library.
 
 - Fixed `release.yml` coverage step failing due to stale gcov invocation
-- Release pipeline (`tools/make_release.sh`) now auto-commits
-  pipeline-generated changes (badge updates, version sync) instead of
-  failing on a dirty working tree
 - Removed conflicting auto-release job from `ci.yml` (replaced by
   tag-triggered `release.yml`)
 - Documentation updated: `release_management.md`, `docs/building.md`,
-  and `pages/guide/building.html` now accurately describe the 17-step
-  guided release pipeline
+  and `pages/guide/building.html` now accurately describe the guided
+  release pipeline
 
 ---
 

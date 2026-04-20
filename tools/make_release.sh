@@ -364,15 +364,24 @@ do_push_branch() {
         fi
     fi
 
-    # Check if we're ahead of origin (works for both master and feature branches).
-    local ahead
-    ahead=$(git rev-list --count "origin/$BRANCH..HEAD" 2>/dev/null || echo "0")
-    if [ "$ahead" -eq 0 ]; then
-        pass "$BRANCH is up to date with origin."
-        return 0
+    # Check if remote branch exists and whether we're ahead.
+    local remote_exists=true
+    if ! git rev-parse --verify "origin/$BRANCH" &>/dev/null; then
+        remote_exists=false
     fi
 
-    echo "  $ahead commit(s) ahead of origin/$BRANCH."
+    if $remote_exists; then
+        local ahead
+        ahead=$(git rev-list --count "origin/$BRANCH..HEAD" 2>/dev/null || echo "0")
+        if [ "$ahead" -eq 0 ]; then
+            pass "$BRANCH is up to date with origin."
+            return 0
+        fi
+        echo "  $ahead commit(s) ahead of origin/$BRANCH."
+    else
+        echo "  Remote branch origin/$BRANCH does not exist yet."
+    fi
+
     confirm "Push $BRANCH to origin?"
     run_cmd git push -u origin "$BRANCH"
     pass "Pushed."
@@ -608,7 +617,16 @@ do_switch_master() {
     fi
 
     run_cmd git checkout master
-    run_cmd git pull --ff-only origin master
+    run_cmd git fetch origin master
+    # After a squash-merge, local master and origin/master have diverged
+    # (the squash commit is a new commit). Reset to origin/master which
+    # has the authoritative squash-merged content.
+    if ! git merge-base --is-ancestor origin/master HEAD 2>/dev/null; then
+        echo "  Local master diverged from origin (expected after squash-merge)."
+        run_cmd git reset --hard origin/master
+    else
+        run_cmd git pull --ff-only origin master
+    fi
     BRANCH="master"
     ON_MASTER=true
     pass "On master at $(git rev-parse --short HEAD)."
