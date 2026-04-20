@@ -364,15 +364,24 @@ do_push_branch() {
         fi
     fi
 
-    # Check if we're ahead of origin (works for both master and feature branches).
-    local ahead
-    ahead=$(git rev-list --count "origin/$BRANCH..HEAD" 2>/dev/null || echo "0")
-    if [ "$ahead" -eq 0 ]; then
-        pass "$BRANCH is up to date with origin."
-        return 0
+    # Check if remote branch exists and whether we're ahead.
+    local remote_exists=true
+    if ! git rev-parse --verify "origin/$BRANCH" &>/dev/null; then
+        remote_exists=false
     fi
 
-    echo "  $ahead commit(s) ahead of origin/$BRANCH."
+    if $remote_exists; then
+        local ahead
+        ahead=$(git rev-list --count "origin/$BRANCH..HEAD" 2>/dev/null || echo "0")
+        if [ "$ahead" -eq 0 ]; then
+            pass "$BRANCH is up to date with origin."
+            return 0
+        fi
+        echo "  $ahead commit(s) ahead of origin/$BRANCH."
+    else
+        echo "  Remote branch origin/$BRANCH does not exist yet."
+    fi
+
     confirm "Push $BRANCH to origin?"
     run_cmd git push -u origin "$BRANCH"
     pass "Pushed."
