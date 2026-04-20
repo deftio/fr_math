@@ -608,7 +608,16 @@ do_switch_master() {
     fi
 
     run_cmd git checkout master
-    run_cmd git pull --ff-only origin master
+    run_cmd git fetch origin master
+    # After a squash-merge, local master and origin/master have diverged
+    # (the squash commit is a new commit). Reset to origin/master which
+    # has the authoritative squash-merged content.
+    if ! git merge-base --is-ancestor origin/master HEAD 2>/dev/null; then
+        echo "  Local master diverged from origin (expected after squash-merge)."
+        run_cmd git reset --hard origin/master
+    else
+        run_cmd git pull --ff-only origin master
+    fi
     BRANCH="master"
     ON_MASTER=true
     pass "On master at $(git rev-parse --short HEAD)."

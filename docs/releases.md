@@ -4,6 +4,13 @@ Release highlights. For the full per-symbol change log, see
 [release_notes.md](https://github.com/deftio/fr_math/blob/master/release_notes.md)
 in the repo.
 
+## v2.0.5 — 2026
+
+Release pipeline fixes. Fixed squash-merge divergence handling and
+on-master push/CI sequencing in `tools/make_release.sh`.
+
+---
+
 ## v2.0.4 — 2026
 
 CI fix release. Fixed `release.yml` coverage step, release pipeline
