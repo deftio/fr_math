@@ -4,9 +4,10 @@ Reference for every helper script and `make` target used to build, test,
 validate, and ship FR_Math. If a command is not listed here, it isn't
 part of the supported release workflow.
 
-The single source of truth for the current version is the repo-root
-`VERSION` file (one line, e.g. `2.0.0`). All version-bearing files are
-kept in sync from that file via `scripts/sync_version.sh`.
+The single source of truth for the current version is
+`FR_MATH_VERSION_HEX` in `src/FR_math.h` (hex `0xMMmmpp` → `M.m.p`).
+All version-bearing files are kept in sync via
+`scripts/sync_version.sh`.
 
 ---
 
@@ -20,10 +21,10 @@ kept in sync from that file via `scripts/sync_version.sh`.
 | `./scripts/clean_build.sh` | Wipe `build/` and `coverage/`, recreate them |
 | `./scripts/coverage_report.sh` (or `make coverage`) | gcov coverage table |
 | `./scripts/size_report.sh` (or `make size-report`) | Multi-arch object-size report |
-| `./scripts/sync_version.sh` | Propagate `VERSION` to every versioned file |
+| `./scripts/sync_version.sh` | Propagate `FR_MATH_VERSION_HEX` to every versioned file |
 | `./scripts/sync_version.sh --check` | Drift check (non-destructive) |
-| `./scripts/sync_version.sh --set X.Y.Z` | Bump version, then sync |
-| `./scripts/make_release.sh` | Strict pre-merge release validation gate |
+| `./tools/make_release.sh` | Guided release pipeline (validate → PR → merge → tag → publish) |
+| `./tools/make_release.sh --validate` | Local validation only (build, tests, coverage) |
 
 ---
 
@@ -74,7 +75,7 @@ start, so do not run it inside a session that depends on pre-existing
 `build/` contents.
 
 Invoked automatically by `make coverage` and by
-`scripts/make_release.sh`.
+`tools/make_release.sh`.
 
 ### `scripts/size_report.sh` — multi-architecture size report
 
@@ -102,18 +103,23 @@ Invoked automatically by `make size-report`.
 
 ### `scripts/sync_version.sh` — version propagation
 
-Single source of truth is the repo-root `VERSION` file. This script
-rewrites every file that embeds a user-visible version string so they
-all match.
+Single source of truth is `FR_MATH_VERSION_HEX` in `src/FR_math.h`.
+This script rewrites every file that embeds a user-visible version
+string so they all match.
 
 Files it updates:
 
+- `src/FR_math.h` — `FR_MATH_VERSION` string (derived from `_HEX`)
+- `VERSION` — plain-text `X.Y.Z` file
 - `README.md` — shields.io version badge (`img.shields.io/badge/version-X.Y.Z-…`)
-- `README.md` — the `Current version: X.Y.Z` line in the Version section
-- `pages/assets/site.js` — `var FR_VERSION = 'vX.Y.Z';` (shown in the docs site header)
+- `README.md` — the `Current version: X.Y.Z` line
+- `pages/assets/site.js` — `var FR_VERSION = 'vX.Y.Z';` (docs site header)
 - `src/FR_math_2D.h` — `@version X.Y.Z` doxygen tag
 - `src/FR_math_2D.cpp` — `@version X.Y.Z` doxygen tag
-- `scripts/make_release.sh` — the `git tag -a vX.Y.Z …` hint in the squash-merge instructions
+- `library.properties` — Arduino Library Manager `version=` field
+- `library.json` — PlatformIO registry `"version":` field
+- `idf_component.yml` — ESP-IDF Component Registry `version:` field
+- `llms.txt` — `- Version: X.Y.Z` line
 
 Files it deliberately leaves alone (history / descriptive prose):
 
@@ -122,61 +128,76 @@ Files it deliberately leaves alone (history / descriptive prose):
 - `pages/**/*.html` — dated "As of vX.Y.Z" observations
 - `docs/**/*.md` — markdown mirror of `pages/`
 
+Manual review required at release time (no auto-sync):
+
+- `llms.txt` — verify API docs match any new/changed functions
+- `agents.md` — verify build/contribution instructions are current
+
 | Invocation | Effect |
 | --- | --- |
-| `./scripts/sync_version.sh` | Propagate current `VERSION` to every file above |
+| `./scripts/sync_version.sh` | Propagate `FR_MATH_VERSION_HEX` to every file above |
 | `./scripts/sync_version.sh --check` | Drift check only; exit 1 if any file disagrees |
-| `./scripts/sync_version.sh --set=X.Y.Z` | Rewrite `VERSION` first, then propagate |
-| `./scripts/sync_version.sh X.Y.Z` | Same as `--set`, positional form |
 | `./scripts/sync_version.sh --help` | Print usage |
 
 Idempotent: running it when everything is already in sync is a no-op
 and prints `All files already at X.Y.Z. Nothing to do.`
 
-### `scripts/make_release.sh` — strict release validation gate
+### `tools/make_release.sh` — guided release pipeline
 
-Full pre-merge validation. Does **not** push, tag, or merge anything —
-it runs a strict build + full test suite + coverage + size report and
-then prints squash-merge instructions to follow by hand. Exit status is
-0 only if every step passes.
+End-to-end release automation. Walks through local validation, PR
+creation, CI wait, merge, tagging, and package-registry publishing.
+Each step pauses for confirmation before anything visible to others.
+Exit status is 0 only if every step passes.
 
-Steps, in order:
+Steps (full mode):
 
-1. **Clean build tree** — calls `clean_build.sh`.
-2. **Version sync check** — runs `sync_version.sh --check`; aborts on drift.
-3. **Strict compile** — rebuilds `FR_math.c` and `FR_math_2D.cpp` with
-   `-Wall -Wextra -Werror -Wshadow -Os`. Any warning is a release blocker.
-4. **Build library + examples** — `make lib examples`.
-5. **Run full test suite** — `make test`. Also scans the log for
-   `Failed: N` lines with `N ≥ 1` and aborts if any are found.
-6. **Coverage report** — runs `coverage_report.sh`; parses the overall
-   percentage. Warns (but does not fail) if coverage is below 90%.
-7. **Update README badges** — rewrites the `coverage-<N>%25-<color>` and
-   `tests-<N>%20passing-brightgreen` badge URLs in `README.md` from the
-   measured numbers. Picks a shields.io colour based on the coverage
-   percentage. If the badges change, prints a reminder to commit.
-8. **Size report** — `size` (or `ls`) on the host objects.
-9. **Cross-compile sanity** — tries `arm-none-eabi-gcc`,
-   `riscv64-unknown-elf-gcc`, and `arm-linux-gnueabi-gcc`. If a
-   toolchain is installed, it must compile cleanly; otherwise it is
-   silently skipped. `--skip-cross` disables this step entirely.
-10. **Working tree status** — `git status --porcelain`; warns if the
-    tree is dirty (it can legitimately be dirty from the badge update
-    in step 7).
-11. **AI agent docs** — verify that `llms.txt` and `agents.md` reflect
-    any API changes made in this release (new functions, changed
-    signatures, removed features). These files are consumed by coding
-    agents and must stay current.
+1. **Extract version** — reads `FR_MATH_VERSION_HEX` from `src/FR_math.h`.
+2. **Sync manifests** — runs `sync_version.sh --check`; auto-syncs if
+   drift is detected and stages the changes.
+3. **Local validation** — clean build, strict compile
+   (`-Wall -Wextra -Werror -Wshadow`), `make test`, coverage report,
+   README badge update, and host size report. Aborts on any warning
+   or test failure.
+4. **Cross-compile sanity** — tries `arm-none-eabi-gcc`,
+   `riscv64-unknown-elf-gcc`, and `arm-linux-gnueabi-gcc`. Missing
+   toolchains are silently skipped. `--skip-cross` disables this step.
+5. **Commit pipeline-generated changes** — if only known files are dirty
+   (README.md badges, version-synced manifests), prompts to commit them.
+   If unexpected files are dirty, stops with an error.
+6. **Check git state** — identifies the current branch, checks whether
+   the tag already exists, and verifies the working tree is clean.
+7. **Push branch** — syncs with `origin/master`, pushes the feature
+   branch (skipped if already on master).
+8. **Open PR** — creates a PR via `gh pr create` (or reuses an
+   existing one).
+9. **Wait for CI** — polls `gh pr checks` every 30 s until all checks
+   pass (or fails immediately on a red check).
+10. **Merge PR** — enables auto-merge (squash) via `gh pr merge --auto`.
+11. **Switch to master** — waits for the merge to land, then checks out
+    master and pulls.
+12. **Verify on master** — clean rebuild + `make test` on the merged
+    master.
+13. **Tag and push** — creates an annotated tag `vX.Y.Z` and pushes it,
+    triggering the `release.yml` workflow.
+14. **Wait for GitHub Release** — polls until `release.yml` creates the
+    GitHub Release (or reports a failure with recovery instructions).
+15. **Publish to PlatformIO** — `pio pkg publish . --no-interactive`
+    (skipped if `pio` is not installed or version already published).
+16. **Publish to ESP-IDF** — `compote component upload --name fr_math
+    --namespace deftio` (skipped if `compote` is not installed).
+17. **Done** — prints a summary with links and an Arduino reminder.
 
-Final output is a summary (branch, commit, tests passed, coverage) plus
-a squash-merge checklist showing the exact `git` / `gh` commands to
-commit any remaining changes, push, open the PR, squash-merge, and tag.
+All output is tee'd to `build/release-<timestamp>.log`.
+
+With `--validate`, only steps 1–4 run (local validation only — nothing
+is pushed, tagged, or published).
 
 | Invocation | Effect |
 | --- | --- |
-| `./scripts/make_release.sh` | Run the full ten-step validation |
-| `./scripts/make_release.sh --skip-cross` | Skip step 9 (faster on dev machines without cross toolchains) |
-| `./scripts/make_release.sh --help` | Print usage |
+| `./tools/make_release.sh` | Full guided release (recommended) |
+| `./tools/make_release.sh --validate` | Local validation only (steps 1–4) |
+| `./tools/make_release.sh --skip-cross` | Skip cross-compile step (faster on machines without cross toolchains) |
+| `./tools/make_release.sh --help` | Print usage |
 
 ---
 
@@ -235,24 +256,36 @@ invoked individually.
 
 ## Release workflow
 
-A typical version bump + release runs these commands in order:
+A typical version bump + release:
 
 ```bash
-# 1. Bump the source-of-truth version and propagate it everywhere.
-./scripts/sync_version.sh --set=2.1.0
+# 1. Create a feature branch.
+git checkout -b release-2.1.0
 
-# 2. Update release_notes.md by hand — sync_version.sh does not touch it.
-$EDITOR release_notes.md
+# 2. Bump the version hex in src/FR_math.h and propagate it.
+#    Edit FR_MATH_VERSION_HEX, then:
+./scripts/sync_version.sh
 
-# 3. Run the full validation gate. This also rewrites the README badges
-#    from the measured coverage/tests numbers.
-./scripts/make_release.sh
+# 3. Update release_notes.md, docs/releases.md, and
+#    pages/releases.html by hand — sync_version.sh does not touch them.
+$EDITOR release_notes.md docs/releases.md pages/releases.html
 
-# 4. Review, commit, push, PR, squash-merge, tag — the script prints
-#    the exact git / gh commands for each step at the end.
+# 4. Verify llms.txt and agents.md reflect any API changes.
+
+# 5. Commit all changes and run the guided release pipeline.
+#    This handles validation, PR, CI wait, merge, tagging,
+#    GitHub Release, PlatformIO, and ESP-IDF publishing.
+./tools/make_release.sh
 ```
 
-For day-to-day development the full gate is overkill; the common loop is:
+For local validation only (no PR, no tagging, no publishing):
+
+```bash
+./tools/make_release.sh --validate
+```
+
+For day-to-day development the full pipeline is overkill; the common
+loop is:
 
 ```bash
 ./scripts/build.sh           # clean rebuild + tests
@@ -266,5 +299,6 @@ For day-to-day development the full gate is overkill; the common loop is:
 
 - `CONTRIBUTING.md` — PR expectations, portability rules, commit format.
 - `release_notes.md` — canonical per-release change log.
-- `VERSION` — single source of truth for the current version string.
+- `src/FR_math.h` — `FR_MATH_VERSION_HEX`, the single source of truth
+  for the version.
 - `docs/building.md` — user-facing build instructions.

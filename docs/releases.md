@@ -4,6 +4,14 @@ Release highlights. For the full per-symbol change log, see
 [release_notes.md](https://github.com/deftio/fr_math/blob/master/release_notes.md)
 in the repo.
 
+## v2.0.3 — 2026
+
+CI and release pipeline cleanup. Guided release script
+(`tools/make_release.sh`) that validates, merges, tags, and publishes
+to PlatformIO and ESP-IDF in one flow.
+
+---
+
 ## v2.0.2 — 2026
 
 Embedded library publishing support. No functional changes to the

@@ -81,34 +81,29 @@ suite), and emits an HTML report under
 coverage to the console so you can copy the numbers into badge
 updates or release notes.</p>
 
-<h3><code>scripts/make_release.sh</code></h3>
+<h3><code>tools/make_release.sh</code></h3>
 
-<p>The release-candidate validator. Run it before opening a merge
-request to <code>master</code>.</p>
+<p>Guided release pipeline. Handles everything from local validation
+through PR, merge, tagging, GitHub Release, and package-registry
+publishing (PlatformIO and ESP-IDF). Each outward-facing step
+pauses for confirmation.</p>
 
-<pre><code class="language-bash">./scripts/make_release.sh</code></pre>
+<pre><code class="language-bash">./tools/make_release.sh              # full guided release
+./tools/make_release.sh --validate   # local validation only
+./tools/make_release.sh --skip-cross # skip cross-compile step</code></pre>
 
-<p>Nine steps, each gated: if any step fails, the script stops and
-tells you what to fix.</p>
+<p>In full mode the pipeline runs 17 steps: extract version, sync
+manifests, strict compile + tests + coverage + badges, cross-compile
+sanity, commit pipeline-generated changes, check git state, push
+branch, open PR, wait for CI, merge PR, switch to master, verify
+on master, tag, wait for GitHub Release, publish to PlatformIO,
+publish to ESP-IDF, done.</p>
 
-<ol>
-  <li>Clean <code>build/</code></li>
-  <li>Strict compile: <code>-Wall -Wextra -Werror -Wshadow
-      -Wformat=2</code></li>
-  <li>Build library + examples</li>
-  <li>Full test suite</li>
-  <li>Coverage report</li>
-  <li>Update README badges (coverage % and test count)</li>
-  <li>Size report (<code>size build/libfrmath.a</code>)</li>
-  <li>Cross-compile sanity check (if a cross compiler is on
-      <code>PATH</code>)</li>
-  <li>Working-tree status (warns if there are uncommitted files other
-      than the README badge update itself)</li>
-</ol>
+<p>With <code>--validate</code>, only the local validation steps run
+(steps 1&ndash;4) &mdash; nothing is pushed, tagged, or published.</p>
 
-<p>At the end, the script prints a squash-merge checklist you can
-paste into a PR description. It does <em>not</em> push, tag, or merge
-on its own.</p>
+<p>See <code>release_management.md</code> for the full step-by-step
+reference.</p>
 
 <h2>The test suite</h2>
 
@@ -216,18 +211,25 @@ run.</p>
 
 <h2>Release checklist</h2>
 
-<p>Before tagging a release:</p>
-
 <ol>
-  <li>Update <code>release_notes.md</code> with what changed.</li>
-  <li>Run <code>./scripts/make_release.sh</code> and fix any failures.</li>
-  <li>Commit the README badge update (if the script produced one).</li>
-  <li>Squash-merge the branch to <code>master</code> using the
-      message template the script prints.</li>
-  <li>Tag <code>master</code> with the version and push the tag.</li>
-  <li>Draft a GitHub release pointing at the tag, copy-pasting the
-      top section of <code>release_notes.md</code>.</li>
+  <li>Create a feature branch and bump <code>FR_MATH_VERSION_HEX</code>
+      in <code>src/FR_math.h</code>.</li>
+  <li>Run <code>./scripts/sync_version.sh</code> to propagate the
+      version to all manifests (Arduino, PlatformIO, ESP-IDF,
+      docs).</li>
+  <li>Update <code>release_notes.md</code>,
+      <code>docs/releases.md</code>, and
+      <code>pages/releases.html</code> by hand.</li>
+  <li>Verify <code>llms.txt</code> and <code>agents.md</code> reflect
+      any API changes.</li>
+  <li>Commit everything and run <code>./tools/make_release.sh</code>.
+      The script handles validation, PR, CI wait, merge, tagging,
+      GitHub Release creation (via <code>release.yml</code>), and
+      publishing to PlatformIO and ESP-IDF registries.</li>
 </ol>
+
+<p>Arduino Library Manager indexes from GitHub tags automatically once
+the library is registered.</p>
 
 <p>See <a href="../releases.html">Releases</a> for the list of tagged
 versions and their highlights.</p>

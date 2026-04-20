@@ -22,7 +22,6 @@
 #   pages/assets/site.js         — FR_VERSION constant (docs page header)
 #   src/FR_math_2D.h             — @version doxygen tag
 #   src/FR_math_2D.cpp           — @version doxygen tag
-#   scripts/make_release.sh      — git tag hint in squash-merge instructions
 #   library.properties           — Arduino Library Manager version
 #   library.json                 — PlatformIO registry version
 #   idf_component.yml            — ESP-IDF Component Registry version
@@ -222,39 +221,28 @@ update_file "src/FR_math_2D.cpp @version" "${PROJECT_ROOT}/src/FR_math_2D.cpp" \
     "s|(\\@version )[0-9]+\\.[0-9]+\\.[0-9]+|\${1}${VERSION}|g"
 
 # --------------------------------------------------------------------------
-# 8. scripts/make_release.sh — git tag hint in squash-merge instructions
-#    Patterns:
-#       git tag -a v2.0.0 -m "FR_Math 2.0.0"
-#       git push origin v2.0.0
-# --------------------------------------------------------------------------
-update_file "scripts/make_release.sh tag hint" "${PROJECT_ROOT}/scripts/make_release.sh" \
-    "s|v[0-9]+\\.[0-9]+\\.[0-9]+|v${VERSION}|g if /git (tag|push origin v)/"
-update_file "scripts/make_release.sh tag message" "${PROJECT_ROOT}/scripts/make_release.sh" \
-    "s|(FR_Math )[0-9]+\\.[0-9]+\\.[0-9]+|\${1}${VERSION}|g"
-
-# --------------------------------------------------------------------------
-# 9. library.properties — version field
+# 8. library.properties — version field
 #    Pattern: version=2.0.1
 # --------------------------------------------------------------------------
 update_file "library.properties version" "${PROJECT_ROOT}/library.properties" \
     "s|^(version=)[0-9]+\\.[0-9]+\\.[0-9]+|\${1}${VERSION}|"
 
 # --------------------------------------------------------------------------
-# 10. library.json — version field
+# 9. library.json — version field
 #     Pattern: "version": "2.0.1"
 # --------------------------------------------------------------------------
 update_file "library.json version" "${PROJECT_ROOT}/library.json" \
     "s|(\"version\":\\s*\")[0-9]+\\.[0-9]+\\.[0-9]+(\")|\${1}${VERSION}\${2}|"
 
 # --------------------------------------------------------------------------
-# 11. idf_component.yml — version field
+# 10. idf_component.yml — version field
 #     Pattern: version: "2.0.1"
 # --------------------------------------------------------------------------
 update_file "idf_component.yml version" "${PROJECT_ROOT}/idf_component.yml" \
     "s|(version:\\s*\")[0-9]+\\.[0-9]+\\.[0-9]+(\")|\${1}${VERSION}\${2}|"
 
 # --------------------------------------------------------------------------
-# 12. llms.txt — version line
+# 11. llms.txt — version line
 #     Pattern: - Version: 2.0.1
 # --------------------------------------------------------------------------
 update_file "llms.txt version" "${PROJECT_ROOT}/llms.txt" \

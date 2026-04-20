@@ -1,5 +1,21 @@
 # FR_Math Release Notes
 
+## Version 2.0.3 (2026)
+
+CI and release pipeline cleanup. No functional changes to the math
+library itself.
+
+### Release pipeline
+
+- New guided release script `tools/make_release.sh` (ported from xelp):
+  validates, opens PR, waits for CI, merges, tags, waits for GitHub
+  Release, then publishes to PlatformIO and ESP-IDF registries
+- Removed old `scripts/make_release.sh` (validation-only, manual merge)
+- All doc/page references updated to `tools/make_release.sh`
+- Cleaned up stale branches
+
+---
+
 ## Version 2.0.2 (2026)
 
 Embedded library publishing support. No functional changes to the
