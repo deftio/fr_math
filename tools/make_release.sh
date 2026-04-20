@@ -344,38 +344,35 @@ do_check_git() {
 # -----------------------------------------------------------------------
 
 do_push_branch() {
-    if $ON_MASTER; then return 0; fi
-
-    step_header "Sync with master and push branch '$BRANCH'"
+    step_header "Push $BRANCH to origin"
 
     run_cmd git fetch origin master
-    local behind
-    behind=$(git rev-list --count "HEAD..origin/master" 2>/dev/null || echo "0")
-    if [ "$behind" -gt 0 ]; then
-        echo "  Branch is $behind commit(s) behind origin/master."
-        echo "  Merging origin/master..."
-        if ! run_cmd git merge origin/master --no-edit; then
-            fail "Merge conflict. Resolve manually and re-run."
+
+    if ! $ON_MASTER; then
+        # Feature branch: merge in latest master first.
+        local behind
+        behind=$(git rev-list --count "HEAD..origin/master" 2>/dev/null || echo "0")
+        if [ "$behind" -gt 0 ]; then
+            echo "  Branch is $behind commit(s) behind origin/master."
+            echo "  Merging origin/master..."
+            if ! run_cmd git merge origin/master --no-edit; then
+                fail "Merge conflict. Resolve manually and re-run."
+            fi
+            pass "Merged origin/master into $BRANCH."
+        else
+            pass "Branch is up to date with master."
         fi
-        pass "Merged origin/master into $BRANCH."
-    else
-        pass "Branch is up to date with master."
     fi
 
-    local tracking
-    tracking=$(git rev-parse --abbrev-ref --symbolic-full-name "@{u}" 2>/dev/null || true)
-    if [ -n "$tracking" ]; then
-        local ahead
-        ahead=$(git rev-list --count "@{u}..HEAD" 2>/dev/null || echo "0")
-        if [ "$ahead" -eq 0 ]; then
-            pass "Branch is up to date with remote."
-            return 0
-        fi
-        echo "  $ahead commit(s) ahead of remote."
-    else
-        echo "  No upstream tracking branch set."
+    # Check if we're ahead of origin (works for both master and feature branches).
+    local ahead
+    ahead=$(git rev-list --count "origin/$BRANCH..HEAD" 2>/dev/null || echo "0")
+    if [ "$ahead" -eq 0 ]; then
+        pass "$BRANCH is up to date with origin."
+        return 0
     fi
 
+    echo "  $ahead commit(s) ahead of origin/$BRANCH."
     confirm "Push $BRANCH to origin?"
     run_cmd git push -u origin "$BRANCH"
     pass "Pushed."
@@ -423,7 +420,65 @@ do_open_pr() {
 # -----------------------------------------------------------------------
 
 do_wait_ci() {
-    if $ON_MASTER; then return 0; fi
+    if $ON_MASTER; then
+        step_header "Wait for CI on master push"
+        echo "  Polling commit status every 30s..."
+        echo ""
+        local sha
+        sha=$(git rev-parse HEAD)
+
+        local attempts=0
+        local max_attempts=40
+        while [ $attempts -lt $max_attempts ]; do
+            local state
+            echo "  \$ gh api repos/:owner/:repo/commits/$sha/status"
+            state=$(gh api "repos/{owner}/{repo}/commits/$sha/status" --jq '.state' 2>/dev/null || echo "pending")
+
+            echo "  Combined status: $state"
+
+            if [ "$state" = "failure" ] || [ "$state" = "error" ]; then
+                echo ""
+                fail "CI failed on master. Fix the issue and re-run."
+            fi
+
+            if [ "$state" = "success" ]; then
+                echo ""
+                pass "All CI checks passed on master."
+                return 0
+            fi
+
+            # Also check via check-runs API (GitHub Actions uses this instead of commit status)
+            local checks_json
+            checks_json=$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" --jq '.check_runs[] | {name, status, conclusion}' 2>/dev/null || true)
+            if [ -n "$checks_json" ]; then
+                local any_in_progress any_failed_cr
+                any_in_progress=$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" \
+                    --jq '[.check_runs[] | select(.status != "completed")] | length' 2>/dev/null || echo "1")
+                any_failed_cr=$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" \
+                    --jq '[.check_runs[] | select(.conclusion == "failure")] | length' 2>/dev/null || echo "0")
+
+                if [ "$any_failed_cr" -gt 0 ]; then
+                    echo ""
+                    fail "CI check-run failed on master. Fix the issue and re-run."
+                fi
+                if [ "$any_in_progress" -eq 0 ]; then
+                    echo ""
+                    pass "All CI check-runs passed on master."
+                    return 0
+                fi
+            fi
+
+            attempts=$((attempts + 1))
+            echo "  ... waiting 30s (attempt $attempts/$max_attempts)"
+            echo ""
+            sleep 30
+        done
+
+        echo ""
+        echo "  Timed out waiting for CI after $max_attempts attempts."
+        confirm "Continue without CI? (not recommended)"
+        return 0
+    fi
 
     step_header "Wait for CI on PR #$PR_NUM"
     echo "  Polling every 30s..."
@@ -513,9 +568,18 @@ do_merge_pr() {
 
 do_switch_master() {
     if $ON_MASTER; then
-        echo ""
-        echo "  (Already on master, pulling latest)"
-        run_cmd git pull --ff-only origin master
+        step_header "Verify master is in sync with origin"
+        run_cmd git fetch origin master
+        local ahead behind
+        ahead=$(git rev-list --count "origin/master..HEAD" 2>/dev/null || echo "0")
+        behind=$(git rev-list --count "HEAD..origin/master" 2>/dev/null || echo "0")
+        if [ "$ahead" -ne 0 ]; then
+            fail "Local master is $ahead commit(s) ahead of origin. Push first (this should not happen)."
+        fi
+        if [ "$behind" -ne 0 ]; then
+            run_cmd git pull --ff-only origin master
+        fi
+        pass "master is in sync with origin at $(git rev-parse --short HEAD)."
         return 0
     fi
 
