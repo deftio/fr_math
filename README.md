@@ -2,7 +2,7 @@
 [![CI](https://github.com/deftio/fr_math/actions/workflows/ci.yml/badge.svg)](https://github.com/deftio/fr_math/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen.svg)](#building-and-testing)
 [![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://deftio.github.io/fr_math/)
-[![Version](https://img.shields.io/badge/version-2.0.3-blue.svg)](release_notes.md)
+[![Version](https://img.shields.io/badge/version-2.0.4-blue.svg)](release_notes.md)
 
 # FR_Math: A C Language Fixed-Point Math Library for Embedded Systems
 

@@ -60,10 +60,7 @@ jobs:
           echo "Zero warnings."
 
       - name: Coverage check
-        run: |
-          make coverage
-          echo "--- Coverage Summary ---"
-          gcov src/FR_math.c 2>/dev/null | grep -A 1 "File.*FR_math.c"
+        run: make coverage
 
   release:
     needs: validate
