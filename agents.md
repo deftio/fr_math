@@ -86,7 +86,7 @@ Versioned files (all synced automatically):
 
 1. Bump `FR_MATH_VERSION_HEX` in `src/FR_math.h`
 2. Run `./scripts/sync_version.sh`
-3. Run `./scripts/make_release.sh` (full validation gate)
+3. Run `./tools/make_release.sh` (full validation gate)
 4. Verify `llms.txt` and `agents.md` are current with any API changes
 5. Commit, tag, push
 

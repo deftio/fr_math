@@ -16,7 +16,7 @@
    ════════════════════════════════════════════════════════════════════ */
 
 (function () {
-    var FR_VERSION = 'v2.0.2';
+    var FR_VERSION = 'v2.0.3';
 
     // Detect whether we're a top-level page or inside guide/.
     // Works for both file:// and http(s):// because we look for the
