@@ -196,6 +196,11 @@ do_validate() {
     else
         ls -l build/FR_math.o build/FR_math_2D.o
     fi
+
+    echo ""
+    echo "  --- Accuracy table ---"
+    bash "${PROJECT_ROOT}/scripts/accuracy_report.sh" --update
+    pass "Accuracy table updated in README + docs."
 }
 
 # -----------------------------------------------------------------------
@@ -233,7 +238,7 @@ do_cross_compile() {
 
 # Files the pipeline itself may modify (badge update, version sync).
 # Anything outside this list is unexpected and should block the release.
-PIPELINE_FILES="README.md VERSION src/FR_math.h library.properties library.json idf_component.yml llms.txt pages/assets/site.js src/FR_math_2D.h src/FR_math_2D.cpp"
+PIPELINE_FILES="README.md VERSION src/FR_math.h library.properties library.json idf_component.yml llms.txt pages/assets/site.js src/FR_math_2D.h src/FR_math_2D.cpp docs/README.md pages/index.html"
 
 do_commit_pipeline_changes() {
     step_header "Commit pipeline-generated changes"

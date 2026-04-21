@@ -32,7 +32,9 @@
 #include "FR_math.h"
 #include "FR_trig_table.h"
 
+#ifndef FR_NO_STDINT
 #include <stdint.h>
+#endif
 
 /*=======================================================
  * BAM-native trig: fr_cos_bam, fr_sin_bam, fr_cos, fr_sin, fr_tan
@@ -147,12 +149,14 @@ s32 fr_tan(s32 rad, u16 radix)
  */
 static u16 fr_deg_radix_to_bam(s16 deg, u16 radix)
 {
-	/* (s32)deg * 0xB60B keeps everything in 32-bit math (8051-friendly).
-	 * For radix 0, 0xB60B = 65536/360 ≈ 182.0444. The shift strips the
-	 * input radix to land in u16 BAM space.
+	/* 0xB60B ≈ (65536/360) * 256 — the ×256 prescale keeps 32-bit math
+	 * friendly to 8051-class MCUs.  We must shift out both the input
+	 * fraction bits (radix) AND the 8-bit prescale, hence radix + 8.
+	 * The +half term rounds to nearest, matching FR_DEG2BAM behaviour.
 	 */
-	s32 v = (s32)deg * 0xB60BL;
-	return (u16)((u32)(v >> radix) & 0xffff);
+	s32  v     = (s32)deg * 0xB60BL;
+	u16  shift = radix + 8;
+	return (u16)((u32)((v + (1L << (shift - 1))) >> shift) & 0xffff);
 }
 
 s32 FR_Cos(s16 deg, u16 radix)
@@ -245,14 +249,19 @@ s32 FR_FixAddSat(s32 x, s32 y)
  */
 /* FR_acos — returns radians at out_radix.
  * Range: [0, pi].  Input is a cosine value at the given radix.
+ *
+ * Uses the same 129-entry cosine table as fr_cos_bam, but in reverse:
+ * binary-search to find the bracketing pair, then linear-interpolate
+ * the fractional position between them to recover the full 14-bit
+ * in-quadrant BAM.  This mirrors the forward path and gives matching
+ * precision (~1 LSB of s15.16 output).
  */
 s32 FR_acos(s32 input, u16 radix, u16 out_radix)
 {
 	s32 v;
 	s16 sign;
 	s32 lo, hi, mid;
-	s32 best_idx, best_err;
-	s32 left, right;
+	s32 idx, d, num, frac;
 
 	v = FR_CHRDX(input, radix, FR_TRIG_PREC); /* to s0.15 */
 
@@ -263,9 +272,30 @@ s32 FR_acos(s32 input, u16 radix, u16 out_radix)
 	sign = (v < 0) ? 1 : 0;
 	if (v < 0) v = -v;
 
-	/* Binary search on the BAM quadrant table. The table is monotonically
-	 * decreasing across [0, FR_TRIG_TABLE_SIZE]. We want the index `i`
-	 * such that gFR_COS_TAB_Q[i] is closest to v.
+	/* Small-angle fast path: when v is in the flat region near cos(0)
+	 * the table has only 2-8 LSBs of gap between entries, so linear
+	 * interpolation is very coarse.  Use the identity
+	 *   acos(x) ≈ sqrt(2*(1-x))   for x close to 1
+	 * which is exact in the limit and leverages FR_sqrt's precision.
+	 * Switch at table[3] (gap = 12 LSBs) — below that the table is fine.
+	 */
+	if (v > gFR_COS_TAB_Q[7])
+	{
+		s32 one_minus_v = (s32)(1 << FR_TRIG_PREC) - v; /* 1.0 - x */
+		s32 two_omv     = one_minus_v << 1;          /* 2*(1-x) at radix 15 */
+		s32 rad15       = FR_sqrt(two_omv, FR_TRIG_PREC); /* radians at r15 */
+		s32 rad_out     = FR_CHRDX(rad15, FR_TRIG_PREC, out_radix);
+		if (sign)
+			rad_out = FR_BAM2RAD(FR_BAM_HALF, out_radix) - rad_out;
+		return rad_out;
+	}
+
+	/* Binary search on the cosine quadrant table.  The table is
+	 * monotonically decreasing: gFR_COS_TAB_Q[0] = 32767 (cos 0°),
+	 * gFR_COS_TAB_Q[128] = 0 (cos 90°).
+	 *
+	 * After the search, lo is the first index where table[lo] <= v,
+	 * so the bracketing pair is (lo-1, lo) with table[lo-1] >= v >= table[lo].
 	 */
 	lo = 0;
 	hi = FR_TRIG_TABLE_SIZE;
@@ -277,28 +307,45 @@ s32 FR_acos(s32 input, u16 radix, u16 out_radix)
 		else
 			hi = mid;
 	}
-	best_idx = lo;
-	best_err = (gFR_COS_TAB_Q[best_idx] > v) ? (gFR_COS_TAB_Q[best_idx] - v)
-	                                         : (v - gFR_COS_TAB_Q[best_idx]);
-	if (best_idx > 0)
+
+	/* lo is now the index where table[lo] <= v.  The bracketing interval
+	 * is [lo-1, lo] (table decreasing).  Clamp idx to valid range.
+	 */
+	idx = lo;
+	if (idx <= 0)
 	{
-		left = gFR_COS_TAB_Q[best_idx - 1] - v;
-		if (left < 0) left = -left;
-		if (left < best_err) { best_err = left; best_idx = best_idx - 1; }
+		/* v >= table[0] = 32767 — essentially cos(0), already clamped above
+		 * but guard anyway. */
+		idx = 0;
+		frac = 0;
 	}
-	if (best_idx < FR_TRIG_TABLE_SIZE)
+	else if (idx >= FR_TRIG_TABLE_SIZE)
 	{
-		right = gFR_COS_TAB_Q[best_idx + 1] - v;
-		if (right < 0) right = -right;
-		if (right < best_err) { best_err = right; best_idx = best_idx + 1; }
+		idx = FR_TRIG_TABLE_SIZE - 1;
+		frac = 0;
+	}
+	else
+	{
+		/* Linear interpolate between table[idx-1] and table[idx].
+		 * d = table[idx-1] - table[idx]  (>= 0, cos decreasing)
+		 * num = table[idx-1] - v          (how far past table[idx-1])
+		 * frac = (num << FR_TRIG_FRAC_BITS) / d, in [0, FR_TRIG_FRAC_MAX)
+		 *
+		 * num and d are both in [0, 32767], so num << 7 fits in 22 bits.
+		 */
+		d   = gFR_COS_TAB_Q[idx - 1] - gFR_COS_TAB_Q[idx];
+		num = gFR_COS_TAB_Q[idx - 1] - v;
+		if (d > 0)
+			frac = ((num << FR_TRIG_FRAC_BITS) + (d >> 1)) / d;
+		else
+			frac = 0;
+		/* Reconstruct: the angle is at index (idx-1) + frac/FRAC_MAX,
+		 * so shift idx back by 1 for the BAM calculation below. */
+		idx = idx - 1;
 	}
 
-	/* best_idx is in [0, FR_TRIG_TABLE_SIZE]. Convert to BAM:
-	 * the table covers one quadrant (16384 BAM) in FR_TRIG_TABLE_SIZE-1 steps.
-	 * bam = best_idx << FR_TRIG_FRAC_BITS.
-	 */
 	{
-		u16 bam = (u16)((u32)best_idx << FR_TRIG_FRAC_BITS);
+		u16 bam = (u16)(((u32)idx << FR_TRIG_FRAC_BITS) + (u32)frac);
 		if (sign)
 			bam = (u16)(FR_BAM_HALF - bam);  /* mirror: pi - angle */
 		return FR_BAM2RAD(bam, out_radix);
@@ -1294,7 +1341,7 @@ void fr_adsr_init(fr_adsr_t *env,
 	    ? (s32)(FR_ADSR_PEAK_S130 / attack_samples)
 	    : FR_ADSR_PEAK_S130;
 	env->decay_dec   = (decay_samples   > 0)
-	    ? (s32)((FR_ADSR_PEAK_S130 - env->sustain) / decay_samples)
+	    ? (s32)((FR_ADSR_PEAK_S130 - env->sustain) / (s32)decay_samples)
 	    : (FR_ADSR_PEAK_S130 - env->sustain);
 	env->release_dec = (release_samples > 0)
 	    ? (s32)(FR_ADSR_PEAK_S130 / release_samples)

@@ -65,6 +65,8 @@ typedef struct {
     int n;
     double max_abs_err;
     double sum_abs_err;
+    double max_pct_err;
+    double sum_pct_err;
     double worst_input;
     double worst_actual;
     double worst_expected;
@@ -84,11 +86,19 @@ static void stats_add(stats_t *s, double in, double actual, double expected) {
         s->worst_expected = expected;
     }
     s->sum_abs_err += e;
+    /* Skip percent error when expected ≈ 0 to avoid division artifacts */
+    double pct = (fabs(expected) > 0.01) ? (e / fabs(expected)) * 100.0 : 0.0;
+    if (pct > s->max_pct_err) s->max_pct_err = pct;
+    s->sum_pct_err += pct;
     s->n++;
 }
 
 static double stats_mean(const stats_t *s) {
     return s->n ? s->sum_abs_err / s->n : 0.0;
+}
+
+static double stats_mean_pct(const stats_t *s) {
+    return s->n ? s->sum_pct_err / s->n : 0.0;
 }
 
 static void md_h1(const char *t) { printf("\n# %s\n\n", t); }
@@ -1763,6 +1773,319 @@ static void section_summary(void) {
     printf("\n");
 }
 
+/* ============================================================
+ * Section 14: Accuracy Summary Table (machine-readable)
+ *
+ * Emits a markdown table between sentinel comments so that
+ * scripts/accuracy_report.sh can extract and patch it into
+ * README.md, docs/README.md, and pages/index.html.
+ * ============================================================ */
+
+static void section_accuracy_table(void) {
+    md_h2("14. Accuracy Summary Table");
+
+    printf("<!-- ACCURACY_TABLE_START -->\n");
+    printf("| Function | Max err (LSB) | Max err (%%) | Avg err (%%) | Note |\n");
+    printf("|---|---:|---:|---:|---|\n");
+
+    const int R = 16;
+    const double scale = (double)(1L << R);
+    const double lsb = 1.0 / scale;
+
+    /* --- sin / cos --- */
+    {
+        stats_t st; stats_reset(&st);
+        const u16 radix = 7; /* s8.7 degrees: 128 steps/deg, [-256°,+256°) */
+        /* 65536-point sweep: all s16 values at radix 7 cover > full circle */
+        for (int i = -32768; i <= 32767; i++) {
+            double deg = (double)i / (1 << radix);
+            double rad = deg * M_PI / 180.0;
+            stats_add(&st, deg, frd(FR_Sin((s16)i, radix), FR_TRIG_OUT_PREC), sin(rad));
+            stats_add(&st, deg, frd(FR_Cos((s16)i, radix), FR_TRIG_OUT_PREC), cos(rad));
+        }
+        /* Special cases: exact integer degrees including negative */
+        s16 specials[] = {0,30,45,60,90,120,135,150,180,210,225,240,270,300,315,330,360,
+                          -30,-45,-60,-90,-120,-135,-150,-180,-210,-225,-240,-270,-300,-315,-330,-360};
+        for (int si = 0; si < (int)(sizeof(specials)/sizeof(specials[0])); si++) {
+            s16 d = specials[si];
+            double rad = d * M_PI / 180.0;
+            stats_add(&st, d, frd(FR_SinI(d), FR_TRIG_OUT_PREC), sin(rad));
+            stats_add(&st, d, frd(FR_CosI(d), FR_TRIG_OUT_PREC), cos(rad));
+        }
+        printf("| sin / cos | %.1f | %.4f | %.4f | 65536-pt sweep + specials |\n",
+               st.max_abs_err / lsb, st.max_pct_err, stats_mean_pct(&st));
+    }
+
+    /* --- tan --- */
+    {
+        stats_t st; stats_reset(&st);
+        const u16 radix = 7;
+        for (int i = -32768; i <= 32767; i++) {
+            double deg = (double)i / (1 << radix);
+            double rad = deg * M_PI / 180.0;
+            /* Skip near poles: |cos| < 0.01 → tan > 100 */
+            if (fabs(cos(rad)) < 0.01) continue;
+            stats_add(&st, deg, frd(FR_Tan((s16)i, radix), FR_TRIG_OUT_PREC), tan(rad));
+        }
+        /* Special cases: integer degrees (avoiding poles) */
+        s16 specials[] = {0,30,45,60,-30,-45,-60,120,135,150,-120,-135,-150};
+        for (int si = 0; si < (int)(sizeof(specials)/sizeof(specials[0])); si++) {
+            s16 d = specials[si];
+            double rad = d * M_PI / 180.0;
+            stats_add(&st, d, frd(FR_TanI(d), FR_TRIG_OUT_PREC), tan(rad));
+        }
+        printf("| tan | %.1f | %.4f | %.4f | 65536-pt sweep (skip poles) |\n",
+               st.max_abs_err / lsb, st.max_pct_err, stats_mean_pct(&st));
+    }
+
+    /* --- asin / acos --- */
+    {
+        stats_t st; stats_reset(&st);
+        /* 65536-point sweep: all representable values at radix 15 over [-1, +1) */
+        for (int i = -32768; i <= 32767; i++) {
+            double xd = (double)i / (1 << 15);
+            if (xd < -1.0 || xd > 1.0) continue;
+            s32 rad = FR_asin((s32)i, 15, R);
+            stats_add(&st, xd, frd(rad, R), asin(xd));
+            rad = FR_acos((s32)i, 15, R);
+            stats_add(&st, xd, frd(rad, R), acos(xd));
+        }
+        printf("| asin / acos | %.1f | %.4f | %.4f | 65536-pt; sqrt approx near boundary |\n",
+               st.max_abs_err / lsb, st.max_pct_err, stats_mean_pct(&st));
+    }
+
+    /* --- atan2 --- */
+    {
+        stats_t st; stats_reset(&st);
+        /* 65536-point sweep at each radius.
+         * Skip i=-32768 (exactly -pi): branch-cut convention differs
+         * between FR_atan2 (+pi) and libm (-pi), both correct.
+         * Start radii at 0.1 — at 0.01 inputs have <10 LSBs of angular
+         * resolution, testing input quantization not the algorithm. */
+        double radii[] = {0.1, 1.0, 10.0, 100.0, 1000.0};
+        for (int ri = 0; ri < (int)(sizeof(radii)/sizeof(radii[0])); ri++) {
+            double rad = radii[ri];
+            for (int i = -32767; i <= 32768; i++) {
+                double angle = i * M_PI / 32768.0;
+                double x = rad * cos(angle), y = rad * sin(angle);
+                s32 fx = (s32)(x * scale);
+                s32 fy = (s32)(y * scale);
+                if (fx == 0 && fy == 0) continue;
+                s32 r = FR_atan2(fy, fx, R);
+                double ref = atan2(y, x);
+                /* Skip near ±pi branch cut: sign depends on sub-LSB
+                 * input quantization, not algorithm accuracy. */
+                if (fabs(fabs(ref) - M_PI) < 0.01) continue;
+                stats_add(&st, angle * 180.0 / M_PI, frd(r, R), ref);
+            }
+        }
+        /* Special cases: exact quadrant/octant/30-degree angles */
+        double specials_deg[] = {0,30,45,60,90,120,135,150,
+                                 -30,-45,-60,-90,-120,-135,-150,-170};
+        for (int si = 0; si < (int)(sizeof(specials_deg)/sizeof(specials_deg[0])); si++) {
+            double angle = specials_deg[si] * M_PI / 180.0;
+            double x = 100.0 * cos(angle), y = 100.0 * sin(angle);
+            s32 fx = (s32)(x * scale), fy = (s32)(y * scale);
+            if (fx == 0 && fy == 0) continue;
+            s32 r = FR_atan2(fy, fx, R);
+            stats_add(&st, specials_deg[si], frd(r, R), atan2(y, x));
+        }
+        printf("| atan2 | %.1f | %.4f | %.4f | 65536x5 radii + specials |\n",
+               st.max_abs_err / lsb, st.max_pct_err, stats_mean_pct(&st));
+    }
+
+    /* --- sqrt --- */
+    {
+        stats_t st; stats_reset(&st);
+        double inputs[] = {0.0001, 0.25, 0.5, 1, 2, 3, 4, 7, 9, 16, 25, 100, 1024, 10000, 32000};
+        for (int i = 0; i < (int)(sizeof(inputs)/sizeof(inputs[0])); i++) {
+            s32 fr = (s32)(inputs[i] * scale);
+            s32 r = FR_sqrt(fr, R);
+            stats_add(&st, inputs[i], frd(r, R), sqrt(inputs[i]));
+        }
+        /* Fine sweep */
+        for (int i = 1; i <= 1000; i++) {
+            double x = i * 10.0;
+            s32 fr = (s32)(x * scale);
+            s32 r = FR_sqrt(fr, R);
+            stats_add(&st, x, frd(r, R), sqrt(x));
+        }
+        printf("| sqrt | %.1f | %.4f | %.4f | Round-to-nearest |\n",
+               st.max_abs_err / lsb, st.max_pct_err, stats_mean_pct(&st));
+    }
+
+    /* --- log2 --- */
+    {
+        stats_t st; stats_reset(&st);
+        /* Integer inputs — stay within s32 range at radix 16 (max ~32767) */
+        for (int v = 1; v <= 32000; v += (v < 100 ? 1 : v / 10)) {
+            s32 fr = (s32)((double)v * scale);
+            if (fr <= 0) continue;
+            s32 r = FR_log2(fr, (u16)R, (u16)R);
+            stats_add(&st, (double)v, frd(r, R), log2((double)v));
+        }
+        /* Fractional sweep 0.125 .. 1.0 */
+        for (int i = 1; i <= 100; i++) {
+            double x = 0.125 + (0.875 * i / 100.0);
+            s32 fr = (s32)(x * scale);
+            if (fr <= 0) continue;
+            s32 r = FR_log2(fr, (u16)R, (u16)R);
+            stats_add(&st, x, frd(r, R), log2(x));
+        }
+        printf("| log2 | %.1f | %.4f | %.4f | 65-entry mantissa table |\n",
+               st.max_abs_err / lsb, st.max_pct_err, stats_mean_pct(&st));
+    }
+
+    /* --- pow2 --- */
+    {
+        stats_t st; stats_reset(&st);
+        for (int i = -800; i <= 800; i++) {
+            double x = i / 100.0;
+            s32 fr = (s32)(x * scale);
+            s32 r = FR_pow2(fr, R);
+            double ref = pow(2.0, x);
+            stats_add(&st, x, frd(r, R), ref);
+        }
+        printf("| pow2 | %.1f | %.4f | %.4f | 65-entry fraction table |\n",
+               st.max_abs_err / lsb, st.max_pct_err, stats_mean_pct(&st));
+    }
+
+    /* --- ln, log10 --- */
+    {
+        stats_t st; stats_reset(&st);
+        double inputs[] = {0.125, 0.25, 0.5, 1, 2, M_E, 3, 4, 5, 7, 8, 10, 20, 50, 100, 1000};
+        for (int i = 0; i < (int)(sizeof(inputs)/sizeof(inputs[0])); i++) {
+            s32 fr = (s32)(inputs[i] * scale);
+            if (fr <= 0) continue;
+            s32 r = FR_ln(fr, R, R);
+            double ref = log(inputs[i]);
+            stats_add(&st, inputs[i], frd(r, R), ref);
+            r = FR_log10(fr, R, R);
+            ref = log10(inputs[i]);
+            stats_add(&st, inputs[i], frd(r, R), ref);
+        }
+        printf("| ln, log10 | %.1f | %.4f | %.4f | Via FR_MULK28 from log2 |\n",
+               st.max_abs_err / lsb, st.max_pct_err, stats_mean_pct(&st));
+    }
+
+    /* --- exp (FR_EXP) --- */
+    {
+        stats_t st; stats_reset(&st);
+        for (int i = -400; i <= 400; i++) {
+            double x = i / 100.0;
+            s32 fr = (s32)(x * scale);
+            s32 r = FR_EXP(fr, R);
+            double ref = exp(x);
+            if (ref > 32000.0 || ref < 1e-6) continue; /* skip overflow/underflow */
+            stats_add(&st, x, frd(r, R), ref);
+        }
+        printf("| exp | %.1f | %.4f | %.4f | FR_MULK28 + FR_pow2 |\n",
+               st.max_abs_err / lsb, st.max_pct_err, stats_mean_pct(&st));
+    }
+
+    /* --- exp_fast (FR_EXP_FAST) --- */
+    {
+        stats_t st; stats_reset(&st);
+        for (int i = -400; i <= 400; i++) {
+            double x = i / 100.0;
+            s32 fr = (s32)(x * scale);
+            s32 r = FR_EXP_FAST(fr, R);
+            double ref = exp(x);
+            if (ref > 32000.0 || ref < 1e-6) continue;
+            stats_add(&st, x, frd(r, R), ref);
+        }
+        printf("| exp_fast | %.1f | %.4f | %.4f | Shift-only scaling |\n",
+               st.max_abs_err / lsb, st.max_pct_err, stats_mean_pct(&st));
+    }
+
+    /* --- pow10 (FR_POW10) --- */
+    {
+        stats_t st; stats_reset(&st);
+        for (int i = -200; i <= 200; i++) {
+            double x = i / 100.0;
+            s32 fr = (s32)(x * scale);
+            s32 r = FR_POW10(fr, R);
+            double ref = pow(10.0, x);
+            if (ref > 32000.0 || ref < 1e-6) continue;
+            stats_add(&st, x, frd(r, R), ref);
+        }
+        printf("| pow10 | %.1f | %.4f | %.4f | FR_MULK28 + FR_pow2 |\n",
+               st.max_abs_err / lsb, st.max_pct_err, stats_mean_pct(&st));
+    }
+
+    /* --- pow10_fast (FR_POW10_FAST) --- */
+    {
+        stats_t st; stats_reset(&st);
+        for (int i = -200; i <= 200; i++) {
+            double x = i / 100.0;
+            s32 fr = (s32)(x * scale);
+            s32 r = FR_POW10_FAST(fr, R);
+            double ref = pow(10.0, x);
+            if (ref > 32000.0 || ref < 1e-6) continue;
+            stats_add(&st, x, frd(r, R), ref);
+        }
+        printf("| pow10_fast | %.1f | %.4f | %.4f | Shift-only scaling |\n",
+               st.max_abs_err / lsb, st.max_pct_err, stats_mean_pct(&st));
+    }
+
+    /* --- hypot (exact) --- */
+    {
+        stats_t st; stats_reset(&st);
+        struct { double x, y; } cases[] = {
+            {0,0},{1,0},{0,1},{3,4},{5,12},{8,15},{-3,-4},{-3,4},{3,-4},
+            {1,1},{0.5,0.5},{100,100},{1000,1},{1,1000}
+        };
+        for (int i = 0; i < (int)(sizeof(cases)/sizeof(cases[0])); i++) {
+            s32 fx = (s32)(cases[i].x * scale);
+            s32 fy = (s32)(cases[i].y * scale);
+            s32 r = FR_hypot(fx, fy, R);
+            double ref = hypot(cases[i].x, cases[i].y);
+            stats_add(&st, ref, frd(r, R), ref);
+        }
+        printf("| hypot (exact) | %.1f | %.4f | %.4f | 64-bit intermediate |\n",
+               st.max_abs_err / lsb, st.max_pct_err, stats_mean_pct(&st));
+    }
+
+    /* --- hypot_fast (4-seg) --- */
+    {
+        stats_t st; stats_reset(&st);
+        struct { double x, y; } cases[] = {
+            {1,0},{0,1},{3,4},{5,12},{8,15},{-3,-4},{1,1},{0.5,0.5},
+            {100,100},{1000,1},{1,1000},{7,24},{20,21}
+        };
+        for (int i = 0; i < (int)(sizeof(cases)/sizeof(cases[0])); i++) {
+            s32 fx = (s32)(cases[i].x * scale);
+            s32 fy = (s32)(cases[i].y * scale);
+            s32 r = FR_hypot_fast(fx, fy);
+            double ref = hypot(cases[i].x, cases[i].y);
+            if (ref > 0) stats_add(&st, ref, frd(r, R), ref);
+        }
+        printf("| hypot_fast (4-seg) | %.1f | %.4f | %.4f | Shift-only, no multiply |\n",
+               st.max_abs_err / lsb, st.max_pct_err, stats_mean_pct(&st));
+    }
+
+    /* --- hypot_fast8 (8-seg) --- */
+    {
+        stats_t st; stats_reset(&st);
+        struct { double x, y; } cases[] = {
+            {1,0},{0,1},{3,4},{5,12},{8,15},{-3,-4},{1,1},{0.5,0.5},
+            {100,100},{1000,1},{1,1000},{7,24},{20,21}
+        };
+        for (int i = 0; i < (int)(sizeof(cases)/sizeof(cases[0])); i++) {
+            s32 fx = (s32)(cases[i].x * scale);
+            s32 fy = (s32)(cases[i].y * scale);
+            s32 r = FR_hypot_fast8(fx, fy);
+            double ref = hypot(cases[i].x, cases[i].y);
+            if (ref > 0) stats_add(&st, ref, frd(r, R), ref);
+        }
+        printf("| hypot_fast8 (8-seg) | %.1f | %.4f | %.4f | Shift-only, no multiply |\n",
+               st.max_abs_err / lsb, st.max_pct_err, stats_mean_pct(&st));
+    }
+
+    printf("<!-- ACCURACY_TABLE_END -->\n");
+    printf("\n");
+}
+
 int main(void) {
     md_h1("FR_Math TDD Characterization Report");
     printf("> Generated by `tests/test_tdd.cpp`. This is a measurement suite, not a pass/fail suite.\n");
@@ -1782,6 +2105,7 @@ int main(void) {
     section_v2_new();
     section_multiradix();
     section_summary();
+    section_accuracy_table();
 
     return 0;
 }

@@ -772,12 +772,12 @@ int test_edge_branches() {
     s32 r32;
     fr_adsr_t env;
 
-    /* FR_Tan(deg, radix) c==0 branch. At radix 0, deg=-16384 and
-     * deg=16384 both drive the internal BAM to exactly 90°/270°, so
+    /* FR_Tan(deg, radix) c==0 branch. At radix 0, deg=90 and deg=270
+     * drive the internal BAM to exactly 16384/49152 (90°/270°), so
      * cos==0 and we hit the saturation return. */
-    r32 = FR_Tan(-16384, 0);                 /* bam=16384 (sin>0) */
+    r32 = FR_Tan(90, 0);                     /* bam=16384 (sin>0) */
     if (r32 != FR_TRIG_MAXVAL) return TEST_FAIL;
-    r32 = FR_Tan(16384, 0);                  /* bam=49152 (sin<0) */
+    r32 = FR_Tan(270, 0);                    /* bam=49152 (sin<0) */
     if (r32 != -FR_TRIG_MAXVAL) return TEST_FAIL;
 
     /* FR_atan2 now returns radians at out_radix.

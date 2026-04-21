@@ -152,24 +152,67 @@ you improved a polynomial approximation), update the pinned values in
 
 <p>The library has no CPU-specific code. It compiles and runs
 identically on all of the targets listed below. The only requirement
-is an integer pipeline and the standard <code>&lt;stdint.h&gt;</code>
-header. You do <em>not</em> need a floating-point unit, and you do
-<em>not</em> need <code>libm</code>.</p>
+is an integer pipeline and <code>&lt;stdint.h&gt;</code> (or define
+<code>FR_NO_STDINT</code> for bare-metal toolchains that lack it &mdash;
+<code>FR_defs.h</code> provides fallback typedefs). You do <em>not</em>
+need a floating-point unit, and you do <em>not</em> need
+<code>libm</code>.</p>
 
 <table>
 <thead><tr><th>Target</th><th>Toolchain</th><th>Tested?</th></tr></thead>
 <tbody>
-<tr><td>x86 / x86_64 Linux</td><td><code>gcc</code>, <code>clang</code></td><td>CI.</td></tr>
+<tr><td>x86 / x86_64 Linux</td><td><code>gcc</code>, <code>clang</code>, <code>tcc</code></td><td>CI + Docker.</td></tr>
 <tr><td>macOS arm64 / x86_64</td><td>Apple <code>clang</code></td><td>CI.</td></tr>
 <tr><td>Windows x86_64</td><td>MSVC, <code>clang-cl</code>, MinGW</td><td>Manual.</td></tr>
-<tr><td>ARM Cortex-M0/M3/M4/M7</td><td><code>arm-none-eabi-gcc</code>, IAR, Keil</td><td>Manual.</td></tr>
-<tr><td>RISC-V rv32imc</td><td><code>riscv32-unknown-elf-gcc</code></td><td>Manual.</td></tr>
-<tr><td>AVR (ATmega328P, etc.)</td><td><code>avr-gcc</code></td><td>Manual.</td></tr>
+<tr><td>AArch64 (ARM64)</td><td><code>aarch64-linux-gnu-gcc</code></td><td>Docker.</td></tr>
+<tr><td>ARM32 / Thumb</td><td><code>arm-none-eabi-gcc</code>, IAR, Keil</td><td>Docker.</td></tr>
+<tr><td>RISC-V rv64 / rv32</td><td><code>riscv64-linux-gnu-gcc</code>, <code>riscv64-unknown-elf-gcc</code></td><td>Docker.</td></tr>
+<tr><td>AVR (ATmega328P, ATtiny85)</td><td><code>avr-gcc</code></td><td>Docker.</td></tr>
 <tr><td>Arduino (AVR, SAMD, etc.)</td><td><code>arduino-cli</code></td><td>Manual.</td></tr>
-<tr><td>MSP430</td><td><code>msp430-elf-gcc</code></td><td>Manual.</td></tr>
+<tr><td>MSP430</td><td><code>msp430-gcc</code></td><td>Docker.</td></tr>
+<tr><td>Motorola 68k</td><td><code>m68k-linux-gnu-gcc</code></td><td>Docker.</td></tr>
+<tr><td>Motorola 68HC11</td><td><code>m68hc11-gcc</code></td><td>Docker.</td></tr>
+<tr><td>PowerPC</td><td><code>powerpc-linux-gnu-gcc</code></td><td>Docker.</td></tr>
+<tr><td>Xtensa LX106 (ESP8266)</td><td><code>xtensa-lx106-elf-gcc</code></td><td>Docker.</td></tr>
 <tr><td>8051</td><td><code>sdcc</code></td><td>Manual.</td></tr>
 </tbody>
 </table>
+
+<h3>Code size (<code>.text</code> section, compiled with <code>-Os</code>)</h3>
+
+<p>All sizes are for the complete <code>FR_math.c</code> &mdash; every function
+included, nothing stripped. With <code>-ffunction-sections</code> and
+linker <code>--gc-sections</code>, only the functions your application
+references are linked, so real flash usage will be smaller.</p>
+
+<!-- SIZE_TABLE_START -->
+<table>
+<thead><tr><th>Target</th><th>.text (bytes)</th></tr></thead>
+<tbody>
+<tr><td>GCC ARM32 Thumb</td><td>4,530</td></tr>
+<tr><td>GCC RISC-V (rv64)</td><td>4,830</td></tr>
+<tr><td>GCC RISC-V (rv32)</td><td>5,068</td></tr>
+<tr><td>GCC Xtensa LX106 (ESP8266)</td><td>5,548</td></tr>
+<tr><td>GCC ARM32</td><td>5,820</td></tr>
+<tr><td>GCC m68k</td><td>5,626</td></tr>
+<tr><td>GCC x86-64</td><td>6,130</td></tr>
+<tr><td>Clang x86-64</td><td>6,728</td></tr>
+<tr><td>GCC AArch64 (ARM64)</td><td>6,396</td></tr>
+<tr><td>GCC x86-32</td><td>7,362</td></tr>
+<tr><td>GCC PowerPC</td><td>7,940</td></tr>
+<tr><td>GCC MSP430</td><td>9,958</td></tr>
+<tr><td>TCC x86</td><td>10,190</td></tr>
+<tr><td>GCC AVR5 (ATmega328P)</td><td>11,912</td></tr>
+<tr><td>GCC AVR ATtiny85</td><td>12,410</td></tr>
+<tr><td>GCC 68HC11</td><td>17,331</td></tr>
+</tbody>
+</table>
+<!-- SIZE_TABLE_END -->
+
+<p>To regenerate this table, run the Docker cross-build
+(requires the <a href="https://github.com/deftio/xelp">xelp</a> Docker image):</p>
+
+<pre><code class="language-bash">scripts/crossbuild-docker.sh</code></pre>
 
 <h3>Example: RISC-V</h3>
 
@@ -195,9 +238,8 @@ arduino-cli compile --fqbn arduino:avr:uno examples/basic-math
 arduino-cli compile --fqbn arduino:avr:uno examples/trig-functions
 arduino-cli compile --fqbn arduino:avr:uno examples/wave-generators</code></pre>
 
-<p>Expect the whole integer-only library to land around a few
-kilobytes of flash. The wave, trig, and log modules can be compiled
-in independently if you want to strip further.</p>
+<p>See the code size table above for exact numbers. With linker
+dead-code elimination, only the functions you call are linked.</p>
 
 <h2>CI</h2>
 

@@ -249,7 +249,7 @@ int putSingleChar(char x)
 }
 //===============================================
 // main program for testing the functions
-int main(int argc, char *argv[])
+int main(int /*argc*/, char * /*argv*/[])
 {
 	int ret_val = 0;
 	int i;

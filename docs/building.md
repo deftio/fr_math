@@ -134,21 +134,62 @@ you improved a polynomial approximation), update the pinned values in
 
 The library has no CPU-specific code. It compiles and runs
 identically on all of the targets listed below. The only requirement
-is an integer pipeline and the standard `<stdint.h>`
-header. You do *not* need a floating-point unit, and you do
-*not* need `libm`.
+is an integer pipeline and `<stdint.h>` (or define `FR_NO_STDINT`
+for bare-metal toolchains that lack it — `FR_defs.h` provides
+fallback typedefs). You do *not* need a floating-point unit, and
+you do *not* need `libm`.
 
 | Target | Toolchain | Tested? |
 | --- | --- | --- |
-| x86 / x86_64 Linux | `gcc`, `clang` | CI. |
+| x86 / x86_64 Linux | `gcc`, `clang`, `tcc` | CI + Docker. |
 | macOS arm64 / x86_64 | Apple `clang` | CI. |
 | Windows x86_64 | MSVC, `clang-cl`, MinGW | Manual. |
-| ARM Cortex-M0/M3/M4/M7 | `arm-none-eabi-gcc`, IAR, Keil | Manual. |
-| RISC-V rv32imc | `riscv32-unknown-elf-gcc` | Manual. |
-| AVR (ATmega328P, etc.) | `avr-gcc` | Manual. |
+| AArch64 (ARM64) | `aarch64-linux-gnu-gcc` | Docker. |
+| ARM32 / Thumb | `arm-none-eabi-gcc`, IAR, Keil | Docker. |
+| RISC-V rv64 / rv32 | `riscv64-linux-gnu-gcc`, `riscv64-unknown-elf-gcc` | Docker. |
+| AVR (ATmega328P, ATtiny85) | `avr-gcc` | Docker. |
 | Arduino (AVR, SAMD, etc.) | `arduino-cli` | Manual. |
-| MSP430 | `msp430-elf-gcc` | Manual. |
+| MSP430 | `msp430-gcc` | Docker. |
+| Motorola 68k | `m68k-linux-gnu-gcc` | Docker. |
+| Motorola 68HC11 | `m68hc11-gcc` | Docker. |
+| PowerPC | `powerpc-linux-gnu-gcc` | Docker. |
+| Xtensa LX106 (ESP8266) | `xtensa-lx106-elf-gcc` | Docker. |
 | 8051 | `sdcc` | Manual. |
+
+### Code size (.text section, compiled with `-Os`)
+
+All sizes are for the complete `FR_math.c` — every function
+included, nothing stripped.  With `-ffunction-sections` and
+linker `--gc-sections`, only the functions your application
+references are linked, so real flash usage will be smaller.
+
+<!-- SIZE_TABLE_START -->
+| Target | .text (bytes) |
+|---|---:|
+| GCC ARM32 Thumb | 4,530 |
+| GCC RISC-V (rv64) | 4,830 |
+| GCC RISC-V (rv32) | 5,068 |
+| GCC Xtensa LX106 (ESP8266) | 5,548 |
+| GCC ARM32 | 5,820 |
+| GCC m68k | 5,626 |
+| GCC x86-64 | 6,130 |
+| Clang x86-64 | 6,728 |
+| GCC AArch64 (ARM64) | 6,396 |
+| GCC x86-32 | 7,362 |
+| GCC PowerPC | 7,940 |
+| GCC MSP430 | 9,958 |
+| TCC x86 | 10,190 |
+| GCC AVR5 (ATmega328P) | 11,912 |
+| GCC AVR ATtiny85 | 12,410 |
+| GCC 68HC11 | 17,331 |
+<!-- SIZE_TABLE_END -->
+
+To regenerate this table, run the Docker cross-build
+(requires the [xelp](https://github.com/deftio/xelp) Docker image):
+
+```bash
+scripts/crossbuild-docker.sh
+```
 
 ### Example: RISC-V
 
@@ -180,9 +221,9 @@ arduino-cli compile --fqbn arduino:avr:uno examples/trig-functions
 arduino-cli compile --fqbn arduino:avr:uno examples/wave-generators
 ```
 
-Expect the whole integer-only library to land around a few
-kilobytes of flash. The wave, trig, and log modules can be compiled
-in independently if you want to strip further.
+See the [code size table](#code-size-text-section-compiled-with--os) above
+for exact numbers. With linker dead-code elimination, only the
+functions you call are linked.
 
 ## CI
 

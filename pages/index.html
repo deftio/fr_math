@@ -47,21 +47,31 @@ into a single format.</p>
 <p>Errors below are measured at Q16.16 (s15.16). All functions accept any
 radix &mdash; Q16.16 is just the reference point for the table.
 See the <a href="https://github.com/deftio/fr_math/blob/master/build/test_tdd_report.md">TDD
-report</a> for sweeps at radixes 8, 12, 16, and 24.</p>
+report</a> for sweeps at radixes 8, 12, 16, and 24.
+Percent errors skip expected values near zero (|expected| &lt; 0.01).</p>
 
+<!-- ACCURACY_TABLE_START -->
 <table>
-<thead><tr><th>Function</th><th>Max error</th><th>Note</th></tr></thead>
+<thead><tr><th>Function</th><th>Max err (LSB)</th><th>Max err (%)</th><th>Avg err (%)</th><th>Note</th></tr></thead>
 <tbody>
-<tr><td>sin / cos</td><td>5 LSB (~7.7e-5)</td><td>Exact at 0, 90, 180, 270</td></tr>
-<tr><td>sqrt</td><td>&le; 0.5 LSB</td><td>Round-to-nearest</td></tr>
-<tr><td>log2</td><td>&le; 4 LSB</td><td>65-entry mantissa table</td></tr>
-<tr><td>pow2</td><td>&le; 1 LSB (integers exact)</td><td>65-entry fraction table</td></tr>
-<tr><td>ln, log10</td><td>&le; 4 LSB</td><td>Via FR_MULK28 from log2</td></tr>
-<tr><td>hypot (exact)</td><td>&le; 0.5 LSB</td><td>64-bit intermediate</td></tr>
-<tr><td>hypot_fast (4-seg)</td><td>0.34%</td><td>Shift-only, no multiply</td></tr>
-<tr><td>hypot_fast8 (8-seg)</td><td>0.10%</td><td>Shift-only, no multiply</td></tr>
+<tr><td>sin / cos</td><td>7.5</td><td>0.7169</td><td>0.0100</td><td>65536-pt sweep + specials</td></tr>
+<tr><td>tan</td><td>38020.4</td><td>0.7118</td><td>0.0162</td><td>65536-pt sweep (skip poles)</td></tr>
+<tr><td>asin / acos</td><td>512.6</td><td>0.7025</td><td>0.0105</td><td>65536-pt; sqrt approx near boundary</td></tr>
+<tr><td>atan2</td><td>44.7</td><td>2.9913</td><td>0.0383</td><td>65536x5 radii + specials</td></tr>
+<tr><td>sqrt</td><td>28.4</td><td>0.0003</td><td>0.0000</td><td>Round-to-nearest</td></tr>
+<tr><td>log2</td><td>10.5</td><td>0.2479</td><td>0.0045</td><td>65-entry mantissa table</td></tr>
+<tr><td>pow2</td><td>220.4</td><td>0.1373</td><td>0.0057</td><td>65-entry fraction table</td></tr>
+<tr><td>ln, log10</td><td>0.7</td><td>0.0015</td><td>0.0004</td><td>Via FR_MULK28 from log2</td></tr>
+<tr><td>exp</td><td>65.7</td><td>0.0719</td><td>0.0051</td><td>FR_MULK28 + FR_pow2</td></tr>
+<tr><td>exp_fast</td><td>195.5</td><td>0.0719</td><td>0.0064</td><td>Shift-only scaling</td></tr>
+<tr><td>pow10</td><td>143.4</td><td>0.1163</td><td>0.0075</td><td>FR_MULK28 + FR_pow2</td></tr>
+<tr><td>pow10_fast</td><td>581.9</td><td>0.1163</td><td>0.0100</td><td>Shift-only scaling</td></tr>
+<tr><td>hypot (exact)</td><td>0.2</td><td>0.0001</td><td>0.0000</td><td>64-bit intermediate</td></tr>
+<tr><td>hypot_fast (4-seg)</td><td>216112.8</td><td>0.3418</td><td>0.1923</td><td>Shift-only, no multiply</td></tr>
+<tr><td>hypot_fast8 (8-seg)</td><td>59968.8</td><td>0.0977</td><td>0.0508</td><td>Shift-only, no multiply</td></tr>
 </tbody>
 </table>
+<!-- ACCURACY_TABLE_END -->
 
 <h2>What&rsquo;s in the box</h2>
 

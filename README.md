@@ -2,7 +2,7 @@
 [![CI](https://github.com/deftio/fr_math/actions/workflows/ci.yml/badge.svg)](https://github.com/deftio/fr_math/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen.svg)](#building-and-testing)
 [![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://deftio.github.io/fr_math/)
-[![Version](https://img.shields.io/badge/version-2.0.5-blue.svg)](release_notes.md)
+[![Version](https://img.shields.io/badge/version-2.0.6-blue.svg)](release_notes.md)
 
 # FR_Math: A C Language Fixed-Point Math Library for Embedded Systems
 
@@ -40,17 +40,27 @@ See [`docker/`](docker/) for the cross-compile setup.
 
 Errors below are measured at Q16.16 (s15.16). All functions accept any
 radix — Q16.16 is just the reference point for the table.
+Percent errors skip expected values near zero (|expected| < 0.01).
 
-| Function | Max error | Note |
-|---|---|---|
-| sin / cos | 5 LSB (~7.7e-5) | Exact at 0, 90, 180, 270 |
-| sqrt | ≤ 0.5 LSB | Round-to-nearest |
-| log2 | ≤ 4 LSB | 65-entry mantissa table |
-| pow2 | ≤ 1 LSB (integers exact) | 65-entry fraction table |
-| ln, log10 | ≤ 4 LSB | Via FR_MULK28 from log2 |
-| hypot (exact) | ≤ 0.5 LSB | 64-bit intermediate |
-| hypot_fast (4-seg) | 0.34% | Shift-only, no multiply |
-| hypot_fast8 (8-seg) | 0.10% | Shift-only, no multiply |
+<!-- ACCURACY_TABLE_START -->
+| Function | Max err (LSB) | Max err (%) | Avg err (%) | Note |
+|---|---:|---:|---:|---|
+| sin / cos | 7.5 | 0.7169 | 0.0100 | 65536-pt sweep + specials |
+| tan | 38020.4 | 0.7118 | 0.0162 | 65536-pt sweep (skip poles) |
+| asin / acos | 512.6 | 0.7025 | 0.0105 | 65536-pt; sqrt approx near boundary |
+| atan2 | 44.7 | 2.9913 | 0.0383 | 65536x5 radii + specials |
+| sqrt | 28.4 | 0.0003 | 0.0000 | Round-to-nearest |
+| log2 | 10.5 | 0.2479 | 0.0045 | 65-entry mantissa table |
+| pow2 | 220.4 | 0.1373 | 0.0057 | 65-entry fraction table |
+| ln, log10 | 0.7 | 0.0015 | 0.0004 | Via FR_MULK28 from log2 |
+| exp | 65.7 | 0.0719 | 0.0051 | FR_MULK28 + FR_pow2 |
+| exp_fast | 195.5 | 0.0719 | 0.0064 | Shift-only scaling |
+| pow10 | 143.4 | 0.1163 | 0.0075 | FR_MULK28 + FR_pow2 |
+| pow10_fast | 581.9 | 0.1163 | 0.0100 | Shift-only scaling |
+| hypot (exact) | 0.2 | 0.0001 | 0.0000 | 64-bit intermediate |
+| hypot_fast (4-seg) | 216112.8 | 0.3418 | 0.1923 | Shift-only, no multiply |
+| hypot_fast8 (8-seg) | 59968.8 | 0.0977 | 0.0508 | Shift-only, no multiply |
+<!-- ACCURACY_TABLE_END -->
 
 ### What's in the box
 

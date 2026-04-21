@@ -29,13 +29,39 @@
 #define __FR_Platform_Defs_H__
 
 /*
- * Fixed-width integer typedefs. C99 stdint.h is mandatory in v2.
+ * Fixed-width integer typedefs.
  *
- * Any C99-or-newer toolchain (gcc, clang, MSVC, IAR, Keil, sdcc, MSP430-gcc,
- * AVR-gcc, RISC-V toolchains, ARM toolchains) supports <stdint.h>. If you
- * are on a pre-C99 toolchain, FR_Math 1.0.x is the version for you.
+ * Prefer C99 <stdint.h> when available (gcc, clang, MSVC, IAR, Keil, sdcc,
+ * MSP430-gcc, AVR-gcc, RISC-V, ARM toolchains).  For bare-metal toolchains
+ * or pre-C99 compilers that lack <stdint.h>, define FR_NO_STDINT before
+ * including this header and the types are provided via sizeof()-based
+ * fallback definitions that cover the common 8/16/32/64-bit layouts.
  */
+#ifndef FR_NO_STDINT
 #include <stdint.h>
+#else
+/* ---- fallback: no <stdint.h> ------------------------------------ */
+/* Works on any toolchain where char=8, short=16, int/long=32 bits,
+ * which covers virtually all embedded targets (AVR, MSP430, ARM,
+ * 68HC11, 68k, PPC, RISC-V, Xtensa, x86).  Adjust if your platform
+ * differs.
+ */
+typedef unsigned char      uint8_t;
+typedef signed   char      int8_t;
+typedef unsigned short     uint16_t;
+typedef signed   short     int16_t;
+#if defined(__AVR__) || defined(__MSP430__) || defined(__m68hc1x__)
+  /* On these targets int is 16-bit; use long for 32-bit */
+  typedef unsigned long    uint32_t;
+  typedef signed   long    int32_t;
+#else
+  typedef unsigned int     uint32_t;
+  typedef signed   int     int32_t;
+#endif
+/* 64-bit: available on most 32-bit+ GCC targets via long long */
+typedef unsigned long long uint64_t;
+typedef signed   long long int64_t;
+#endif /* FR_NO_STDINT */
 
 /*
  * Arduino's USBAPI.h typedefs u8 and u16 as unsigned char / unsigned short.
