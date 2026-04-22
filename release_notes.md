@@ -1,5 +1,42 @@
 # FR_Math Release Notes
 
+## Version 2.0.6 (2026)
+
+Accuracy improvements, lean-build options, and library cleanup.
+
+### Accuracy & algorithms
+
+- **FR_acos boundary fix**: deferred quantization computes `1-x` at the
+  caller's radix instead of r15, giving 12x better accuracy near ±1.0
+  (max LSB error 512.6 → 42.3)
+- **FR_atan2 rewrite**: uses asin/acos + hypot_fast8 with octant
+  switching for well-conditioned results everywhere (0.41% peak vs
+  20% for libfixmath)
+
+### Lean build options
+
+Two new compile-time `#define` guards strip optional subsystems for
+ROM-constrained targets:
+
+| Define | Removes | Savings |
+|---|---|---|
+| `FR_NO_PRINT` | `FR_printNumF/D/H`, `FR_numstr` | ~1.3 KB |
+| `FR_NO_WAVES` | `fr_wave_*`, `fr_adsr_*`, `FR_HZ2BAM_INC` | ~0.6 KB |
+
+With both guards the core math library compiles to ~3.5 KB on x86-64
+(clang -Os), roughly 2.6 KB on Thumb-2.
+
+### Removed
+
+- **FR_hypot_fast** (4-segment) deleted — FR_hypot_fast8 (8-segment)
+  is strictly better in both accuracy (0.10% vs 0.34%) and is used
+  internally by FR_atan2. The 4-segment variant was dead weight.
+
+### Other
+
+- libfixmath comparison benchmark (`compare_lfm/`) added to repo
+- Documentation updated across all markdown and HTML pages
+
 ## Version 2.0.5 (2026)
 
 Release pipeline fixes. No functional changes to the math library.

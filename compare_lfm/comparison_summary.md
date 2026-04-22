@@ -43,20 +43,20 @@ All errors measured vs IEEE 754 double. Pct errors skip |ref| < 0.01.
 
 | Function | FR_math | libfixmath | Speedup | Faster |
 |----------|--------:|-----------:|--------:|--------|
-| sin             |    2.5 |       10.3 |   4.06x | FR      |
-| cos             |    2.3 |       10.3 |   4.51x | FR      |
-| tan             |    4.2 |       29.5 |   7.02x | FR      |
-| asin            |    9.0 |       49.8 |   5.55x | FR      |
-| acos            |    8.4 |       50.9 |   6.05x | FR      |
-| atan            |    8.4 |       11.4 |   1.35x | FR      |
-| atan2           |   16.1 |       10.7 |   0.66x | lfm     |
-| sqrt            |   19.2 |       20.7 |   1.08x | FR      |
-| exp             |    3.2 |       65.2 |  20.21x | FR      |
-| ln              |    8.8 |      457.0 |  51.86x | FR      |
-| log2            |    8.9 |       40.2 |   4.50x | FR      |
-| mul             |    1.0 |        1.3 |   1.34x | FR      |
-| div             |    0.9 |        5.6 |   6.21x | FR      |
-| hypot           |   20.2 |        --- |     --- | FR only |
+| sin             |    2.6 |       20.7 |   7.94x | FR      |
+| cos             |    4.8 |       18.4 |   3.86x | FR      |
+| tan             |    6.0 |       41.4 |   6.89x | FR      |
+| asin            |   11.5 |       53.7 |   4.67x | FR      |
+| acos            |    8.4 |       50.4 |   5.97x | FR      |
+| atan            |    8.0 |       11.2 |   1.41x | FR      |
+| atan2           |   15.9 |       10.5 |   0.66x | lfm     |
+| sqrt            |   18.6 |       19.8 |   1.06x | FR      |
+| exp             |    3.1 |       67.6 |  22.02x | FR      |
+| ln              |    8.8 |      479.3 |  54.70x | FR      |
+| log2            |    8.7 |       39.4 |   4.55x | FR      |
+| mul             |    0.9 |        1.2 |   1.33x | FR      |
+| div             |    0.9 |        5.2 |   5.98x | FR      |
+| hypot           |   20.0 |        --- |     --- | FR only |
 | hypot_fast8     |    2.4 |        --- |     --- | FR only |
 
 ### Summary (13 head-to-head functions)
@@ -69,13 +69,13 @@ All errors measured vs IEEE 754 double. Pct errors skip |ref| < 0.01.
 
 | | FR_math | libfixmath | lfm (no cache) |
 |---|---:|---:|---:|
-| Code (text) | 6,888 B | 4,880 B | 5,444 B |
-| Tables (ROM) | 834 B | 32 B | 32 B |
-| **ROM total** | **7,722 B** | **4,912 B** | **5,476 B** |
+| Code (text) | 6,652 B | 4,880 B | 5,444 B |
+| Tables (ROM) | 818 B | 32 B | 32 B |
+| **ROM total** | **7,470 B** | **4,912 B** | **5,476 B** |
 | BSS / RAM | **0 B** | **112 KB** | **0 B** |
 
-FR_math packs trig, inv-trig, log/ln/log10, exp/pow2/pow10, sqrt, hypot(3),
-waves(6), ADSR, print into 7.5 KB ROM with zero RAM overhead.
+FR_math packs trig, inv-trig, log/ln/log10, exp/pow2/pow10, sqrt, hypot(2),
+waves(6), ADSR, print into 7.3 KB ROM with zero RAM overhead.
 libfixmath (trig, inv-trig, log/log2, exp, sqrt, mul/div, str) is 4.8 KB ROM
 but caches 112 KB of sin/exp LUTs in BSS at runtime.
 

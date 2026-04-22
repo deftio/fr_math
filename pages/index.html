@@ -96,6 +96,34 @@ Percent errors skip expected values near zero (|expected| &lt; 0.01).</p>
 <a href="https://github.com/deftio/fr_math/blob/master/tests/test_tdd.cpp">TDD
 characterization suite</a> in the repo.</p>
 
+<h2>Lean build options</h2>
+
+<p>Two compile-time <code>#define</code> guards let you strip optional subsystems
+for ROM-constrained targets. Define them before including
+<code>FR_math.h</code> (or pass <code>-D</code> on the compiler command line):</p>
+
+<table>
+<thead><tr><th>Define</th><th>What it removes</th><th>Typical savings</th></tr></thead>
+<tbody>
+<tr><td><code>FR_NO_PRINT</code></td><td><code>FR_printNumF</code>, <code>FR_printNumD</code>, <code>FR_printNumH</code>, <code>FR_numstr</code></td><td>~1.3 KB</td></tr>
+<tr><td><code>FR_NO_WAVES</code></td><td><code>fr_wave_*</code> (6 shapes), <code>fr_adsr_*</code> (ADSR envelope), <code>FR_HZ2BAM_INC</code></td><td>~0.6 KB</td></tr>
+</tbody>
+</table>
+
+<p>With both guards enabled the core math library (trig, inverse trig, log/exp,
+sqrt, hypot) compiles to ~3.5 KB on x86-64 / clang -Os. On Thumb-2 this
+would be roughly 2.6 KB.</p>
+
+<pre><code class="language-c">/* Example: headless sensor node &mdash; math only, no print, no audio */
+#define FR_NO_PRINT
+#define FR_NO_WAVES
+#include "FR_math.h"</code></pre>
+
+<p>With <code>-ffunction-sections</code> and linker <code>--gc-sections</code>,
+the linker will also strip any unused functions automatically, so these guards
+are most useful when you include the library as a single <code>.c</code> file
+or static archive without section-level dead-code elimination.</p>
+
 <h2>Why fixed-point, in 2026?</h2>
 
 <p>Most application code today has an FPU and can use <code>float</code>
@@ -149,7 +177,7 @@ s32 two  = I2FR(2, R);              /* 2.0 &rarr; raw 131072              */
  * UPPERCASE FR_ names are macros &mdash; they expand inline with no call
  * overhead, and the compiler can constant-fold them.  Use these for
  * conversions and simple arithmetic:
- *   I2FR, FR2I, FR_NUM, FR_ADD, FR_MUL, FR_DIV, FR_ABS, FR_EXP ...
+ *   I2FR, FR2I, FR_NUM, FR_ADD, FR_DIV, FR_ABS, FR_CHRDX, FR_EXP ...
  *
  * MixedCase FR_ names are functions &mdash; they contain loops, tables, or
  * multi-step algorithms where inlining would waste ROM:
@@ -218,7 +246,7 @@ for the build script.</small></p>
 built for graphics transforms on 16&nbsp;MHz 68k Palm Pilots (it
 shipped inside Trumpetsoft&rsquo;s <em>Inkstorm</em>), then ported
 forward to ARM, x86, MIPS, RISC-V, and various 8/16-bit embedded
-targets. v2.0.2 is the current release with a full test suite,
+targets. v2.0.6 is the current release with a full test suite,
 bit-exact numerical specification, and CI on every push.</p>
 
 <h2>License</h2>

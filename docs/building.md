@@ -95,7 +95,7 @@ binaries to keep compile times low:
 
 | Binary | What it checks |
 | --- | --- |
-| `test_basic` | Radix conversions, `FR_ADD`, `FR_MUL`, rounding. |
+| `test_basic` | Radix conversions, `FR_ADD`, `FR_FixMuls`, rounding. |
 | `test_trig` | Integer-degree trig (`FR_Sin` et al.). |
 | `test_trig_radians` | Radian / BAM trig and the v2 `fr_sin` API. |
 | `test_log_exp` | Log base 2 / ln / log10 and their inverses. |
@@ -183,6 +183,32 @@ references are linked, so real flash usage will be smaller.
 | GCC AVR ATtiny85 | 12,410 |
 | GCC 68HC11 | 17,331 |
 <!-- SIZE_TABLE_END -->
+
+### Lean build options
+
+Two compile-time `#define` guards let you strip optional subsystems
+for ROM-constrained targets. Define them before including `FR_math.h`
+(or pass `-D` on the compiler command line):
+
+| Define | What it removes | Typical savings |
+|---|---|---|
+| `FR_NO_PRINT` | `FR_printNumF`, `FR_printNumD`, `FR_printNumH`, `FR_numstr` | ~1.3 KB |
+| `FR_NO_WAVES` | `fr_wave_*` (6 shapes), `fr_adsr_*` (ADSR envelope), `FR_HZ2BAM_INC` | ~0.6 KB |
+
+With both guards enabled the core math library (trig, inverse trig, log/exp,
+sqrt, hypot) compiles to ~3.5 KB on x86-64 / clang -Os.
+
+```c
+/* Example: headless sensor node — math only, no print, no audio */
+#define FR_NO_PRINT
+#define FR_NO_WAVES
+#include "FR_math.h"
+```
+
+With `-ffunction-sections` and linker `--gc-sections`, the linker will
+also strip any unused functions automatically, so these guards are most
+useful when you include the library as a single `.c` file or static
+archive without section-level dead-code elimination.
 
 To regenerate this table, run the Docker cross-build
 (requires the [xelp](https://github.com/deftio/xelp) Docker image):

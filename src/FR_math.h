@@ -455,6 +455,19 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 #define FR_EXP_FAST(input, radix)   (FR_pow2(FR_SLOG2E(input), radix))
 #define FR_POW10_FAST(input, radix) (FR_pow2(FR_SLOG2_10(input), radix))
 
+/*===============================================
+ * Formatted output and string parsing
+ *
+ * Define FR_NO_PRINT before including this header to exclude all
+ * print/format functions from compilation. This saves ~1.7 KB of ROM
+ * on targets that don't need human-readable output (e.g. headless
+ * sensor nodes, DSP-only firmware).
+ *
+ *   #define FR_NO_PRINT
+ *   #include "FR_math.h"
+ */
+#ifndef FR_NO_PRINT
+
   /* printing family of functions */
   int FR_printNumF(int (*f)(char), s32 n, int radix, int pad, int prec); /* print fixed radix num as floating point e.g.  -12.34" */
   int FR_printNumD(int (*f)(char), int n, int pad);                      /* print decimal number with optional padding e.g. " 12" */
@@ -462,6 +475,8 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 
   /* string-to-fixed-point parser (inverse of FR_printNumF) */
   s32 FR_numstr(const char *s, u16 radix);
+
+#endif /* FR_NO_PRINT */
 
 /*===============================================
  * Square root and hypot
@@ -487,6 +502,19 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
    * No radix parameter needed because the algorithm is scale-invariant.
    */
   s32 FR_hypot_fast8(s32 x, s32 y);
+
+/*===============================================
+ * Wave generators and ADSR envelope
+ *
+ * Define FR_NO_WAVES before including this header to exclude all
+ * waveform generators (square, pulse, triangle, saw, noise) and the
+ * ADSR envelope from compilation. This saves ~400 B of ROM on targets
+ * that only need math/trig and don't do audio synthesis.
+ *
+ *   #define FR_NO_WAVES
+ *   #include "FR_math.h"
+ */
+#ifndef FR_NO_WAVES
 
 /*===============================================
  * Wave generators — synth-style fixed-shape waveforms.
@@ -567,6 +595,8 @@ typedef struct fr_adsr_s {
   void fr_adsr_trigger(fr_adsr_t *env);
   void fr_adsr_release(fr_adsr_t *env);
   s16  fr_adsr_step(fr_adsr_t *env);
+
+#endif /* FR_NO_WAVES */
 
 #ifdef __cplusplus
 

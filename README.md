@@ -20,7 +20,9 @@ beyond `<stdint.h>`.
 
 ### Library size (FR_math.c only, `-Os`)
 
-The following are compilied object code sizes on select platforms from static test build.  Your sizes may vary depending on optimization choices and linker settings.  Sizes include full code and any internal tables and are ROMable.
+Compiled object code sizes on select platforms (static test build). Your
+sizes may vary depending on optimization and linker settings. Sizes
+include all code and internal tables; everything is ROMable.
 
 | Target | Code (text) |
 |--------|-------------|
@@ -38,13 +40,41 @@ The optional 2D module adds ~1 KB.
 \* 8051 and MSP430 are 8/16-bit — every 32-bit operation expands to multiple instructions.
 See [`docker/`](docker/) for the cross-compile setup.
 
+### Lean build options
+
+Two compile-time `#define` guards let you strip optional subsystems
+for ROM-constrained targets. Define them before including `FR_math.h`
+(or pass `-D` on the compiler command line):
+
+| Define | What it removes | Typical savings |
+|---|---|---|
+| `FR_NO_PRINT` | `FR_printNumF`, `FR_printNumD`, `FR_printNumH`, `FR_numstr` | ~1.3 KB |
+| `FR_NO_WAVES` | `fr_wave_*` (6 shapes), `fr_adsr_*` (ADSR envelope), `FR_HZ2BAM_INC` | ~0.6 KB |
+
+With both guards enabled the core math library (trig, inverse trig, log/exp,
+sqrt, hypot) compiles to ~3.5 KB on x86-64 / clang -Os. On Thumb-2 this
+would be roughly 2.6 KB.
+
+```c
+/* Example: headless sensor node — math only, no print, no audio */
+#define FR_NO_PRINT
+#define FR_NO_WAVES
+#include "FR_math.h"
+```
+
+With `-ffunction-sections` and linker `--gc-sections`, the linker will
+also strip any unused functions automatically, so these guards are most
+useful when you include the library as a single `.c` file or static
+archive without section-level dead-code elimination.
+
 ### Measured accuracy
 
 Errors below are measured at Q16.16 (s15.16). All functions accept any
 radix — Q16.16 is just the reference point for the table.
 Percent errors skip expected values near zero (|expected| < 0.01).
 
-Note that at other radixes (3bit, 24 bit etc), accuracy may change due fractional bits available but with increased/decreased scale.  All functions support 0 to 30 bit radix types at compile time.
+At other radixes (3-bit, 24-bit, etc.) accuracy will differ due to the
+number of fractional bits available. All functions support radix 0 to 30.
 
 <!-- ACCURACY_TABLE_START -->
 | Function | Max err (LSB) | Max err (%) | Avg err (%) | Note |
@@ -88,7 +118,7 @@ Note that at other radixes (3bit, 24 bit etc), accuracy may change due fractiona
 git clone https://github.com/deftio/fr_math.git
 cd fr_math
 make lib       # build static library
-make test      # run all tests (coverage, TDD characterization, 2D)
+make test      # run all tests (unit, TDD characterization, 2D)
 ```
 
 ## Quick taste
@@ -120,7 +150,7 @@ s32 two  = I2FR(2, R);              /* 2.0 → raw 131072              */
  * UPPERCASE FR_ names are macros — they expand inline with no call
  * overhead, and the compiler can constant-fold them.  Use these for
  * conversions and simple arithmetic:
- *   I2FR, FR2I, FR_NUM, FR_ADD, FR_MUL, FR_DIV, FR_ABS, FR_EXP ...
+ *   I2FR, FR2I, FR_NUM, FR_ADD, FR_DIV, FR_ABS, FR_CHRDX, FR_EXP ...
  *
  * MixedCase FR_ names are functions — they contain loops, tables, or
  * multi-step algorithms where inlining would waste ROM:
@@ -176,7 +206,7 @@ The full docs ship in two forms — pick whichever fits how you read.
 FR_Math has been in service since 2000, originally built for graphics
 transforms on 16 MHz 68k Palm Pilots. It shipped inside Trumpetsoft's
 *Inkstorm* on PalmOS, then moved forward through ARM, x86, MIPS,
-RISC-V, and various 8/16-bit embedded targets. v2.0.2 is the current
+RISC-V, and various 8/16-bit embedded targets. v2.0.6 is the current
 release with a full test suite, bit-exact numerical specification, and
 CI on every push.
 
@@ -192,5 +222,5 @@ BSD-2-Clause — see [LICENSE.txt](LICENSE.txt).
 
 ## Version
 
-2.0.2 — see [release_notes.md](release_notes.md) for the v1 → v2
+2.0.6 — see [release_notes.md](release_notes.md) for the v1 → v2
 migration guide, numerical fixes, and new functionality.

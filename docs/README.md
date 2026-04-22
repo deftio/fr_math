@@ -84,6 +84,33 @@ radix — Q16.16 is just the reference point for the table. See the
 Every function is covered by the TDD characterization suite in
 [`tests/test_tdd.cpp`](../tests/test_tdd.cpp).
 
+## Lean build options
+
+Two compile-time `#define` guards let you strip optional subsystems
+for ROM-constrained targets. Define them before including `FR_math.h`
+(or pass `-D` on the compiler command line):
+
+| Define | What it removes | Typical savings |
+|---|---|---|
+| `FR_NO_PRINT` | `FR_printNumF`, `FR_printNumD`, `FR_printNumH`, `FR_numstr` | ~1.3 KB |
+| `FR_NO_WAVES` | `fr_wave_*` (6 shapes), `fr_adsr_*` (ADSR envelope), `FR_HZ2BAM_INC` | ~0.6 KB |
+
+With both guards enabled the core math library (trig, inverse trig, log/exp,
+sqrt, hypot) compiles to ~3.5 KB on x86-64 / clang -Os. On Thumb-2 this
+would be roughly 2.6 KB.
+
+```c
+/* Example: headless sensor node — math only, no print, no audio */
+#define FR_NO_PRINT
+#define FR_NO_WAVES
+#include "FR_math.h"
+```
+
+With `-ffunction-sections` and linker `--gc-sections`, the linker will
+also strip any unused functions automatically, so these guards are most
+useful when you include the library as a single `.c` file or static
+archive without section-level dead-code elimination.
+
 ## Why fixed-point, in 2026?
 
 Most application code today has an FPU and can use `float` freely.
@@ -133,7 +160,7 @@ s32 two  = I2FR(2, R);              /* 2.0 → raw 131072              */
  * UPPERCASE FR_ names are macros — they expand inline with no call
  * overhead, and the compiler can constant-fold them.  Use these for
  * conversions and simple arithmetic:
- *   I2FR, FR2I, FR_NUM, FR_ADD, FR_MUL, FR_DIV, FR_ABS, FR_EXP ...
+ *   I2FR, FR2I, FR_NUM, FR_ADD, FR_DIV, FR_ABS, FR_CHRDX, FR_EXP ...
  *
  * MixedCase FR_ names are functions — they contain loops, tables, or
  * multi-step algorithms where inlining would waste ROM:
@@ -198,7 +225,7 @@ script.
 FR_Math has been in service since **2000**, originally built for
 graphics transforms on 16 MHz 68k Palm Pilots (it shipped inside
 Trumpetsoft's *Inkstorm*), then ported forward to ARM, x86, MIPS,
-RISC-V, and various 8/16-bit embedded targets. v2.0.2 is the current
+RISC-V, and various 8/16-bit embedded targets. v2.0.6 is the current
 release with a full test suite, bit-exact numerical
 specification, and CI on every push.
 

@@ -664,6 +664,7 @@ s32 FR_log10(s32 input, u16 radix, u16 output_radix)
 	return FR_MULK28(r, FR_krLOG2_10_28);
 }
 
+#ifndef FR_NO_PRINT
 /***************************************
  * FR_printNumD - write a decimal integer with space padding.
  *
@@ -928,6 +929,7 @@ s32 FR_numstr(const char *s, u16 radix)
 
     return neg ? -result : result;
 }
+#endif /* FR_NO_PRINT */
 
 /*=======================================================
  * Square root and hypot
@@ -1094,6 +1096,7 @@ s32 FR_hypot_fast8(s32 x, s32 y)
     }
 }
 
+#ifndef FR_NO_WAVES
 /*=======================================================
  * Wave generators — synth-style fixed-shape waveforms.
  *
@@ -1365,3 +1368,4 @@ s16 fr_adsr_step(fr_adsr_t *env)
 		return (s16)out;
 	}
 }
+#endif /* FR_NO_WAVES */
