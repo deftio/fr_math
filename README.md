@@ -26,18 +26,22 @@ include all code and internal tables; everything is ROMable.
 
 | Target | Code (text) |
 |--------|-------------|
-| Cortex-M0 (Thumb-1) | 4.2 KB |
-| Cortex-M4 (Thumb-2) | 4.1 KB |
-| ESP32 (Xtensa) | 4.6 KB |
-| 68k | 5.5 KB |
-| x86-64 | 5.8 KB |
-| RISC-V 32 (rv32im) | 6.5 KB |
-| x86-32 | 7.2 KB |
-| MSP430 (16-bit) | 8.4 KB |
-| 8051 (SDCC) | 20.4 KB * |
+| ARM Thumb (Cortex-M0/M4) | 4.2 KB |
+| RISC-V 32 (rv32imac) | 4.7 KB |
+| RISC-V 64 | 4.5 KB |
+| Xtensa LX106 (ESP8266) | 5.2 KB |
+| 68k | 5.3 KB |
+| ARM32 | 5.4 KB |
+| x86-64 (GCC) | 5.7 KB |
+| AArch64 (ARM64) | 6.0 KB |
+| x86-64 (Clang) | 6.4 KB |
+| x86-32 | 6.8 KB |
+| PowerPC | 7.4 KB |
+| MSP430 (16-bit) | 8.9 KB * |
+| AVR (ATmega328P) | 10.6 KB * |
 
 The optional 2D module adds ~1 KB.
-\* 8051 and MSP430 are 8/16-bit — every 32-bit operation expands to multiple instructions.
+\* MSP430 and AVR are 8/16-bit — every 32-bit operation expands to multiple instructions.
 See [`docker/`](docker/) for the cross-compile setup.
 
 ### Lean build options

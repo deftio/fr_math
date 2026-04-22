@@ -166,22 +166,22 @@ references are linked, so real flash usage will be smaller.
 <!-- SIZE_TABLE_START -->
 | Target | .text (bytes) |
 |---|---:|
-| GCC ARM32 Thumb | 4,530 |
-| GCC RISC-V (rv64) | 4,830 |
-| GCC RISC-V (rv32) | 5,068 |
-| GCC Xtensa LX106 (ESP8266) | 5,548 |
-| GCC ARM32 | 5,820 |
-| GCC m68k | 5,626 |
-| GCC x86-64 | 6,130 |
-| Clang x86-64 | 6,728 |
-| GCC AArch64 (ARM64) | 6,396 |
-| GCC x86-32 | 7,362 |
-| GCC PowerPC | 7,940 |
-| GCC MSP430 | 9,958 |
-| TCC x86 | 10,190 |
-| GCC AVR5 (ATmega328P) | 11,912 |
-| GCC AVR ATtiny85 | 12,410 |
-| GCC 68HC11 | 17,331 |
+| GCC ARM32 Thumb | 4,278 |
+| GCC RISC-V (rv64) | 4,574 |
+| GCC RISC-V (rv32) | 4,820 |
+| GCC Xtensa LX106 (ESP8266) | 5,317 |
+| GCC m68k | 5,410 |
+| GCC ARM32 | 5,504 |
+| GCC x86-64 | 5,857 |
+| GCC AArch64 (ARM64) | 6,112 |
+| Clang x86-64 | 6,555 |
+| GCC x86-32 | 6,947 |
+| GCC PowerPC | 7,540 |
+| GCC MSP430 | 9,146 |
+| TCC x86 | 9,887 |
+| GCC AVR5 (ATmega328P) | 10,806 |
+| GCC AVR ATtiny85 | 11,382 |
+| GCC 68HC11 | 16,392 |
 <!-- SIZE_TABLE_END -->
 
 ### Lean build options
