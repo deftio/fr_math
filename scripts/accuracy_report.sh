@@ -21,13 +21,16 @@ PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
 MODE="print"
+SHOWPEAK=""
 for arg in "$@"; do
     case "$arg" in
         --update) MODE="update" ;;
+        --showpeak) SHOWPEAK="1" ;;
         -h|--help)
-            echo "Usage: scripts/accuracy_report.sh [--update]"
+            echo "Usage: scripts/accuracy_report.sh [--update] [--showpeak]"
             echo "  (no args)   Build test_tdd, run it, print accuracy table"
             echo "  --update    Also patch README.md, docs/README.md, pages/index.html"
+            echo "  --showpeak  Add a 'Peak at' column showing the input that produced max % error"
             exit 0
             ;;
         *) echo "Unknown option: $arg" >&2; exit 1 ;;
@@ -45,7 +48,11 @@ make -s build/test_tdd 2>&1 >&2
 # 2. Run and capture the accuracy table
 # -----------------------------------------------------------------------
 echo "Running test_tdd..." >&2
-OUTPUT=$(./build/test_tdd 2>/dev/null)
+if [ -n "$SHOWPEAK" ]; then
+    OUTPUT=$(FR_SHOWPEAK=1 ./build/test_tdd 2>/dev/null)
+else
+    OUTPUT=$(./build/test_tdd 2>/dev/null)
+fi
 
 # Extract lines between sentinels (inclusive)
 TABLE=$(echo "$OUTPUT" | sed -n '/<!-- ACCURACY_TABLE_START -->/,/<!-- ACCURACY_TABLE_END -->/p')

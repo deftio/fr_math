@@ -9,7 +9,7 @@ Branch: `update_wave_fns`
   - tan return type s15.16 → s16.15
   - FR_FR2I → FR2I, FR_MUL removed, FR_EXP/FR_POW10 casing
   - 2D examples: FR_Matrix2D_CPT, ID(), XFormPtI
-  - Summary tables: added FR_hypot_fast, FR_hypot_fast8, FR_numstr
+  - Summary tables: added FR_hypot_fast8, FR_numstr
 - [x] Version bump 2.0.0 → 2.0.1 (hex 0x020000 → 0x020001)
 - [x] sync_version.sh rewrite — FR_MATH_VERSION_HEX is single source of truth
 - [x] CI auto-release job — reads hex version, creates GitHub release + tag

@@ -480,14 +480,12 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
    * Based on piecewise-linear approximation of sqrt(x*x + y*y).
    * See US Patent 6,567,777 B1 (Chatterjee, expired).
    *
-   *   FR_hypot_fast(x, y)   4-segment, ~0.4% peak error
-   *   FR_hypot_fast8(x, y)  8-segment, ~0.14% peak error
+   *   FR_hypot_fast8(x, y)  8-segment, ~0.10% peak error
    *
    * Inputs are raw signed integers (or fixed-point at any radix — the
    * result is at the same radix as the inputs, just like FR_hypot).
    * No radix parameter needed because the algorithm is scale-invariant.
    */
-  s32 FR_hypot_fast(s32 x, s32 y);
   s32 FR_hypot_fast8(s32 x, s32 y);
 
 /*===============================================

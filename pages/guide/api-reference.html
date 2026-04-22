@@ -888,20 +888,14 @@ where 64-bit multiply is very expensive.</p>
       the given radix.</td>
 </tr>
 <tr>
-  <td><code>FR_hypot_fast</code></td>
-  <td><code>s32 x</code>, <code>s32 y</code> (any radix)</td>
-  <td><code>s32</code> at the same radix.</td>
-  <td>Fast approximate magnitude using 4-segment piecewise-linear
-      shift-only arithmetic. &sim;0.4% peak error. No multiply, no
-      64-bit, no ROM table. Based on the method of US Patent
-      6,567,777 B1 (public domain). No <code>radix</code> parameter
-      needed &mdash; the algorithm is scale-invariant.</td>
-</tr>
-<tr>
   <td><code>FR_hypot_fast8</code></td>
   <td><code>s32 x</code>, <code>s32 y</code> (any radix)</td>
   <td><code>s32</code> at the same radix.</td>
-  <td>8-segment variant. &sim;0.14% peak error. Same shift-only
+  <td>8-segment shift-only piecewise-linear approximate magnitude.
+      &sim;0.14% peak error. No multiply, no 64-bit, no ROM table.
+      Based on the method of US Patent 6,567,777 B1 (public domain).
+      No <code>radix</code> parameter needed &mdash; the algorithm is
+      scale-invariant. Same shift-only
       approach, more branches.</td>
 </tr>
 </tbody>

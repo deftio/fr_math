@@ -127,10 +127,14 @@ $(BUILD_DIR)/test_2d_complete: $(TEST_DIR)/test_2d_complete.cpp $(SRC_DIR)/FR_ma
 	$(CXX) $(CXXFLAGS) $(TEST_FLAGS) $(TEST_DIR)/test_2d_complete.cpp $(BUILD_DIR)/test_2dc_FR_math.o $(BUILD_DIR)/test_2dc_FR_math_2D.o $(LDFLAGS) -o $@
 
 # Accuracy summary table (extract from test_tdd output)
-.PHONY: accuracy
+.PHONY: accuracy accuracy-showpeak
 accuracy: dirs $(BUILD_DIR)/test_tdd
 	@echo "Running accuracy report..."
 	@./$(BUILD_DIR)/test_tdd 2>/dev/null | sed -n '/ACCURACY_TABLE_START/,/ACCURACY_TABLE_END/p'
+
+accuracy-showpeak: dirs $(BUILD_DIR)/test_tdd
+	@echo "Running accuracy report (with peak inputs)..."
+	@FR_SHOWPEAK=1 ./$(BUILD_DIR)/test_tdd 2>/dev/null | sed -n '/ACCURACY_TABLE_START/,/ACCURACY_TABLE_END/p'
 
 # Coverage report using gcov (no external dependencies)
 .PHONY: coverage

@@ -1,0 +1,77 @@
+# Makefile.explog — build exp/log accuracy improvement benchmark
+# Usage: make -f Makefile.explog run
+
+CXX      := clang++
+CC       := clang
+CXXFLAGS := -std=c++17 -O2 -Wall -Wextra
+CFLAGS   := -std=c11 -O2 -Wall -Wextra
+
+FR_SRC   := ../src/FR_math.c
+FR_INC   := -I../src
+
+LFM_DIR  := libfixmath/libfixmath
+LFM_SRC  := $(LFM_DIR)/fix16.c       \
+            $(LFM_DIR)/fix16_sqrt.c   \
+            $(LFM_DIR)/fix16_exp.c    \
+            $(LFM_DIR)/fix16_trig.c   \
+            $(LFM_DIR)/fix16_str.c    \
+            $(LFM_DIR)/uint32.c       \
+            $(LFM_DIR)/fract32.c
+LFM_INC  := -I$(LFM_DIR)
+
+BUILD    := build
+TARGET   := $(BUILD)/bench_explog
+
+# Reuse FR_math and libfixmath objects from main Makefile
+OBJS := $(BUILD)/FR_math.o       \
+        $(BUILD)/fix16.o          \
+        $(BUILD)/fix16_sqrt.o     \
+        $(BUILD)/fix16_exp.o      \
+        $(BUILD)/fix16_trig.o     \
+        $(BUILD)/fix16_str.o      \
+        $(BUILD)/uint32.o         \
+        $(BUILD)/fract32.o        \
+        $(BUILD)/bench_explog.o
+
+.PHONY: all clean run
+
+all: $(TARGET)
+
+run: $(TARGET)
+	./$(TARGET)
+
+$(TARGET): $(OBJS) | $(BUILD)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+$(BUILD):
+	mkdir -p $(BUILD)
+
+$(BUILD)/FR_math.o: $(FR_SRC) | $(BUILD)
+	$(CC) $(CFLAGS) $(FR_INC) -c -o $@ $<
+
+$(BUILD)/fix16.o: $(LFM_DIR)/fix16.c | $(BUILD)
+	$(CC) $(CFLAGS) $(LFM_INC) -c -o $@ $<
+
+$(BUILD)/fix16_sqrt.o: $(LFM_DIR)/fix16_sqrt.c | $(BUILD)
+	$(CC) $(CFLAGS) $(LFM_INC) -c -o $@ $<
+
+$(BUILD)/fix16_exp.o: $(LFM_DIR)/fix16_exp.c | $(BUILD)
+	$(CC) $(CFLAGS) $(LFM_INC) -c -o $@ $<
+
+$(BUILD)/fix16_trig.o: $(LFM_DIR)/fix16_trig.c | $(BUILD)
+	$(CC) $(CFLAGS) $(LFM_INC) -c -o $@ $<
+
+$(BUILD)/fix16_str.o: $(LFM_DIR)/fix16_str.c | $(BUILD)
+	$(CC) $(CFLAGS) $(LFM_INC) -c -o $@ $<
+
+$(BUILD)/uint32.o: $(LFM_DIR)/uint32.c | $(BUILD)
+	$(CC) $(CFLAGS) $(LFM_INC) -c -o $@ $<
+
+$(BUILD)/fract32.o: $(LFM_DIR)/fract32.c | $(BUILD)
+	$(CC) $(CFLAGS) $(LFM_INC) -c -o $@ $<
+
+$(BUILD)/bench_explog.o: bench_explog.cpp | $(BUILD)
+	$(CXX) $(CXXFLAGS) $(FR_INC) $(LFM_INC) -c -o $@ $<
+
+clean:
+	rm -f $(BUILD)/bench_explog.o $(TARGET)
