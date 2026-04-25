@@ -537,8 +537,7 @@ targets (AVR, 8051) where 64-bit multiply is very expensive.
 | --- | --- | --- | --- |
 | `FR_sqrt` | `s32 input` at `radix`<br>`u16 radix` | `s32` at the **same radix**. | Domain: `input ≥ 0`. Returns `FR_DOMAIN_ERROR` for negative input. Digit-by-digit integer isqrt on an `int64_t` accumulator — deterministic 32-iteration cost, no floating point anywhere. **Rounds to nearest** (remainder > root → +1). Worst-case error is ±0.5 LSB at the input radix. |
 | `FR_hypot` | `s32 x`, `s32 y` both at `radix`<br>`u16 radix` | `s32` at the **same radix**. | Overflow-safe magnitude: computes `sqrt(x² + y²)` without an intermediate 32-bit overflow by promoting the sum of squares to `int64_t`. Accepts the full `s32` input range; output saturates at `FR_OVERFLOW_POS` only if the true hypot exceeds `2^31−1` at the given radix. |
-| `FR_hypot_fast` | `s32 x`, `s32 y` (any radix) | `s32` at the same radix. | Fast approximate magnitude using 4-segment piecewise-linear shift-only arithmetic. ~0.4% peak error. No multiply, no 64-bit, no ROM table. Based on the method of US Patent 6,567,777 B1 (public domain). No `radix` parameter needed — the algorithm is scale-invariant. |
-| `FR_hypot_fast8` | `s32 x`, `s32 y` (any radix) | `s32` at the same radix. | 8-segment variant. ~0.14% peak error. Same shift-only approach, more branches. |
+| `FR_hypot_fast8` | `s32 x`, `s32 y` (any radix) | `s32` at the same radix. | 8-segment shift-only piecewise-linear approximate magnitude. ~0.14% peak error. No multiply, no 64-bit, no ROM table. Based on the method of US Patent 6,567,777 B1 (public domain). No `radix` parameter needed — the algorithm is scale-invariant. |
 
 ## Wave generators
 

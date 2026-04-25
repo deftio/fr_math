@@ -1,5 +1,42 @@
 # FR_Math Release Notes
 
+## Version 2.0.6 (2026)
+
+Accuracy improvements, lean-build options, and library cleanup.
+
+### Accuracy & algorithms
+
+- **FR_acos boundary fix**: deferred quantization computes `1-x` at the
+  caller's radix instead of r15, giving 12x better accuracy near ±1.0
+  (max LSB error 512.6 → 42.3)
+- **FR_atan2 rewrite**: uses asin/acos + hypot_fast8 with octant
+  switching for well-conditioned results everywhere (0.41% peak vs
+  20% for libfixmath)
+
+### Lean build options
+
+Two new compile-time `#define` guards strip optional subsystems for
+ROM-constrained targets:
+
+| Define | Removes | Savings |
+|---|---|---|
+| `FR_NO_PRINT` | `FR_printNumF/D/H`, `FR_numstr` | ~1.3 KB |
+| `FR_NO_WAVES` | `fr_wave_*`, `fr_adsr_*`, `FR_HZ2BAM_INC` | ~0.6 KB |
+
+With both guards the core math library compiles to ~3.5 KB on x86-64
+(clang -Os), roughly 2.6 KB on Thumb-2.
+
+### Removed
+
+- **FR_hypot_fast** (4-segment) deleted — FR_hypot_fast8 (8-segment)
+  is strictly better in both accuracy (0.10% vs 0.34%) and is used
+  internally by FR_atan2. The 4-segment variant was dead weight.
+
+### Other
+
+- libfixmath comparison benchmark (`compare_lfm/`) added to repo
+- Documentation updated across all markdown and HTML pages
+
 ## Version 2.0.5 (2026)
 
 Release pipeline fixes. No functional changes to the math library.
@@ -241,10 +278,9 @@ for the implementation plan this release executed.
   computes `sqrt(x^2 + y^2)` with no intermediate overflow up to the
   full s32 range. Bit-exact for perfect squares; max error ~1 LSB at
   the requested radix.
-- **Fast approximate magnitude** (`FR_hypot_fast`, `FR_hypot_fast8`):
+- **Fast approximate magnitude** (`FR_hypot_fast8`):
   shift-only piecewise-linear approximation of `sqrt(x^2 + y^2)` — no
   multiply, no divide, no 64-bit math, no ROM table, no iteration.
-  `FR_hypot_fast` uses 4 segments (~0.4% peak error);
   `FR_hypot_fast8` uses 8 segments (~0.14% peak error). Based on the
   method of US Patent 6,567,777 B1 (Chatterjee, public domain). No
   `radix` parameter needed — the algorithm is scale-invariant.

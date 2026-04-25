@@ -440,36 +440,7 @@ int test_sqrt_hypot() {
     result = FR_hypot(I2FR(5, 16), I2FR(12, 16), 16);
     if (result < I2FR(13, 16) - 2 || result > I2FR(13, 16) + 2) return TEST_FAIL;
 
-    /* FR_hypot_fast (4-seg) — same test cases, wider tolerance (~0.3%) */
-    result = FR_hypot_fast(I2FR(3, 16), I2FR(4, 16));
-    /* 0.3% of 5.0 at radix 16 = 0.015 * 65536 ≈ 983, use 1000 */
-    if (result < I2FR(5, 16) - 1000 || result > I2FR(5, 16) + 1000) return TEST_FAIL;
-
-    result = FR_hypot_fast(0, 0);
-    if (result != 0) return TEST_FAIL;
-
-    result = FR_hypot_fast(I2FR(-3, 16), I2FR(-4, 16));
-    if (result < I2FR(5, 16) - 1000 || result > I2FR(5, 16) + 1000) return TEST_FAIL;
-
-    result = FR_hypot_fast(I2FR(5, 16), I2FR(12, 16));
-    if (result < I2FR(13, 16) - 2600 || result > I2FR(13, 16) + 2600) return TEST_FAIL;
-
-    /* Edge: one axis zero — tolerance is 0.4% of expected */
-    result = FR_hypot_fast(I2FR(7, 16), 0);
-    if (result < I2FR(7, 16) - 2000 || result > I2FR(7, 16) + 2000) return TEST_FAIL;
-
-    result = FR_hypot_fast(0, I2FR(7, 16));
-    if (result < I2FR(7, 16) - 2000 || result > I2FR(7, 16) + 2000) return TEST_FAIL;
-
-    /* Equal axes: hypot(1,1) = sqrt(2) ≈ 1.41421 */
-    result = FR_hypot_fast(I2FR(1, 16), I2FR(1, 16));
-    if (result < 92000 || result > 93300) return TEST_FAIL;
-
-    /* INT32_MIN must not crash (UB in negation) */
-    result = FR_hypot_fast((s32)0x80000000, 0);
-    if (result <= 0) return TEST_FAIL;
-
-    /* FR_hypot_fast8 (8-seg) — tighter tolerance (~0.1%) */
+    /* FR_hypot_fast8 (8-seg) — ~0.1% tolerance */
     result = FR_hypot_fast8(I2FR(3, 16), I2FR(4, 16));
     if (result < I2FR(5, 16) - 400 || result > I2FR(5, 16) + 400) return TEST_FAIL;
 
@@ -772,12 +743,12 @@ int test_edge_branches() {
     s32 r32;
     fr_adsr_t env;
 
-    /* FR_Tan(deg, radix) c==0 branch. At radix 0, deg=-16384 and
-     * deg=16384 both drive the internal BAM to exactly 90°/270°, so
+    /* FR_Tan(deg, radix) c==0 branch. At radix 0, deg=90 and deg=270
+     * drive the internal BAM to exactly 16384/49152 (90°/270°), so
      * cos==0 and we hit the saturation return. */
-    r32 = FR_Tan(-16384, 0);                 /* bam=16384 (sin>0) */
+    r32 = FR_Tan(90, 0);                     /* bam=16384 (sin>0) */
     if (r32 != FR_TRIG_MAXVAL) return TEST_FAIL;
-    r32 = FR_Tan(16384, 0);                  /* bam=49152 (sin<0) */
+    r32 = FR_Tan(270, 0);                    /* bam=49152 (sin<0) */
     if (r32 != -FR_TRIG_MAXVAL) return TEST_FAIL;
 
     /* FR_atan2 now returns radians at out_radix.

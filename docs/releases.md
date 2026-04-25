@@ -4,6 +4,18 @@ Release highlights. For the full per-symbol change log, see
 [release_notes.md](https://github.com/deftio/fr_math/blob/master/release_notes.md)
 in the repo.
 
+## v2.0.6 — 2026
+
+Accuracy improvements, lean-build options, library cleanup.
+
+- **FR_acos boundary fix** — 12x better accuracy near ±1.0 via deferred quantization
+- **FR_atan2 rewrite** — asin/acos + hypot_fast8, 0.41% peak error (was 20% in libfixmath)
+- **Lean build guards** — `FR_NO_PRINT` (~1.3 KB) and `FR_NO_WAVES` (~0.6 KB) for ROM-constrained targets
+- **Removed FR_hypot_fast** (4-segment) — FR_hypot_fast8 is strictly better; 4-seg was dead weight
+- libfixmath comparison benchmark added to repo (`compare_lfm/`)
+
+---
+
 ## v2.0.5 — 2026
 
 Release pipeline fixes. Fixed squash-merge divergence handling and

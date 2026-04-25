@@ -90,6 +90,15 @@ Versioned files (all synced automatically):
 4. Verify `llms.txt` and `agents.md` are current with any API changes
 5. Commit, tag, push
 
+## Lean build options
+
+Define before including `FR_math.h` to exclude optional subsystems:
+
+| Define | Removes | Savings |
+|---|---|---|
+| `FR_NO_PRINT` | `FR_printNumF/D/H`, `FR_numstr` | ~1.3 KB |
+| `FR_NO_WAVES` | `fr_wave_*`, `fr_adsr_*`, `FR_HZ2BAM_INC` | ~0.6 KB |
+
 ## Platform targets
 
 The library compiles on: AVR (Arduino), ARM Cortex-M0/M4, ESP32,

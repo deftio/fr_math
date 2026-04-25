@@ -1,0 +1,10 @@
+# Build artifacts
+build/
+
+# Cloned third-party libraries (fetch from GitHub as needed)
+libfixmath/
+fpm/
+liquid-fpm/
+
+# Claude session data
+.claude/

@@ -95,7 +95,7 @@ binaries to keep compile times low:
 
 | Binary | What it checks |
 | --- | --- |
-| `test_basic` | Radix conversions, `FR_ADD`, `FR_MUL`, rounding. |
+| `test_basic` | Radix conversions, `FR_ADD`, `FR_FixMuls`, rounding. |
 | `test_trig` | Integer-degree trig (`FR_Sin` et al.). |
 | `test_trig_radians` | Radian / BAM trig and the v2 `fr_sin` API. |
 | `test_log_exp` | Log base 2 / ln / log10 and their inverses. |
@@ -134,21 +134,88 @@ you improved a polynomial approximation), update the pinned values in
 
 The library has no CPU-specific code. It compiles and runs
 identically on all of the targets listed below. The only requirement
-is an integer pipeline and the standard `<stdint.h>`
-header. You do *not* need a floating-point unit, and you do
-*not* need `libm`.
+is an integer pipeline and `<stdint.h>` (or define `FR_NO_STDINT`
+for bare-metal toolchains that lack it — `FR_defs.h` provides
+fallback typedefs). You do *not* need a floating-point unit, and
+you do *not* need `libm`.
 
 | Target | Toolchain | Tested? |
 | --- | --- | --- |
-| x86 / x86_64 Linux | `gcc`, `clang` | CI. |
+| x86 / x86_64 Linux | `gcc`, `clang`, `tcc` | CI + Docker. |
 | macOS arm64 / x86_64 | Apple `clang` | CI. |
 | Windows x86_64 | MSVC, `clang-cl`, MinGW | Manual. |
-| ARM Cortex-M0/M3/M4/M7 | `arm-none-eabi-gcc`, IAR, Keil | Manual. |
-| RISC-V rv32imc | `riscv32-unknown-elf-gcc` | Manual. |
-| AVR (ATmega328P, etc.) | `avr-gcc` | Manual. |
+| AArch64 (ARM64) | `aarch64-linux-gnu-gcc` | Docker. |
+| ARM32 / Thumb | `arm-none-eabi-gcc`, IAR, Keil | Docker. |
+| RISC-V rv64 / rv32 | `riscv64-linux-gnu-gcc`, `riscv64-unknown-elf-gcc` | Docker. |
+| AVR (ATmega328P, ATtiny85) | `avr-gcc` | Docker. |
 | Arduino (AVR, SAMD, etc.) | `arduino-cli` | Manual. |
-| MSP430 | `msp430-elf-gcc` | Manual. |
+| MSP430 | `msp430-gcc` | Docker. |
+| Motorola 68k | `m68k-linux-gnu-gcc` | Docker. |
+| Motorola 68HC11 | `m68hc11-gcc` | Docker. |
+| PowerPC | `powerpc-linux-gnu-gcc` | Docker. |
+| Xtensa LX106 (ESP8266) | `xtensa-lx106-elf-gcc` | Docker. |
 | 8051 | `sdcc` | Manual. |
+
+### Code size (.text section, compiled with `-Os`)
+
+All sizes are for the complete `FR_math.c` — every function
+included, nothing stripped.  With `-ffunction-sections` and
+linker `--gc-sections`, only the functions your application
+references are linked, so real flash usage will be smaller.
+
+<!-- SIZE_TABLE_START -->
+| Target | .text (bytes) |
+|---|---:|
+| GCC ARM32 Thumb | 4,278 |
+| GCC RISC-V (rv64) | 4,574 |
+| GCC RISC-V (rv32) | 4,820 |
+| GCC Xtensa LX106 (ESP8266) | 5,317 |
+| GCC m68k | 5,410 |
+| GCC ARM32 | 5,504 |
+| GCC x86-64 | 5,857 |
+| GCC AArch64 (ARM64) | 6,112 |
+| Clang x86-64 | 6,555 |
+| GCC x86-32 | 6,947 |
+| GCC PowerPC | 7,540 |
+| GCC MSP430 | 9,146 |
+| TCC x86 | 9,887 |
+| GCC AVR5 (ATmega328P) | 10,806 |
+| GCC AVR ATtiny85 | 11,382 |
+| GCC 68HC11 | 16,392 |
+<!-- SIZE_TABLE_END -->
+
+### Lean build options
+
+Two compile-time `#define` guards let you strip optional subsystems
+for ROM-constrained targets. Define them before including `FR_math.h`
+(or pass `-D` on the compiler command line):
+
+| Define | What it removes | Typical savings |
+|---|---|---|
+| `FR_NO_PRINT` | `FR_printNumF`, `FR_printNumD`, `FR_printNumH`, `FR_numstr` | ~1.3 KB |
+| `FR_NO_WAVES` | `fr_wave_*` (6 shapes), `fr_adsr_*` (ADSR envelope), `FR_HZ2BAM_INC` | ~0.6 KB |
+
+With both guards enabled the core math library (trig, inverse trig, log/exp,
+sqrt, hypot) compiles to ~3.5 KB on x86-64 / clang -Os.
+
+```c
+/* Example: headless sensor node — math only, no print, no audio */
+#define FR_NO_PRINT
+#define FR_NO_WAVES
+#include "FR_math.h"
+```
+
+With `-ffunction-sections` and linker `--gc-sections`, the linker will
+also strip any unused functions automatically, so these guards are most
+useful when you include the library as a single `.c` file or static
+archive without section-level dead-code elimination.
+
+To regenerate this table, run the Docker cross-build
+(requires the [xelp](https://github.com/deftio/xelp) Docker image):
+
+```bash
+scripts/crossbuild-docker.sh
+```
 
 ### Example: RISC-V
 
@@ -180,9 +247,9 @@ arduino-cli compile --fqbn arduino:avr:uno examples/trig-functions
 arduino-cli compile --fqbn arduino:avr:uno examples/wave-generators
 ```
 
-Expect the whole integer-only library to land around a few
-kilobytes of flash. The wave, trig, and log modules can be compiled
-in independently if you want to strip further.
+See the [code size table](#code-size-text-section-compiled-with--os) above
+for exact numbers. With linker dead-code elimination, only the
+functions you call are linked.
 
 ## CI
 

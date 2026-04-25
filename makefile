@@ -14,8 +14,11 @@ EXAMPLE_DIR = examples
 BUILD_DIR = build
 COV_DIR = coverage
 
-# Compiler flags
-CFLAGS = -I$(SRC_DIR) -Wall -Os
+# Compiler flags — full warnings, fail on any warning
+# LIB_WARN: strictest for library source (includes -Wconversion -Wpedantic)
+# CFLAGS:   for tests/examples (no -Wconversion/-Wpedantic — macro casts are intentional)
+LIB_WARN = -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Werror
+CFLAGS   = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Werror -Os
 CXXFLAGS = $(CFLAGS)
 TEST_FLAGS = -ftest-coverage -fprofile-arcs
 LDFLAGS = -lm
@@ -23,7 +26,41 @@ LDFLAGS = -lm
 # Source files
 HEADERS = $(SRC_DIR)/FR_defs.h $(SRC_DIR)/FR_math.h $(SRC_DIR)/FR_math_2D.h
 
-# Default target
+# Default target — print help
+.PHONY: help
+help:
+	@echo "FR_Math — Fixed Radix Math Library"
+	@echo ""
+	@echo "Usage: make <target>"
+	@echo ""
+	@echo "Build targets:"
+	@echo "  all              Build library and examples"
+	@echo "  lib              Build library objects only"
+	@echo "  examples         Build example program"
+	@echo ""
+	@echo "Test targets:"
+	@echo "  test             Run all tests"
+	@echo "  test-basic       Run basic tests"
+	@echo "  test-comprehensive  Run comprehensive tests"
+	@echo "  test-2d          Run 2D math tests"
+	@echo "  test-overflow    Run overflow/saturation tests"
+	@echo "  test-full        Run full coverage tests"
+	@echo "  test-2d-complete Run 2D complete coverage tests"
+	@echo "  test-tdd         Run TDD characterization tests"
+	@echo ""
+	@echo "Analysis targets:"
+	@echo "  accuracy         Show accuracy summary table"
+	@echo "  accuracy-showpeak  Show accuracy with peak inputs"
+	@echo "  coverage         Generate coverage report (gcov)"
+	@echo "  coverage-basic   Basic coverage info without lcov"
+	@echo "  coverage-html    HTML coverage report (requires lcov)"
+	@echo "  size-report      Multi-architecture size report"
+	@echo "  size-simple      Size report for current platform"
+	@echo ""
+	@echo "Maintenance:"
+	@echo "  clean            Remove build artifacts"
+	@echo "  cleanall         Remove build artifacts and backups"
+
 .PHONY: all
 all: dirs lib examples
 
@@ -43,10 +80,10 @@ dirs:
 lib: dirs $(BUILD_DIR)/FR_math.o $(BUILD_DIR)/FR_math_2D.o
 
 $(BUILD_DIR)/FR_math.o: $(SRC_DIR)/FR_math.c $(HEADERS)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) -I$(SRC_DIR) $(LIB_WARN) -Os -c $< -o $@
 
 $(BUILD_DIR)/FR_math_2D.o: $(SRC_DIR)/FR_math_2D.cpp $(HEADERS)
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+	$(CXX) -I$(SRC_DIR) $(LIB_WARN) -Os -c $< -o $@
 
 # Build examples
 .PHONY: examples
@@ -66,8 +103,8 @@ test-tdd: $(BUILD_DIR)/test_tdd
 	@echo "Report written to $(BUILD_DIR)/test_tdd_report.md"
 
 $(BUILD_DIR)/test_tdd: $(TEST_DIR)/test_tdd.cpp $(SRC_DIR)/FR_math.c $(SRC_DIR)/FR_math_2D.cpp
-	$(CC) $(CFLAGS) $(TEST_FLAGS) -c $(SRC_DIR)/FR_math.c -o $(BUILD_DIR)/test_tdd_FR_math.o
-	$(CXX) $(CXXFLAGS) $(TEST_FLAGS) -c $(SRC_DIR)/FR_math_2D.cpp -o $(BUILD_DIR)/test_tdd_FR_math_2D.o
+	$(CC) -I$(SRC_DIR) $(LIB_WARN) -Os $(TEST_FLAGS) -c $(SRC_DIR)/FR_math.c -o $(BUILD_DIR)/test_tdd_FR_math.o
+	$(CXX) -I$(SRC_DIR) $(LIB_WARN) -Os $(TEST_FLAGS) -c $(SRC_DIR)/FR_math_2D.cpp -o $(BUILD_DIR)/test_tdd_FR_math_2D.o
 	$(CXX) $(CXXFLAGS) $(TEST_FLAGS) $(TEST_DIR)/test_tdd.cpp $(BUILD_DIR)/test_tdd_FR_math.o $(BUILD_DIR)/test_tdd_FR_math_2D.o $(LDFLAGS) -o $@
 
 .PHONY: test-basic
@@ -107,7 +144,10 @@ $(BUILD_DIR)/test_comprehensive: $(TEST_DIR)/test_comprehensive.c $(SRC_DIR)/FR_
 	$(CC) $(CFLAGS) $(TEST_FLAGS) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/test_2d: $(TEST_DIR)/test_2d_math.c $(SRC_DIR)/FR_math.c $(SRC_DIR)/FR_math_2D.cpp
-	$(CXX) $(CXXFLAGS) $(TEST_FLAGS) $^ $(LDFLAGS) -o $@
+	$(CC) -I$(SRC_DIR) $(LIB_WARN) -Os $(TEST_FLAGS) -c $(SRC_DIR)/FR_math.c -o $(BUILD_DIR)/test_2d_FR_math.o
+	$(CXX) $(CXXFLAGS) $(TEST_FLAGS) -c $(SRC_DIR)/FR_math_2D.cpp -o $(BUILD_DIR)/test_2d_FR_math_2D.o
+	$(CC) $(CFLAGS) $(TEST_FLAGS) -c $(TEST_DIR)/test_2d_math.c -o $(BUILD_DIR)/test_2d_math.o
+	$(CXX) $(TEST_FLAGS) $(BUILD_DIR)/test_2d_math.o $(BUILD_DIR)/test_2d_FR_math.o $(BUILD_DIR)/test_2d_FR_math_2D.o $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/test_overflow: $(TEST_DIR)/test_overflow_saturation.c $(SRC_DIR)/FR_math.c
 	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
@@ -116,7 +156,19 @@ $(BUILD_DIR)/test_full: $(TEST_DIR)/test_full_coverage.c $(SRC_DIR)/FR_math.c
 	$(CC) $(CFLAGS) $(TEST_FLAGS) $^ $(LDFLAGS) -o $@
 
 $(BUILD_DIR)/test_2d_complete: $(TEST_DIR)/test_2d_complete.cpp $(SRC_DIR)/FR_math.c $(SRC_DIR)/FR_math_2D.cpp
-	$(CXX) $(CXXFLAGS) $(TEST_FLAGS) $^ $(LDFLAGS) -o $@
+	$(CC) -I$(SRC_DIR) $(LIB_WARN) -Os $(TEST_FLAGS) -c $(SRC_DIR)/FR_math.c -o $(BUILD_DIR)/test_2dc_FR_math.o
+	$(CXX) $(CXXFLAGS) $(TEST_FLAGS) -c $(SRC_DIR)/FR_math_2D.cpp -o $(BUILD_DIR)/test_2dc_FR_math_2D.o
+	$(CXX) $(CXXFLAGS) $(TEST_FLAGS) $(TEST_DIR)/test_2d_complete.cpp $(BUILD_DIR)/test_2dc_FR_math.o $(BUILD_DIR)/test_2dc_FR_math_2D.o $(LDFLAGS) -o $@
+
+# Accuracy summary table (extract from test_tdd output)
+.PHONY: accuracy accuracy-showpeak
+accuracy: dirs $(BUILD_DIR)/test_tdd
+	@echo "Running accuracy report..."
+	@./$(BUILD_DIR)/test_tdd 2>/dev/null | sed -n '/ACCURACY_TABLE_START/,/ACCURACY_TABLE_END/p'
+
+accuracy-showpeak: dirs $(BUILD_DIR)/test_tdd
+	@echo "Running accuracy report (with peak inputs)..."
+	@FR_SHOWPEAK=1 ./$(BUILD_DIR)/test_tdd 2>/dev/null | sed -n '/ACCURACY_TABLE_START/,/ACCURACY_TABLE_END/p'
 
 # Coverage report using gcov (no external dependencies)
 .PHONY: coverage
@@ -127,8 +179,8 @@ coverage:
 .PHONY: coverage-html
 coverage-html: clean dirs
 	@echo "Building with coverage flags..."
-	@$(CC) $(CFLAGS) $(TEST_FLAGS) -c $(SRC_DIR)/FR_math.c -o $(BUILD_DIR)/FR_math.o
-	@$(CXX) $(CXXFLAGS) $(TEST_FLAGS) -c $(SRC_DIR)/FR_math_2D.cpp -o $(BUILD_DIR)/FR_math_2D.o
+	@$(CC) -I$(SRC_DIR) $(LIB_WARN) -Os $(TEST_FLAGS) -c $(SRC_DIR)/FR_math.c -o $(BUILD_DIR)/FR_math.o
+	@$(CXX) -I$(SRC_DIR) $(LIB_WARN) -Os $(TEST_FLAGS) -c $(SRC_DIR)/FR_math_2D.cpp -o $(BUILD_DIR)/FR_math_2D.o
 	@$(CC) $(CFLAGS) $(TEST_FLAGS) $(TEST_DIR)/fr_math_test.c $(BUILD_DIR)/FR_math.o $(BUILD_DIR)/FR_math_2D.o $(LDFLAGS) -lstdc++ -o $(BUILD_DIR)/fr_test
 	@echo "Running tests for coverage..."
 	@./$(BUILD_DIR)/fr_test
@@ -173,8 +225,8 @@ cleanall: clean
 .PHONY: coverage-basic
 coverage-basic: clean dirs
 	@echo "Building with coverage flags..."
-	@$(CC) $(CFLAGS) $(TEST_FLAGS) -c $(SRC_DIR)/FR_math.c -o $(BUILD_DIR)/FR_math.o
-	@$(CXX) $(CXXFLAGS) $(TEST_FLAGS) -c $(SRC_DIR)/FR_math_2D.cpp -o $(BUILD_DIR)/FR_math_2D.o
+	@$(CC) -I$(SRC_DIR) $(LIB_WARN) -Os $(TEST_FLAGS) -c $(SRC_DIR)/FR_math.c -o $(BUILD_DIR)/FR_math.o
+	@$(CXX) -I$(SRC_DIR) $(LIB_WARN) -Os $(TEST_FLAGS) -c $(SRC_DIR)/FR_math_2D.cpp -o $(BUILD_DIR)/FR_math_2D.o
 	@$(CC) $(CFLAGS) $(TEST_FLAGS) $(TEST_DIR)/fr_math_test.c $(BUILD_DIR)/FR_math.o $(BUILD_DIR)/FR_math_2D.o $(LDFLAGS) -lstdc++ -o $(BUILD_DIR)/fr_test
 	@echo "Running tests..."
 	@./$(BUILD_DIR)/fr_test

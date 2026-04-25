@@ -32,7 +32,9 @@
 #include "FR_math.h"
 #include "FR_trig_table.h"
 
+#ifndef FR_NO_STDINT
 #include <stdint.h>
+#endif
 
 /*=======================================================
  * BAM-native trig: fr_cos_bam, fr_sin_bam, fr_cos, fr_sin, fr_tan
@@ -147,12 +149,14 @@ s32 fr_tan(s32 rad, u16 radix)
  */
 static u16 fr_deg_radix_to_bam(s16 deg, u16 radix)
 {
-	/* (s32)deg * 0xB60B keeps everything in 32-bit math (8051-friendly).
-	 * For radix 0, 0xB60B = 65536/360 ≈ 182.0444. The shift strips the
-	 * input radix to land in u16 BAM space.
+	/* 0xB60B ≈ (65536/360) * 256 — the ×256 prescale keeps 32-bit math
+	 * friendly to 8051-class MCUs.  We must shift out both the input
+	 * fraction bits (radix) AND the 8-bit prescale, hence radix + 8.
+	 * The +half term rounds to nearest, matching FR_DEG2BAM behaviour.
 	 */
-	s32 v = (s32)deg * 0xB60BL;
-	return (u16)((u32)(v >> radix) & 0xffff);
+	s32  v     = (s32)deg * 0xB60BL;
+	u16  shift = radix + 8;
+	return (u16)((u32)((v + (1L << (shift - 1))) >> shift) & 0xffff);
 }
 
 s32 FR_Cos(s16 deg, u16 radix)
@@ -245,27 +249,67 @@ s32 FR_FixAddSat(s32 x, s32 y)
  */
 /* FR_acos — returns radians at out_radix.
  * Range: [0, pi].  Input is a cosine value at the given radix.
+ *
+ * Uses the same 129-entry cosine table as fr_cos_bam, but in reverse:
+ * binary-search to find the bracketing pair, then linear-interpolate
+ * the fractional position between them to recover the full 14-bit
+ * in-quadrant BAM.  This mirrors the forward path and gives matching
+ * precision (~1 LSB of s15.16 output).
  */
 s32 FR_acos(s32 input, u16 radix, u16 out_radix)
 {
 	s32 v;
 	s16 sign;
 	s32 lo, hi, mid;
-	s32 best_idx, best_err;
-	s32 left, right;
+	s32 idx, d, num, frac;
+	s32 input_abs;
 
-	v = FR_CHRDX(input, radix, FR_TRIG_PREC); /* to s0.15 */
+	/* Work with absolute value at the caller's radix — we'll need it for
+	 * the sqrt fast path before quantising to r15. */
+	sign = (s16)((input < 0) ? 1 : 0);
+	input_abs = sign ? -input : input;
 
-	/* Clamp range: acos(1.0) = 0, acos(-1.0) = pi */
-	if (v >=  32767) return 0;
-	if (v <= -32767) return FR_BAM2RAD(FR_BAM_HALF, out_radix); /* pi */
+	/* Clamp at the caller's radix — not at r15.  Near ±1.0 the r15
+	 * quantisation can round to 32767 even when the caller has sub-LSB
+	 * precision that the sqrt fast path can use. */
+	{
+		s32 one = (s32)1 << radix;
+		if (input_abs >= one)
+			return sign ? FR_BAM2RAD(FR_BAM_HALF, out_radix) : 0;
+	}
 
-	sign = (v < 0) ? 1 : 0;
-	if (v < 0) v = -v;
+	v = FR_CHRDX(input_abs, radix, FR_TRIG_PREC); /* |input| at s0.15 */
 
-	/* Binary search on the BAM quadrant table. The table is monotonically
-	 * decreasing across [0, FR_TRIG_TABLE_SIZE]. We want the index `i`
-	 * such that gFR_COS_TAB_Q[i] is closest to v.
+	/* Small-angle fast path: when cos(θ) is close to 1.0, the table
+	 * has only 2-8 LSBs of gap per entry, so linear interpolation is
+	 * very coarse.  Use the identity  acos(x) ≈ sqrt(2*(1-x)).
+	 *
+	 * Key: compute 1-x at the CALLER's radix, not r15.  Near ±1.0 the
+	 * r15 quantisation crushes many distinct inputs to the same value
+	 * (cos(179.5°)..cos(179.9°) all round to 32767 at r15).  The
+	 * caller's higher-radix bits carry the angular information via the
+	 * identity sin(θ) = sqrt(2(1-cos θ)) — effectively the sin trick. */
+	if (v > gFR_COS_TAB_Q[7])
+	{
+		s32 one = (s32)1 << radix;
+		s32 one_minus_x = one - input_abs;           /* 1-|x| at caller radix */
+		s32 two_omx     = one_minus_x << 1;          /* 2(1-|x|) at caller radix */
+		s32 rad_native  = FR_sqrt(two_omx, radix);   /* radians at caller radix */
+		s32 rad_out     = FR_CHRDX(rad_native, radix, out_radix);
+		if (sign)
+			rad_out = FR_BAM2RAD(FR_BAM_HALF, out_radix) - rad_out;
+		return rad_out;
+	}
+
+	/* Below this point we need the sign-stripped r15 value for the
+	 * binary search.  (v was already computed from input_abs above.) */
+
+	/* Binary search on the cosine quadrant table.  The table is
+	 * monotonically decreasing: gFR_COS_TAB_Q[0] = 32767 (cos 0°),
+	 * gFR_COS_TAB_Q[128] = 0 (cos 90°).
+	 *
+	 * After the search, lo is the first index where table[lo] <= v,
+	 * so the bracketing pair is (lo-1, lo) with table[lo-1] >= v >= table[lo].
 	 */
 	lo = 0;
 	hi = FR_TRIG_TABLE_SIZE;
@@ -277,28 +321,45 @@ s32 FR_acos(s32 input, u16 radix, u16 out_radix)
 		else
 			hi = mid;
 	}
-	best_idx = lo;
-	best_err = (gFR_COS_TAB_Q[best_idx] > v) ? (gFR_COS_TAB_Q[best_idx] - v)
-	                                         : (v - gFR_COS_TAB_Q[best_idx]);
-	if (best_idx > 0)
+
+	/* lo is now the index where table[lo] <= v.  The bracketing interval
+	 * is [lo-1, lo] (table decreasing).  Clamp idx to valid range.
+	 */
+	idx = lo;
+	if (idx <= 0)
 	{
-		left = gFR_COS_TAB_Q[best_idx - 1] - v;
-		if (left < 0) left = -left;
-		if (left < best_err) { best_err = left; best_idx = best_idx - 1; }
+		/* v >= table[0] = 32767 — essentially cos(0), already clamped above
+		 * but guard anyway. */
+		idx = 0;
+		frac = 0;
 	}
-	if (best_idx < FR_TRIG_TABLE_SIZE)
+	else if (idx >= FR_TRIG_TABLE_SIZE)
 	{
-		right = gFR_COS_TAB_Q[best_idx + 1] - v;
-		if (right < 0) right = -right;
-		if (right < best_err) { best_err = right; best_idx = best_idx + 1; }
+		idx = FR_TRIG_TABLE_SIZE - 1;
+		frac = 0;
+	}
+	else
+	{
+		/* Linear interpolate between table[idx-1] and table[idx].
+		 * d = table[idx-1] - table[idx]  (>= 0, cos decreasing)
+		 * num = table[idx-1] - v          (how far past table[idx-1])
+		 * frac = (num << FR_TRIG_FRAC_BITS) / d, in [0, FR_TRIG_FRAC_MAX)
+		 *
+		 * num and d are both in [0, 32767], so num << 7 fits in 22 bits.
+		 */
+		d   = gFR_COS_TAB_Q[idx - 1] - gFR_COS_TAB_Q[idx];
+		num = gFR_COS_TAB_Q[idx - 1] - v;
+		if (d > 0)
+			frac = ((num << FR_TRIG_FRAC_BITS) + (d >> 1)) / d;
+		else
+			frac = 0;
+		/* Reconstruct: the angle is at index (idx-1) + frac/FRAC_MAX,
+		 * so shift idx back by 1 for the BAM calculation below. */
+		idx = idx - 1;
 	}
 
-	/* best_idx is in [0, FR_TRIG_TABLE_SIZE]. Convert to BAM:
-	 * the table covers one quadrant (16384 BAM) in FR_TRIG_TABLE_SIZE-1 steps.
-	 * bam = best_idx << FR_TRIG_FRAC_BITS.
-	 */
 	{
-		u16 bam = (u16)((u32)best_idx << FR_TRIG_FRAC_BITS);
+		u16 bam = (u16)(((u32)idx << FR_TRIG_FRAC_BITS) + (u32)frac);
 		if (sign)
 			bam = (u16)(FR_BAM_HALF - bam);  /* mirror: pi - angle */
 		return FR_BAM2RAD(bam, out_radix);
@@ -313,60 +374,22 @@ s32 FR_asin(s32 input, u16 radix, u16 out_radix)
 	return half_pi - FR_acos(input, radix, out_radix);
 }
 
-/* arctan table: gFR_ATAN_TAB[i] = atan(i/32) in degrees, scaled by 64
- * (i.e. fixed-point s.6), for i in [0..32]. So index 32 is atan(1) = 45°.
- *
- * Generated by:
- *   for i in 0..32: int(round(degrees(atan(i/32.0)) * 64))
- *
- *   i=0:   0   atan(0/32)   =  0°       *64 = 0
- *   i=1: 115   atan(1/32)   =  1.7899°  *64 = 114.55
- *   ...
- *   i=32: 2880 atan(32/32)  = 45°       *64 = 2880
- */
-static const s16 gFR_ATAN_TAB[33] = {
-       0,   115,   229,   343,   456,   568,   680,   790,
-     898,  1005,  1111,  1214,  1316,  1415,  1512,  1607,
-    1700,  1791,  1879,  1965,  2048,  2130,  2209,  2285,
-    2360,  2432,  2502,  2570,  2636,  2700,  2762,  2822,
-    2880
-};
-
-/* helper: arctan(t) for t in [0,1] in radix-16 input, returning BAM (u16).
- * Uses the gFR_ATAN_TAB table with linear interpolation.
- *
- * t is in s.16. The table indexes into [0,1] in 32 steps, so the table
- * step in s.16 units is (1<<16)/32 = 2048.
- *
- * The atan table stores degrees*64 (s.6). We convert to BAM internally:
- * bam = deg64 * 65536 / (360 * 64) = deg64 * (65536 / 23040).
- * Approximation: bam ≈ (deg64 * 182) >> 6, matching FR_DEG2BAM precision.
- */
-static u16 fr_atan_unit_q1_bam(s32 t_s16)
-{
-	s32 idx, frac, lo, hi, deg64;
-	if (t_s16 <= 0) return 0;
-	if (t_s16 >= (1L << 16)) return FR_BAM_QUADRANT >> 1; /* 45° in BAM */
-	idx  = t_s16 >> 11;        /* 2048 = 1<<11 */
-	frac = t_s16 & ((1L << 11) - 1);
-	lo = gFR_ATAN_TAB[idx];
-	hi = gFR_ATAN_TAB[idx + 1];
-	deg64 = lo + (((hi - lo) * frac) >> 11);
-	/* Convert degrees*64 → BAM: bam = deg64 * (65536/360) / 64
-	 *                              ≈ (deg64 * 182 + 32) >> 6
-	 */
-	return (u16)(((s32)deg64 * 182L + 32) >> 6);
-}
-
 /* FR_atan2(y, x, out_radix) — full-circle arctangent, returns radians
  * at the specified output radix (s32).
  *
  * Range: [-pi, pi]. Returns 0 for atan2(0,0).
+ *
+ * Implementation: normalise (x,y) via FR_hypot_fast8, then recover the
+ * angle with FR_asin or FR_acos (both use the 129-entry cosine table).
+ * To stay in the well-conditioned region of each inverse function we
+ * switch at 45°:
+ *   |y| <= |x|  →  use asin(y/h)   — asin stable near 0
+ *   |y| >  |x|  →  use acos(x/h)   — acos stable near pi/2
+ * This keeps the derivative amplification factor below 1.414x everywhere.
  */
 s32 FR_atan2(s32 y, s32 x, u16 out_radix)
 {
-	s32 ay, ax, ratio;
-	u16 bam;
+	s32 ax, ay, h, q1_angle;
 
 	/* Axis cases — exact angles, no divide. */
 	if (x == 0)
@@ -381,26 +404,60 @@ s32 FR_atan2(s32 y, s32 x, u16 out_radix)
 	ax = (x < 0) ? -x : x;
 	ay = (y < 0) ? -y : y;
 
-	/* Compute ratio of smaller / larger in s.16 so it stays in [0,1]. */
+	/* Normalise so max(ax,ay) sits in [2^14, 2^15).  This gives
+	 * FR_hypot_fast8 enough integer bits for the shift-only segments
+	 * to produce an accurate ratio — critical when the raw inputs are
+	 * small (e.g. atan2(1,1) at radix 0).  Scaling both by the same
+	 * power of two doesn't change the angle. */
+	{
+		s32 mx = (ax > ay) ? ax : ay;
+		while (mx < (1L << 14)) { ax <<= 1; ay <<= 1; mx <<= 1; }
+		while (mx >= (1L << 16)) { ax >>= 1; ay >>= 1; mx >>= 1; }
+	}
+
+	h = FR_hypot_fast8((s32)ax, (s32)ay);
+	if (h == 0) return 0;  /* degenerate */
+
+	/* Compute the first-quadrant angle (positive, [0..pi/2]).
+	 * Divide produces a value in [0,1] at radix FR_TRIG_PREC (s0.15).
+	 *
+	 * Small-angle fast path: when the minor-axis ratio is small,
+	 * asin(x) ≈ x (error < x³/6).  Below ~5° the cubic term is
+	 * smaller than the table-lookup error, so the direct identity
+	 * is both faster and more accurate.  Threshold 2753 at r15
+	 * corresponds to sin(~4.8°) = 0.084. */
+	#define FR_ATAN2_SMALL  2753
 	if (ay <= ax)
 	{
-		ratio = (s32)(((int64_t)ay << 16) / ax);
-		bam = fr_atan_unit_q1_bam(ratio);                  /* [0..45°] BAM */
+		/* angle in [0°..45°]: use asin(ay/h) — well-conditioned near 0 */
+		s32 sin_val = (s32)(((int64_t)ay << FR_TRIG_PREC) / h);
+		if (sin_val < FR_ATAN2_SMALL)
+			q1_angle = FR_CHRDX(sin_val, FR_TRIG_PREC, out_radix);
+		else
+			q1_angle = FR_asin(sin_val, FR_TRIG_PREC, out_radix);
 	}
 	else
 	{
-		ratio = (s32)(((int64_t)ax << 16) / ay);
-		bam = (u16)(FR_BAM_QUADRANT - fr_atan_unit_q1_bam(ratio)); /* [45..90°] BAM */
+		/* angle in [45°..90°]: use acos(ax/h) — well-conditioned near pi/2 */
+		s32 cos_val = (s32)(((int64_t)ax << FR_TRIG_PREC) / h);
+		if (cos_val < FR_ATAN2_SMALL)
+		{
+			/* angle ≈ pi/2 - cos_val (symmetric small-angle identity) */
+			s32 half_pi = FR_BAM2RAD(FR_BAM_QUADRANT, out_radix);
+			q1_angle = half_pi - FR_CHRDX(cos_val, FR_TRIG_PREC, out_radix);
+		}
+		else
+			q1_angle = FR_acos(cos_val, FR_TRIG_PREC, out_radix);
 	}
 
-	/* Apply quadrant sign and convert BAM → radians. */
+	/* Apply quadrant from signs of x and y.
+	 * q1_angle is always positive [0..pi/2]. */
 	{
-		s32 rad = FR_BAM2RAD(bam, out_radix);
-		s32 pi  = FR_BAM2RAD(FR_BAM_HALF, out_radix);
+		s32 pi = FR_BAM2RAD(FR_BAM_HALF, out_radix);
 		if (x > 0)
-			return (y > 0) ? rad : -rad;
-		/* x < 0 */
-		return (y > 0) ? (pi - rad) : (rad - pi);
+			return (y > 0) ? q1_angle : -q1_angle;
+		/* x < 0: mirror across y-axis */
+		return (y > 0) ? (pi - q1_angle) : (q1_angle - pi);
 	}
 }
 
@@ -607,6 +664,7 @@ s32 FR_log10(s32 input, u16 radix, u16 output_radix)
 	return FR_MULK28(r, FR_krLOG2_10_28);
 }
 
+#ifndef FR_NO_PRINT
 /***************************************
  * FR_printNumD - write a decimal integer with space padding.
  *
@@ -871,6 +929,7 @@ s32 FR_numstr(const char *s, u16 radix)
 
     return neg ? -result : result;
 }
+#endif /* FR_NO_PRINT */
 
 /*=======================================================
  * Square root and hypot
@@ -966,65 +1025,11 @@ s32 FR_hypot(s32 x, s32 y, u16 radix)
 }
 
 /*=======================================================
- * FR_hypot_fast — 4-segment piecewise-linear magnitude approximation.
- *
- * Computes an approximation of sqrt(x*x + y*y) using only shifts and adds
- * (no multiply, no divide, no 64-bit math, no ROM table, no iteration).
- *
- * Based on the piecewise-linear method described in US Patent 6,567,777 B1
- * (Chatterjee, now public domain). The algorithm:
- *   1. Take absolute values, assign hi = max(|x|,|y|), lo = min(|x|,|y|).
- *   2. Determine which of 4 angular slices lo/hi falls into.
- *   3. Apply pre-computed shift-only linear coefficients for that slice.
- *
- * Peak error: ~0.4%.
- * The result is at the same radix as the inputs — scale-invariant.
- */
-s32 FR_hypot_fast(s32 x, s32 y)
-{
-    s32 hi, lo;
-
-    /* absolute values (clamp INT32_MIN to INT32_MAX to avoid UB) */
-    if (x < 0) x = (x == (s32)0x80000000) ? 0x7FFFFFFF : -x;
-    if (y < 0) y = (y == (s32)0x80000000) ? 0x7FFFFFFF : -y;
-
-    /* hi = max(|x|,|y|), lo = min(|x|,|y|) */
-    if (x > y) { hi = x; lo = y; }
-    else       { hi = y; lo = x; }
-
-    if (hi == 0) return 0;
-
-    /* 4 piecewise-linear segments: dist ≈ a*hi + b*lo
-     * where a,b are shift-only minimax fits of sqrt(1+β²) on each
-     * interval, β = lo/hi. Boundaries at β = 0.25, 0.5, 0.75. */
-    if ((hi >> 1) < lo) {
-        /* β in (0.5, 1.0] */
-        if (lo > hi - (hi >> 2))                      /* β > 0.75 */
-            /* a≈0.7559, b≈0.6567 */
-            return hi - (hi >> 2) + (hi >> 7) - (hi >> 9)
-                 + (lo >> 1) + (lo >> 3) + (lo >> 5) + (lo >> 11);
-        else                                           /* β in (0.5, 0.75] */
-            /* a≈0.8555, b≈0.5225 */
-            return hi - (hi >> 3) - (hi >> 6) - (hi >> 8)
-                 + (lo >> 1) + (lo >> 5) - (lo >> 7) - (lo >> 10);
-    } else {
-        /* β in [0, 0.5] */
-        if ((hi >> 2) < lo)                            /* β in (0.25, 0.5] */
-            /* a≈0.9409, b≈0.3477 */
-            return hi - (hi >> 4) + (hi >> 8) - (hi >> 11)
-                 + (lo >> 1) - (lo >> 3) - (lo >> 5) + (lo >> 8);
-        else                                           /* β in [0, 0.25] */
-            /* a≈0.9966, b≈0.1209 */
-            return hi - (hi >> 8) + (hi >> 11)
-                 + (lo >> 3) - (lo >> 8) - (lo >> 12);
-    }
-}
-
-/*=======================================================
  * FR_hypot_fast8 — 8-segment piecewise-linear magnitude approximation.
  *
- * Same approach as FR_hypot_fast but with 8 angular slices for tighter fit.
- * Peak error: ~0.14%.
+ * Shift-only, no multiply, no 64-bit.  Based on the piecewise-linear
+ * method described in US Patent 6,567,777 B1 (Chatterjee, expired).
+ * Peak error: ~0.10%.
  */
 s32 FR_hypot_fast8(s32 x, s32 y)
 {
@@ -1091,6 +1096,7 @@ s32 FR_hypot_fast8(s32 x, s32 y)
     }
 }
 
+#ifndef FR_NO_WAVES
 /*=======================================================
  * Wave generators — synth-style fixed-shape waveforms.
  *
@@ -1200,7 +1206,7 @@ s16 fr_wave_tri_morph(u16 phase, u16 break_point)
 	if (phase < break_point)
 	{
 		/* rising: 0 at phase=0, 32767 at phase=break_point */
-		t = ((u32)phase * 32767UL) / (u32)break_point;
+		t = (u32)(((u32)phase * 32767UL) / (u32)break_point);
 	}
 	else
 	{
@@ -1208,7 +1214,7 @@ s16 fr_wave_tri_morph(u16 phase, u16 break_point)
 		u32 span = (u32)0xffff - (u32)break_point;
 		if (span == 0)
 			return 32767;
-		t = ((u32)((u32)0xffff - (u32)phase) * 32767UL) / span;
+		t = (u32)(((u32)((u32)0xffff - (u32)phase) * 32767UL) / span);
 	}
 	if (t > 32767) t = 32767;
 	return (s16)t;
@@ -1294,7 +1300,7 @@ void fr_adsr_init(fr_adsr_t *env,
 	    ? (s32)(FR_ADSR_PEAK_S130 / attack_samples)
 	    : FR_ADSR_PEAK_S130;
 	env->decay_dec   = (decay_samples   > 0)
-	    ? (s32)((FR_ADSR_PEAK_S130 - env->sustain) / decay_samples)
+	    ? (s32)((FR_ADSR_PEAK_S130 - env->sustain) / (s32)decay_samples)
 	    : (FR_ADSR_PEAK_S130 - env->sustain);
 	env->release_dec = (release_samples > 0)
 	    ? (s32)(FR_ADSR_PEAK_S130 / release_samples)
@@ -1362,3 +1368,4 @@ s16 fr_adsr_step(fr_adsr_t *env)
 		return (s16)out;
 	}
 }
+#endif /* FR_NO_WAVES */
