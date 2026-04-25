@@ -378,7 +378,7 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
  * Derivation: rad = bam * 2π / 65536. At output radix r: bam * 2π * 2^r / 2^16
  *           = bam * (2π * 2^10) / 2^(26 - r) = bam * 6434 >> (26 - r).
  */
-#define FR_BAM2RAD(bam, radix)  (((s32)(u16)(bam) * 6434L) >> (26 - (radix)))
+#define FR_BAM2RAD(bam, radix)  ((s32)(((s32)(u16)(bam) * 6434L) >> (26 - (radix))))
 
 /*===============================================
  * Radian-native and BAM-native trig (recommended)

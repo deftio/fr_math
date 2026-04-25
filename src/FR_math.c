@@ -266,7 +266,7 @@ s32 FR_acos(s32 input, u16 radix, u16 out_radix)
 
 	/* Work with absolute value at the caller's radix — we'll need it for
 	 * the sqrt fast path before quantising to r15. */
-	sign = (input < 0) ? 1 : 0;
+	sign = (s16)((input < 0) ? 1 : 0);
 	input_abs = sign ? -input : input;
 
 	/* Clamp at the caller's radix — not at r15.  Near ±1.0 the r15
@@ -1206,7 +1206,7 @@ s16 fr_wave_tri_morph(u16 phase, u16 break_point)
 	if (phase < break_point)
 	{
 		/* rising: 0 at phase=0, 32767 at phase=break_point */
-		t = ((u32)phase * 32767UL) / (u32)break_point;
+		t = (u32)(((u32)phase * 32767UL) / (u32)break_point);
 	}
 	else
 	{
@@ -1214,7 +1214,7 @@ s16 fr_wave_tri_morph(u16 phase, u16 break_point)
 		u32 span = (u32)0xffff - (u32)break_point;
 		if (span == 0)
 			return 32767;
-		t = ((u32)((u32)0xffff - (u32)phase) * 32767UL) / span;
+		t = (u32)(((u32)((u32)0xffff - (u32)phase) * 32767UL) / span);
 	}
 	if (t > 32767) t = 32767;
 	return (s16)t;

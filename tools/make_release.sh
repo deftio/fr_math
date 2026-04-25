@@ -130,23 +130,13 @@ do_validate() {
     run_cmd make clean >/dev/null 2>&1
 
     echo ""
-    echo "  --- Strict compile (-Wall -Wextra -Werror -Wshadow) ---"
-    local strict_flags="-Isrc -Wall -Wextra -Werror -Wshadow -Os"
+    echo "  --- Build library + examples (uses LIB_WARN from makefile) ---"
     mkdir -p build
-    if ! cc ${strict_flags} -c src/FR_math.c -o build/FR_math_strict.o 2>build/strict_c.log; then
-        cat build/strict_c.log
-        fail "src/FR_math.c has compiler warnings"
+    if ! make lib examples 2>build/strict_build.log; then
+        cat build/strict_build.log
+        fail "Library build failed (compiler warnings or errors)"
     fi
-    if ! c++ ${strict_flags} -c src/FR_math_2D.cpp -o build/FR_math_2D_strict.o 2>build/strict_cpp.log; then
-        cat build/strict_cpp.log
-        fail "src/FR_math_2D.cpp has compiler warnings"
-    fi
-    pass "Zero warnings."
-
-    echo ""
-    echo "  --- Build library + examples ---"
-    run_cmd make lib examples >/dev/null 2>&1
-    pass "Library and examples built."
+    pass "Library and examples built — zero warnings."
 
     echo ""
     echo "  --- Full test suite ---"

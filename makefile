@@ -26,7 +26,41 @@ LDFLAGS = -lm
 # Source files
 HEADERS = $(SRC_DIR)/FR_defs.h $(SRC_DIR)/FR_math.h $(SRC_DIR)/FR_math_2D.h
 
-# Default target
+# Default target — print help
+.PHONY: help
+help:
+	@echo "FR_Math — Fixed Radix Math Library"
+	@echo ""
+	@echo "Usage: make <target>"
+	@echo ""
+	@echo "Build targets:"
+	@echo "  all              Build library and examples"
+	@echo "  lib              Build library objects only"
+	@echo "  examples         Build example program"
+	@echo ""
+	@echo "Test targets:"
+	@echo "  test             Run all tests"
+	@echo "  test-basic       Run basic tests"
+	@echo "  test-comprehensive  Run comprehensive tests"
+	@echo "  test-2d          Run 2D math tests"
+	@echo "  test-overflow    Run overflow/saturation tests"
+	@echo "  test-full        Run full coverage tests"
+	@echo "  test-2d-complete Run 2D complete coverage tests"
+	@echo "  test-tdd         Run TDD characterization tests"
+	@echo ""
+	@echo "Analysis targets:"
+	@echo "  accuracy         Show accuracy summary table"
+	@echo "  accuracy-showpeak  Show accuracy with peak inputs"
+	@echo "  coverage         Generate coverage report (gcov)"
+	@echo "  coverage-basic   Basic coverage info without lcov"
+	@echo "  coverage-html    HTML coverage report (requires lcov)"
+	@echo "  size-report      Multi-architecture size report"
+	@echo "  size-simple      Size report for current platform"
+	@echo ""
+	@echo "Maintenance:"
+	@echo "  clean            Remove build artifacts"
+	@echo "  cleanall         Remove build artifacts and backups"
+
 .PHONY: all
 all: dirs lib examples
 
