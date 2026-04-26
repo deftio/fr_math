@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 #
 # build_sizes.sh — cross-compile FR_math.c for every supported target
-# and report code (text section) sizes.
+# and report code (text section) sizes in two configurations:
+#   Core  = compiled with -DFR_CORE_ONLY (math only, no print, no waves)
+#   Full  = compiled without FR_CORE_ONLY (everything included)
 #
 # Run inside the Docker container:
 #   docker run --rm -v $(pwd):/src fr-math-sizes bash /src/docker/build_sizes.sh
 #
-# Output: markdown table to stdout + build/size_table.md
+# Output: build/sizes.csv + markdown table to stdout + build/size_table.md
 
 set -euo pipefail
 
@@ -14,6 +16,7 @@ SRC="/src/src/FR_math.c"
 INC="-I/src/src"
 OUT="/src/build/size_report_docker"
 TABLE="/src/build/size_table.md"
+CSV="/src/build/sizes.csv"
 
 mkdir -p "${OUT}"
 
@@ -21,6 +24,7 @@ mkdir -p "${OUT}"
 
 # compile_gcc <label> <compiler> <flags...>
 # Compiles FR_math.c → .o, extracts text size via `size`.
+# Pass extra flags (including -DFR_CORE_ONLY) via the flags argument.
 compile_gcc() {
     local label="$1"; shift
     local cc="$1"; shift
@@ -52,7 +56,9 @@ compile_gcc() {
 
 # compile_sdcc — SDCC uses different flags and output format.
 compile_sdcc() {
-    local obj="${OUT}/FR_math_8051"
+    local suffix="$1"  # "" or "_core"
+    local extra="$2"   # "" or "-DFR_CORE_ONLY"
+    local obj="${OUT}/FR_math_8051${suffix}"
 
     if ! command -v sdcc >/dev/null 2>&1; then
         echo "n/a"
@@ -65,7 +71,7 @@ compile_sdcc() {
 void main(void) {}
 CEOF
 
-    if ! sdcc -mmcs51 --std-c99 --opt-code-size ${INC} \
+    if ! sdcc -mmcs51 --std-c99 --opt-code-size ${extra} ${INC} \
          -c "${SRC}" -o "${obj}.rel" 2>/dev/null; then
         echo "fail"
         return
@@ -88,47 +94,87 @@ CEOF
     fi
 }
 
-# ── compile all targets ───────────────────────────────────────────────
+# ── compile all targets (Core + Full) ────────────────────────────────
 
-declare -A RESULTS
-declare -a ORDER
+# Each entry: target_name, word_width, compile_func args...
+# We store results in parallel arrays.
+declare -a TARGET_NAMES TARGET_WIDTHS CORE_SIZES FULL_SIZES
 
-add_result() {
-    local label="$1"
-    local value="$2"
-    RESULTS["${label}"]="${value}"
-    ORDER+=("${label}")
+add_target() {
+    local name="$1"
+    local width="$2"
+    local core="$3"
+    local full="$4"
+    TARGET_NAMES+=("${name}")
+    TARGET_WIDTHS+=("${width}")
+    CORE_SIZES+=("${core}")
+    FULL_SIZES+=("${full}")
 }
 
-echo "Compiling FR_math.c for all targets..."
+echo "Compiling FR_math.c for all targets (Core + Full)..."
 echo ""
 
-add_result "Cortex-M0 (Thumb-1)" \
-    "$(compile_gcc cm0 arm-none-eabi-gcc -mcpu=cortex-m0 -mthumb)"
+# --- ARM targets ---
+add_target "RP2040 (Cortex-M0+)" 32 \
+    "$(compile_gcc rp2040_core arm-none-eabi-gcc -DFR_CORE_ONLY -mcpu=cortex-m0plus -mthumb)" \
+    "$(compile_gcc rp2040_full arm-none-eabi-gcc -mcpu=cortex-m0plus -mthumb)"
 
-add_result "Cortex-M4 (Thumb-2)" \
-    "$(compile_gcc cm4 arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -mfloat-abi=soft)"
+add_target "STM32 (Cortex-M4)" 32 \
+    "$(compile_gcc stm32_core arm-none-eabi-gcc -DFR_CORE_ONLY -mcpu=cortex-m4 -mthumb -mfloat-abi=soft)" \
+    "$(compile_gcc stm32_full arm-none-eabi-gcc -mcpu=cortex-m4 -mthumb -mfloat-abi=soft)"
 
-add_result "MSP430" \
-    "$(compile_gcc msp430 msp430-elf-gcc -mmcu=msp430f5529)"
+add_target "Cortex-M0 (Thumb-1)" 32 \
+    "$(compile_gcc cm0_core arm-none-eabi-gcc -DFR_CORE_ONLY -mcpu=cortex-m0 -mthumb)" \
+    "$(compile_gcc cm0_full arm-none-eabi-gcc -mcpu=cortex-m0 -mthumb)"
 
-add_result "RISC-V 32 (rv32im)" \
-    "$(compile_gcc rv32 riscv64-unknown-elf-gcc -march=rv32im -mabi=ilp32)"
+# --- RISC-V ---
+add_target "RISC-V 32 (rv32im)" 32 \
+    "$(compile_gcc rv32_core riscv64-unknown-elf-gcc -DFR_CORE_ONLY -march=rv32im -mabi=ilp32)" \
+    "$(compile_gcc rv32_full riscv64-unknown-elf-gcc -march=rv32im -mabi=ilp32)"
 
-add_result "ESP32 (Xtensa)" \
-    "$(compile_gcc esp32 xtensa-esp-elf-gcc)"
+# --- Xtensa ---
+add_target "ESP32 (Xtensa)" 32 \
+    "$(compile_gcc esp32_core xtensa-esp-elf-gcc -DFR_CORE_ONLY)" \
+    "$(compile_gcc esp32_full xtensa-esp-elf-gcc)"
 
-add_result "68k" \
-    "$(compile_gcc m68k m68k-linux-gnu-gcc-12)"
+# --- 68k ---
+add_target "68k" 32 \
+    "$(compile_gcc m68k_core m68k-linux-gnu-gcc-12 -DFR_CORE_ONLY)" \
+    "$(compile_gcc m68k_full m68k-linux-gnu-gcc-12)"
 
-add_result "x86-32" \
-    "$(compile_gcc x86_32 gcc -m32)"
+# --- x86 ---
+add_target "x86-32" 32 \
+    "$(compile_gcc x86_32_core gcc -DFR_CORE_ONLY -m32)" \
+    "$(compile_gcc x86_32_full gcc -m32)"
 
-add_result "x86-64" \
-    "$(compile_gcc x86_64 gcc -m64)"
+add_target "x86-64" 64 \
+    "$(compile_gcc x86_64_core gcc -DFR_CORE_ONLY -m64)" \
+    "$(compile_gcc x86_64_full gcc -m64)"
 
-add_result "8051 (SDCC)" \
-    "$(compile_sdcc)"
+# --- 16-bit ---
+add_target "MSP430" 16 \
+    "$(compile_gcc msp430_core msp430-elf-gcc -DFR_CORE_ONLY -mmcu=msp430f5529)" \
+    "$(compile_gcc msp430_full msp430-elf-gcc -mmcu=msp430f5529)"
+
+# --- 68HC11 (8-bit) ---
+add_target "68HC11" 8 \
+    "$(compile_gcc hc11_core m68hc11-gcc -DFR_CORE_ONLY)" \
+    "$(compile_gcc hc11_full m68hc11-gcc)"
+
+# --- 8051 ---
+add_target "8051 (SDCC)" 8 \
+    "$(compile_sdcc _core -DFR_CORE_ONLY)" \
+    "$(compile_sdcc _full "")"
+
+# ── write CSV ────────────────────────────────────────────────────────
+
+echo "target,width,core_bytes,full_bytes" > "${CSV}"
+for i in "${!TARGET_NAMES[@]}"; do
+    echo "${TARGET_NAMES[$i]},${TARGET_WIDTHS[$i]},${CORE_SIZES[$i]},${FULL_SIZES[$i]}" >> "${CSV}"
+done
+
+echo "CSV saved to ${CSV}"
+echo ""
 
 # ── format output ─────────────────────────────────────────────────────
 
@@ -140,22 +186,40 @@ fmt_size() {
         # Format as X.X KB
         local kb
         kb=$(awk "BEGIN { printf \"%.1f\", ${val}/1024.0 }")
-        echo "${val} B (${kb} KB)"
+        echo "${kb} KB"
     fi
 }
 
-# Print to stdout and file
+# Print markdown table sorted by width then full size ascending
 {
     echo "## FR_Math library size (FR_math.c only, \`-Os\`)"
     echo ""
-    echo "| Target | Code (text) |"
-    echo "|--------|-------------|"
-    for label in "${ORDER[@]}"; do
-        val="${RESULTS[${label}]}"
-        echo "| ${label} | $(fmt_size "${val}") |"
+    echo "| Target | Core | Full |"
+    echo "|--------|-----:|-----:|"
+
+    # Build sortable lines: width,full_bytes,index
+    declare -a SORT_LINES
+    for i in "${!TARGET_NAMES[@]}"; do
+        local_full="${FULL_SIZES[$i]}"
+        # Use 999999 for non-numeric values so they sort last
+        if [[ "${local_full}" =~ ^[0-9]+$ ]]; then
+            sort_key="${local_full}"
+        else
+            sort_key="999999"
+        fi
+        SORT_LINES+=("${TARGET_WIDTHS[$i]} ${sort_key} ${i}")
     done
+
+    # Sort by width ascending then by full size ascending
+    sorted=$(printf '%s\n' "${SORT_LINES[@]}" | sort -k1,1n -k2,2n)
+
+    while read -r _width _fsize idx; do
+        echo "| ${TARGET_NAMES[$idx]} | $(fmt_size "${CORE_SIZES[$idx]}") | $(fmt_size "${FULL_SIZES[$idx]}") |"
+    done <<< "${sorted}"
+
     echo ""
     echo "All sizes are text-section bytes compiled with \`-Os -ffreestanding\`."
+    echo "Core = \`-DFR_CORE_ONLY\` (math only, no print, no waves)."
     echo "The optional 2D module (\`FR_math_2D.cpp\`) adds ~1 KB."
 } | tee "${TABLE}"
 
@@ -219,3 +283,4 @@ fi
 
 echo ""
 echo "Size table saved to build/size_table.md"
+echo "CSV saved to build/sizes.csv"

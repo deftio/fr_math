@@ -46,23 +46,23 @@ radix — Q16.16 is just the reference point for the table. See the
 16, and 24. Percent errors skip expected values near zero (|expected| < 0.01).
 
 <!-- ACCURACY_TABLE_START -->
-| Function | Max err (LSB) | Max err (%) | Avg err (%) | Note |
-|---|---:|---:|---:|---|
-| sin / cos | 7.5 | 0.7169 | 0.0100 | 65536-pt sweep + specials |
-| tan | 38020.4 | 0.7118 | 0.0162 | 65536-pt sweep (skip poles) |
-| asin / acos | 42.3 | 0.7025 | 0.0105 | 65536-pt; sqrt approx near boundary |
-| atan2 | 63.3 | 0.4953 | 0.0268 | 65536x5 radii; asin/acos+hypot_fast8 |
-| atan | 61.9 | 0.2985 | 0.0159 | 20001-pt sweep [-10,10]; via FR_atan2 |
-| sqrt | 28.4 | 0.0003 | 0.0000 | Round-to-nearest |
-| log2 | 10.5 | 0.2479 | 0.0045 | 65-entry mantissa table |
-| pow2 | 220.4 | 0.1373 | 0.0057 | 65-entry fraction table |
-| ln, log10 | 0.7 | 0.0015 | 0.0004 | Via FR_MULK28 from log2 |
-| exp | 65.7 | 0.0719 | 0.0051 | FR_MULK28 + FR_pow2 |
-| exp_fast | 195.5 | 0.0719 | 0.0064 | Shift-only scaling |
-| pow10 | 143.4 | 0.1163 | 0.0075 | FR_MULK28 + FR_pow2 |
-| pow10_fast | 581.9 | 0.1163 | 0.0100 | Shift-only scaling |
-| hypot (exact) | 0.2 | 0.0001 | 0.0000 | 64-bit intermediate |
-| hypot_fast8 (8-seg) | 59968.8 | 0.0977 | 0.0508 | Shift-only, no multiply |
+| Function | Max err (%) | Avg err (%) | Note |
+|---|---:|---:|---|
+| sin / cos | 0.7169 | 0.0100 | 65536-pt sweep + specials |
+| tan | 0.7118 | 0.0162 | 65536-pt sweep (skip poles) |
+| asin / acos | 0.7025 | 0.0105 | 65536-pt; sqrt approx near boundary |
+| atan2 | 0.4953 | 0.0268 | 65536x5 radii; asin/acos+hypot_fast8 |
+| atan | 0.2985 | 0.0159 | 20001-pt sweep [-10,10]; via FR_atan2 |
+| sqrt | 0.0003 | 0.0000 | Round-to-nearest |
+| log2 | 0.2479 | 0.0045 | 65-entry mantissa table |
+| pow2 | 0.1373 | 0.0057 | 65-entry fraction table |
+| ln, log10 | 0.0015 | 0.0004 | Via FR_MULK28 from log2 |
+| exp | 0.0719 | 0.0051 | FR_MULK28 + FR_pow2 |
+| exp_fast | 0.0719 | 0.0064 | Shift-only scaling |
+| pow10 | 0.1163 | 0.0075 | FR_MULK28 + FR_pow2 |
+| pow10_fast | 0.1163 | 0.0100 | Shift-only scaling |
+| hypot (exact) | 0.0001 | 0.0000 | 64-bit intermediate |
+| hypot_fast8 (8-seg) | 0.0977 | 0.0508 | Shift-only, no multiply |
 <!-- ACCURACY_TABLE_END -->
 
 ## What's in the box
@@ -86,23 +86,22 @@ Every function is covered by the TDD characterization suite in
 
 ## Lean build options
 
-Two compile-time `#define` guards let you strip optional subsystems
+Three compile-time `#define` guards let you strip optional subsystems
 for ROM-constrained targets. Define them before including `FR_math.h`
 (or pass `-D` on the compiler command line):
 
 | Define | What it removes | Typical savings |
 |---|---|---|
+| `FR_CORE_ONLY` | Everything below (print + waves) | ~1.9 KB |
 | `FR_NO_PRINT` | `FR_printNumF`, `FR_printNumD`, `FR_printNumH`, `FR_numstr` | ~1.3 KB |
 | `FR_NO_WAVES` | `fr_wave_*` (6 shapes), `fr_adsr_*` (ADSR envelope), `FR_HZ2BAM_INC` | ~0.6 KB |
 
-With both guards enabled the core math library (trig, inverse trig, log/exp,
-sqrt, hypot) compiles to ~3.5 KB on x86-64 / clang -Os. On Thumb-2 this
-would be roughly 2.6 KB.
+`FR_CORE_ONLY` is a convenience shorthand that defines both
+`FR_NO_PRINT` and `FR_NO_WAVES` in one step.
 
 ```c
 /* Example: headless sensor node — math only, no print, no audio */
-#define FR_NO_PRINT
-#define FR_NO_WAVES
+#define FR_CORE_ONLY
 #include "FR_math.h"
 ```
 
@@ -225,7 +224,7 @@ script.
 FR_Math has been in service since **2000**, originally built for
 graphics transforms on 16 MHz 68k Palm Pilots (it shipped inside
 Trumpetsoft's *Inkstorm*), then ported forward to ARM, x86, MIPS,
-RISC-V, and various 8/16-bit embedded targets. v2.0.6 is the current
+RISC-V, and various 8/16-bit embedded targets. v2.0.7 is the current
 release with a full test suite, bit-exact numerical
 specification, and CI on every push.
 

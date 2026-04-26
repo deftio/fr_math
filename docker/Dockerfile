@@ -10,6 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc-arm-none-eabi libnewlib-arm-none-eabi \
     gcc-riscv64-unknown-elf \
     gcc-12-m68k-linux-gnu \
+    gcc-m68hc1x \
     sdcc \
     wget ca-certificates xz-utils bzip2 \
     && rm -rf /var/lib/apt/lists/*

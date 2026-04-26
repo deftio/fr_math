@@ -89,8 +89,8 @@ patch_markdown() {
     # Build replacement block: sentinel + header + separator + data + sentinel
     local replacement
     replacement="<!-- ACCURACY_TABLE_START -->"$'\n'
-    replacement+="| Function | Max err (LSB) | Max err (%) | Avg err (%) | Note |"$'\n'
-    replacement+="|---|---:|---:|---:|---|"$'\n'
+    replacement+="| Function | Max err (%) | Avg err (%) | Note |"$'\n'
+    replacement+="|---|---:|---:|---|"$'\n'
     replacement+="$DATA_ROWS"$'\n'
     replacement+="<!-- ACCURACY_TABLE_END -->"
 
@@ -123,8 +123,8 @@ patch_html() {
         local cells
         cells=$(echo "$line" | sed 's/^| //;s/ |$//' | sed 's/ | /\t/g')
         local tr="<tr>"
-        while IFS=$'\t' read -r c1 c2 c3 c4 c5; do
-            tr+="<td>${c1}</td><td>${c2}</td><td>${c3}</td><td>${c4}</td><td>${c5}</td>"
+        while IFS=$'\t' read -r c1 c2 c3 c4; do
+            tr+="<td>${c1}</td><td>${c2}</td><td>${c3}</td><td>${c4}</td>"
         done <<< "$cells"
         tr+="</tr>"
         if [ -n "$html_rows" ]; then
@@ -137,7 +137,7 @@ patch_html() {
     local replacement
     replacement="<!-- ACCURACY_TABLE_START -->"$'\n'
     replacement+="<table>"$'\n'
-    replacement+="<thead><tr><th>Function</th><th>Max err (LSB)</th><th>Max err (%)</th><th>Avg err (%)</th><th>Note</th></tr></thead>"$'\n'
+    replacement+="<thead><tr><th>Function</th><th>Max err (%)</th><th>Avg err (%)</th><th>Note</th></tr></thead>"$'\n'
     replacement+="<tbody>"$'\n'
     replacement+="$html_rows"$'\n'
     replacement+="</tbody>"$'\n'
