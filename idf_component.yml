@@ -1,4 +1,4 @@
-version: "2.0.6"
+version: "2.0.7"
 description: "Compact fixed-point math library for embedded systems. Integer-only with caller-selectable radix. Trig, log/exp, sqrt, hypot, wave generators, ADSR, and 2D transforms. Zero dependencies."
 url: "https://github.com/deftio/fr_math"
 repository: "https://github.com/deftio/fr_math.git"

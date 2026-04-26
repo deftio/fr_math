@@ -9,7 +9,7 @@ or libraries. Pure C99, zero dependencies beyond `<stdint.h>`.
 - Repository: https://github.com/deftio/fr_math
 - Documentation: https://deftio.github.io/fr_math/
 - License: BSD-2-Clause
-- Version: 2.0.6
+- Version: 2.0.7
 
 ## Key concept: radix parameter
 
