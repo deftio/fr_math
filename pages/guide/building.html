@@ -166,6 +166,8 @@ need a floating-point unit, and you do <em>not</em> need
 <tr><td>Windows x86_64</td><td>MSVC, <code>clang-cl</code>, MinGW</td><td>Manual.</td></tr>
 <tr><td>AArch64 (ARM64)</td><td><code>aarch64-linux-gnu-gcc</code></td><td>Docker.</td></tr>
 <tr><td>ARM32 / Thumb</td><td><code>arm-none-eabi-gcc</code>, IAR, Keil</td><td>Docker.</td></tr>
+<tr><td>RP2040 (Cortex-M0+)</td><td><code>arm-none-eabi-gcc</code></td><td>Docker.</td></tr>
+<tr><td>STM32 (Cortex-M4)</td><td><code>arm-none-eabi-gcc</code></td><td>Docker.</td></tr>
 <tr><td>RISC-V rv64 / rv32</td><td><code>riscv64-linux-gnu-gcc</code>, <code>riscv64-unknown-elf-gcc</code></td><td>Docker.</td></tr>
 <tr><td>AVR (ATmega328P, ATtiny85)</td><td><code>avr-gcc</code></td><td>Docker.</td></tr>
 <tr><td>Arduino (AVR, SAMD, etc.)</td><td><code>arduino-cli</code></td><td>Manual.</td></tr>
@@ -180,55 +182,50 @@ need a floating-point unit, and you do <em>not</em> need
 
 <h3>Code size (<code>.text</code> section, compiled with <code>-Os</code>)</h3>
 
-<p>All sizes are for the complete <code>FR_math.c</code> &mdash; every function
-included, nothing stripped. With <code>-ffunction-sections</code> and
-linker <code>--gc-sections</code>, only the functions your application
-references are linked, so real flash usage will be smaller.</p>
+<p>Sizes are for <code>FR_math.c</code> compiled with <code>-Os -ffreestanding</code>.
+Core = compiled with <code>-DFR_CORE_ONLY</code> (math only, no print, no waves).
+With <code>-ffunction-sections</code> and linker <code>--gc-sections</code>,
+only the functions your application references are linked, so real flash
+usage will be smaller.</p>
 
 <!-- SIZE_TABLE_START -->
 <table>
-<thead><tr><th>Target</th><th>.text (bytes)</th></tr></thead>
+<thead><tr><th>Target</th><th>Core</th><th>Full</th></tr></thead>
 <tbody>
-<tr><td>GCC ARM32 Thumb</td><td>4,278</td></tr>
-<tr><td>GCC RISC-V (rv64)</td><td>4,574</td></tr>
-<tr><td>GCC RISC-V (rv32)</td><td>4,820</td></tr>
-<tr><td>GCC Xtensa LX106 (ESP8266)</td><td>5,317</td></tr>
-<tr><td>GCC m68k</td><td>5,410</td></tr>
-<tr><td>GCC ARM32</td><td>5,504</td></tr>
-<tr><td>GCC x86-64</td><td>5,857</td></tr>
-<tr><td>GCC AArch64 (ARM64)</td><td>6,112</td></tr>
-<tr><td>Clang x86-64</td><td>6,555</td></tr>
-<tr><td>GCC x86-32</td><td>6,947</td></tr>
-<tr><td>GCC PowerPC</td><td>7,540</td></tr>
-<tr><td>GCC MSP430</td><td>9,146</td></tr>
-<tr><td>TCC x86</td><td>9,887</td></tr>
-<tr><td>GCC AVR5 (ATmega328P)</td><td>10,806</td></tr>
-<tr><td>GCC AVR ATtiny85</td><td>11,382</td></tr>
-<tr><td>GCC 68HC11</td><td>16,392</td></tr>
+<tr><td>RP2040 (Cortex-M0+)</td><td>2.6 KB</td><td>4.2 KB</td></tr>
+<tr><td>STM32 (Cortex-M4)</td><td>2.6 KB</td><td>4.2 KB</td></tr>
+<tr><td>RISC-V 32 (rv32imac)</td><td>3.0 KB</td><td>4.7 KB</td></tr>
+<tr><td>ESP32 (Xtensa)</td><td>3.5 KB</td><td>5.2 KB</td></tr>
+<tr><td>68k</td><td>3.5 KB</td><td>5.3 KB</td></tr>
+<tr><td>x86-64 (GCC)</td><td>3.5 KB</td><td>5.7 KB</td></tr>
+<tr><td>x86-32</td><td>4.5 KB</td><td>6.8 KB</td></tr>
+<tr><td>MSP430 (16-bit)</td><td>5.9 KB</td><td>8.9 KB</td></tr>
+<tr><td>68HC11</td><td>10.8 KB</td><td>16.0 KB</td></tr>
+<tr><td>AVR (ATmega328P)</td><td>7.0 KB</td><td>10.6 KB</td></tr>
 </tbody>
 </table>
 <!-- SIZE_TABLE_END -->
 
 <h3>Lean build options</h3>
 
-<p>Two compile-time <code>#define</code> guards let you strip optional subsystems
+<p>Three compile-time <code>#define</code> guards let you strip optional subsystems
 for ROM-constrained targets. Define them before including
 <code>FR_math.h</code> (or pass <code>-D</code> on the compiler command line):</p>
 
 <table>
 <thead><tr><th>Define</th><th>What it removes</th><th>Typical savings</th></tr></thead>
 <tbody>
+<tr><td><code>FR_CORE_ONLY</code></td><td>Everything below (print + waves)</td><td>~1.9 KB</td></tr>
 <tr><td><code>FR_NO_PRINT</code></td><td><code>FR_printNumF</code>, <code>FR_printNumD</code>, <code>FR_printNumH</code>, <code>FR_numstr</code></td><td>~1.3 KB</td></tr>
 <tr><td><code>FR_NO_WAVES</code></td><td><code>fr_wave_*</code> (6 shapes), <code>fr_adsr_*</code> (ADSR envelope), <code>FR_HZ2BAM_INC</code></td><td>~0.6 KB</td></tr>
 </tbody>
 </table>
 
-<p>With both guards enabled the core math library (trig, inverse trig, log/exp,
-sqrt, hypot) compiles to ~3.5 KB on x86-64 / clang -Os.</p>
+<p><code>FR_CORE_ONLY</code> is a convenience shorthand that defines both
+<code>FR_NO_PRINT</code> and <code>FR_NO_WAVES</code> in one step.</p>
 
 <pre><code class="language-c">/* Example: headless sensor node &mdash; math only, no print, no audio */
-#define FR_NO_PRINT
-#define FR_NO_WAVES
+#define FR_CORE_ONLY
 #include "FR_math.h"</code></pre>
 
 <p>With <code>-ffunction-sections</code> and linker <code>--gc-sections</code>,

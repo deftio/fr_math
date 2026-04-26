@@ -5,7 +5,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Releases — FR_Math</title>
-  <meta name="description" content="FR_Math release history: v2.0.0 precision rewrite and new waveforms, v1.0.3 test coverage, v1.02 initial public release.">
+  <meta name="description" content="FR_Math release history: v2.0.7 README restructure and FR_CORE_ONLY, v2.0.0 precision rewrite and new waveforms, v1.0.3 test coverage, v1.02 initial public release.">
   <link rel="stylesheet" href="assets/main.css">
 </head>
 <body>
@@ -20,6 +20,21 @@
 <p>Release highlights. For the full per-symbol change log, see
 <a href="https://github.com/deftio/fr_math/blob/master/release_notes.md">release_notes.md</a>
 in the repo.</p>
+
+<h2>v2.0.7 &mdash; 2026</h2>
+
+<p>README restructure, accuracy table cleanup, expanded cross-compile support.</p>
+
+<ul>
+  <li><strong><code>FR_CORE_ONLY</code> convenience define</strong> &mdash; single <code>#define</code> strips both print helpers and wave generators</li>
+  <li><strong>Accuracy table cleanup</strong> &mdash; removed LSB column (percent error is the user-facing metric)</li>
+  <li><strong>New cross-compile targets</strong> &mdash; RP2040 (Cortex-M0+), STM32 (Cortex-M4), 68HC11 added to Docker build</li>
+  <li><strong>Two-column size table</strong> &mdash; Core (<code>-DFR_CORE_ONLY</code>) vs Full for every target</li>
+  <li><strong><code>scripts/update_sizes.sh</code></strong> &mdash; auto-patches size tables from <code>build/sizes.csv</code></li>
+  <li>README reordered: accuracy table first, then function list, then size table</li>
+</ul>
+
+<hr>
 
 <h2>v2.0.6 &mdash; 2026</h2>
 
@@ -336,7 +351,7 @@ released publicly.</p>
 when it was written to run 2D graphics transforms on 16&nbsp;MHz 68k
 Palm Pilots for Trumpetsoft&rsquo;s <em>Inkstorm</em>. It has since
 been ported to ARM, x86, MIPS, RISC-V, and a menagerie of 8- and
-16-bit embedded targets. v2.0.0 is the first major revision with a
+16-bit embedded targets. v2.0.7 is the current release with a
 full test suite, a bit-exact numerical specification, and CI on
 every push.</p>
 

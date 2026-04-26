@@ -1,5 +1,38 @@
 # FR_Math Release Notes
 
+## Version 2.0.7 (2026)
+
+README restructure, accuracy table cleanup, and expanded cross-compile support.
+
+### New: `FR_CORE_ONLY` convenience define
+
+A single `#define FR_CORE_ONLY` before including `FR_math.h` (or `-DFR_CORE_ONLY`
+on the command line) now strips both print helpers and wave generators in one step.
+It expands to `FR_NO_PRINT` + `FR_NO_WAVES` internally.
+
+### Accuracy table cleanup
+
+The LSB column has been removed from the accuracy table output. Percent error
+is the metric that matters to callers; LSB error is an implementation detail
+that varies with the chosen radix.
+
+### Expanded cross-compile targets
+
+- **RP2040 (Cortex-M0+)** and **STM32 (Cortex-M4)** added as named targets
+  in the Docker cross-build
+- **68HC11** toolchain added to the Docker image
+- Size table now shows two columns: **Core** (`-DFR_CORE_ONLY`) and **Full**
+- `docker/build_sizes.sh` outputs `build/sizes.csv` for automated patching
+- New `scripts/update_sizes.sh` auto-patches size tables into README, docs,
+  and HTML pages
+
+### README restructure
+
+Sections reordered: accuracy table moved above the size table to lead with
+the library's primary selling point. Size table now shows Core vs Full columns.
+
+---
+
 ## Version 2.0.6 (2026)
 
 Accuracy improvements, lean-build options, and library cleanup.

@@ -2,7 +2,7 @@
 [![CI](https://github.com/deftio/fr_math/actions/workflows/ci.yml/badge.svg)](https://github.com/deftio/fr_math/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen.svg)](#building-and-testing)
 [![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://deftio.github.io/fr_math/)
-[![Version](https://img.shields.io/badge/version-2.0.6-blue.svg)](release_notes.md)
+[![Version](https://img.shields.io/badge/version-2.0.7-blue.svg)](release_notes.md)
 
 # FR_Math: A C Language Fixed-Point Math Library for Embedded Systems
 
@@ -18,59 +18,6 @@ into a single format. Pure C (C99/C11/C17) with an optional C++
 2D-transform wrapper. Compiles under Arduino. Zero dependencies
 beyond `<stdint.h>`.
 
-### Library size (FR_math.c only, `-Os`)
-
-Compiled object code sizes on select platforms (static test build). Your
-sizes may vary depending on optimization and linker settings. Sizes
-include all code and internal tables; everything is ROMable.
-
-| Target | Code (text) |
-|--------|-------------|
-| ARM Thumb (Cortex-M0/M4) | 4.2 KB |
-| RISC-V 32 (rv32imac) | 4.7 KB |
-| RISC-V 64 | 4.5 KB |
-| Xtensa LX106 (ESP8266) | 5.2 KB |
-| 68k | 5.3 KB |
-| ARM32 | 5.4 KB |
-| x86-64 (GCC) | 5.7 KB |
-| AArch64 (ARM64) | 6.0 KB |
-| x86-64 (Clang) | 6.4 KB |
-| x86-32 | 6.8 KB |
-| PowerPC | 7.4 KB |
-| MSP430 (16-bit) | 8.9 KB * |
-| AVR (ATmega328P) | 10.6 KB * |
-
-The optional 2D module adds ~1 KB.
-\* MSP430 and AVR are 8/16-bit — every 32-bit operation expands to multiple instructions.
-See [`docker/`](docker/) for the cross-compile setup.
-
-### Lean build options
-
-Two compile-time `#define` guards let you strip optional subsystems
-for ROM-constrained targets. Define them before including `FR_math.h`
-(or pass `-D` on the compiler command line):
-
-| Define | What it removes | Typical savings |
-|---|---|---|
-| `FR_NO_PRINT` | `FR_printNumF`, `FR_printNumD`, `FR_printNumH`, `FR_numstr` | ~1.3 KB |
-| `FR_NO_WAVES` | `fr_wave_*` (6 shapes), `fr_adsr_*` (ADSR envelope), `FR_HZ2BAM_INC` | ~0.6 KB |
-
-With both guards enabled the core math library (trig, inverse trig, log/exp,
-sqrt, hypot) compiles to ~3.5 KB on x86-64 / clang -Os. On Thumb-2 this
-would be roughly 2.6 KB.
-
-```c
-/* Example: headless sensor node — math only, no print, no audio */
-#define FR_NO_PRINT
-#define FR_NO_WAVES
-#include "FR_math.h"
-```
-
-With `-ffunction-sections` and linker `--gc-sections`, the linker will
-also strip any unused functions automatically, so these guards are most
-useful when you include the library as a single `.c` file or static
-archive without section-level dead-code elimination.
-
 ### Measured accuracy
 
 Errors below are measured at Q16.16 (s15.16). All functions accept any
@@ -81,23 +28,23 @@ At other radixes (3-bit, 24-bit, etc.) accuracy will differ due to the
 number of fractional bits available. All functions support radix 0 to 30.
 
 <!-- ACCURACY_TABLE_START -->
-| Function | Max err (LSB) | Max err (%) | Avg err (%) | Note |
-|---|---:|---:|---:|---|
-| sin / cos | 7.5 | 0.7169 | 0.0100 | 65536-pt sweep + specials |
-| tan | 38020.4 | 0.7118 | 0.0162 | 65536-pt sweep (skip poles) |
-| asin / acos | 42.3 | 0.7025 | 0.0105 | 65536-pt; sqrt approx near boundary |
-| atan2 | 63.3 | 0.4953 | 0.0268 | 65536x5 radii; asin/acos+hypot_fast8 |
-| atan | 61.9 | 0.2985 | 0.0159 | 20001-pt sweep [-10,10]; via FR_atan2 |
-| sqrt | 28.4 | 0.0003 | 0.0000 | Round-to-nearest |
-| log2 | 10.5 | 0.2479 | 0.0045 | 65-entry mantissa table |
-| pow2 | 220.4 | 0.1373 | 0.0057 | 65-entry fraction table |
-| ln, log10 | 0.7 | 0.0015 | 0.0004 | Via FR_MULK28 from log2 |
-| exp | 65.7 | 0.0719 | 0.0051 | FR_MULK28 + FR_pow2 |
-| exp_fast | 195.5 | 0.0719 | 0.0064 | Shift-only scaling |
-| pow10 | 143.4 | 0.1163 | 0.0075 | FR_MULK28 + FR_pow2 |
-| pow10_fast | 581.9 | 0.1163 | 0.0100 | Shift-only scaling |
-| hypot (exact) | 0.2 | 0.0001 | 0.0000 | 64-bit intermediate |
-| hypot_fast8 (8-seg) | 59968.8 | 0.0977 | 0.0508 | Shift-only, no multiply |
+| Function | Max err (%) | Avg err (%) | Note |
+|---|---:|---:|---|
+| sin / cos | 0.7169 | 0.0100 | 65536-pt sweep + specials |
+| tan | 0.7118 | 0.0162 | 65536-pt sweep (skip poles) |
+| asin / acos | 0.7025 | 0.0105 | 65536-pt; sqrt approx near boundary |
+| atan2 | 0.4953 | 0.0268 | 65536x5 radii; asin/acos+hypot_fast8 |
+| atan | 0.2985 | 0.0159 | 20001-pt sweep [-10,10]; via FR_atan2 |
+| sqrt | 0.0003 | 0.0000 | Round-to-nearest |
+| log2 | 0.2479 | 0.0045 | 65-entry mantissa table |
+| pow2 | 0.1373 | 0.0057 | 65-entry fraction table |
+| ln, log10 | 0.0015 | 0.0004 | Via FR_MULK28 from log2 |
+| exp | 0.0719 | 0.0051 | FR_MULK28 + FR_pow2 |
+| exp_fast | 0.0719 | 0.0064 | Shift-only scaling |
+| pow10 | 0.1163 | 0.0075 | FR_MULK28 + FR_pow2 |
+| pow10_fast | 0.1163 | 0.0100 | Shift-only scaling |
+| hypot (exact) | 0.0001 | 0.0000 | 64-bit intermediate |
+| hypot_fast8 (8-seg) | 0.0977 | 0.0508 | Shift-only, no multiply |
 <!-- ACCURACY_TABLE_END -->
 
 ### What's in the box
@@ -115,6 +62,58 @@ number of fractional bits available. All functions support radix 0 to 30.
 | Envelope | `fr_adsr_init`, `fr_adsr_trigger`, `fr_adsr_release`, `fr_adsr_step` |
 | 2D transforms | `FR_Matrix2D_CPT` (mul, add, sub, det, inv, setrotate, XFormPtI, XFormPtI16) |
 | Formatted output | `FR_printNumD`, `FR_printNumF`, `FR_printNumH`, `FR_numstr` |
+
+### Library size (FR_math.c only, `-Os`)
+
+Compiled object code sizes on select platforms (static test build). Your
+sizes may vary depending on optimization and linker settings. Sizes
+include all code and internal tables; everything is ROMable.
+
+<!-- SIZE_TABLE_START -->
+| Target | Core | Full |
+|--------|-----:|-----:|
+| RP2040 (Cortex-M0+) | 2.6 KB | 4.2 KB |
+| STM32 (Cortex-M4) | 2.6 KB | 4.2 KB |
+| RISC-V 32 (rv32imac) | 3.0 KB | 4.7 KB |
+| ESP32 (Xtensa) | 3.5 KB | 5.2 KB |
+| 68k | 3.5 KB | 5.3 KB |
+| x86-64 (GCC) | 3.5 KB | 5.7 KB |
+| x86-32 | 4.5 KB | 6.8 KB |
+| MSP430 (16-bit) | 5.9 KB | 8.9 KB |
+| 68HC11 | 10.8 KB | 16.0 KB |
+| AVR (ATmega328P) | 7.0 KB | 10.6 KB |
+<!-- SIZE_TABLE_END -->
+
+Core = compiled with `-DFR_CORE_ONLY` (math only, no print, no waves).
+The optional 2D module adds ~1 KB.
+\* MSP430, 68HC11, and AVR are 8/16-bit — every 32-bit operation expands to multiple instructions.
+See [`docker/`](docker/) for the cross-compile setup.
+
+### Lean build options
+
+Three compile-time `#define` guards let you strip optional subsystems
+for ROM-constrained targets. Define them before including `FR_math.h`
+(or pass `-D` on the compiler command line):
+
+| Define | What it removes | Typical savings |
+|---|---|---|
+| `FR_CORE_ONLY` | Everything below (print + waves) | ~1.9 KB |
+| `FR_NO_PRINT` | `FR_printNumF`, `FR_printNumD`, `FR_printNumH`, `FR_numstr` | ~1.3 KB |
+| `FR_NO_WAVES` | `fr_wave_*` (6 shapes), `fr_adsr_*` (ADSR envelope), `FR_HZ2BAM_INC` | ~0.6 KB |
+
+`FR_CORE_ONLY` is a convenience shorthand that defines both
+`FR_NO_PRINT` and `FR_NO_WAVES` in one step.
+
+```c
+/* Example: headless sensor node — math only, no print, no audio */
+#define FR_CORE_ONLY
+#include "FR_math.h"
+```
+
+With `-ffunction-sections` and linker `--gc-sections`, the linker will
+also strip any unused functions automatically, so these guards are most
+useful when you include the library as a single `.c` file or static
+archive without section-level dead-code elimination.
 
 ## Quick start
 
@@ -210,7 +209,7 @@ The full docs ship in two forms — pick whichever fits how you read.
 FR_Math has been in service since 2000, originally built for graphics
 transforms on 16 MHz 68k Palm Pilots. It shipped inside Trumpetsoft's
 *Inkstorm* on PalmOS, then moved forward through ARM, x86, MIPS,
-RISC-V, and various 8/16-bit embedded targets. v2.0.6 is the current
+RISC-V, and various 8/16-bit embedded targets. v2.0.7 is the current
 release with a full test suite, bit-exact numerical specification, and
 CI on every push.
 
@@ -226,5 +225,5 @@ BSD-2-Clause — see [LICENSE.txt](LICENSE.txt).
 
 ## Version
 
-2.0.6 — see [release_notes.md](release_notes.md) for the v1 → v2
+2.0.7 — see [release_notes.md](release_notes.md) for the v1 → v2
 migration guide, numerical fixes, and new functionality.

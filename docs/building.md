@@ -146,6 +146,8 @@ you do *not* need `libm`.
 | Windows x86_64 | MSVC, `clang-cl`, MinGW | Manual. |
 | AArch64 (ARM64) | `aarch64-linux-gnu-gcc` | Docker. |
 | ARM32 / Thumb | `arm-none-eabi-gcc`, IAR, Keil | Docker. |
+| RP2040 (Cortex-M0+) | `arm-none-eabi-gcc` | Docker. |
+| STM32 (Cortex-M4) | `arm-none-eabi-gcc` | Docker. |
 | RISC-V rv64 / rv32 | `riscv64-linux-gnu-gcc`, `riscv64-unknown-elf-gcc` | Docker. |
 | AVR (ATmega328P, ATtiny85) | `avr-gcc` | Docker. |
 | Arduino (AVR, SAMD, etc.) | `arduino-cli` | Manual. |
@@ -158,50 +160,45 @@ you do *not* need `libm`.
 
 ### Code size (.text section, compiled with `-Os`)
 
-All sizes are for the complete `FR_math.c` — every function
-included, nothing stripped.  With `-ffunction-sections` and
-linker `--gc-sections`, only the functions your application
-references are linked, so real flash usage will be smaller.
+Sizes are for `FR_math.c` compiled with `-Os -ffreestanding`.
+Core = compiled with `-DFR_CORE_ONLY` (math only, no print, no waves).
+With `-ffunction-sections` and linker `--gc-sections`, only the
+functions your application references are linked, so real flash
+usage will be smaller.
 
 <!-- SIZE_TABLE_START -->
-| Target | .text (bytes) |
-|---|---:|
-| GCC ARM32 Thumb | 4,278 |
-| GCC RISC-V (rv64) | 4,574 |
-| GCC RISC-V (rv32) | 4,820 |
-| GCC Xtensa LX106 (ESP8266) | 5,317 |
-| GCC m68k | 5,410 |
-| GCC ARM32 | 5,504 |
-| GCC x86-64 | 5,857 |
-| GCC AArch64 (ARM64) | 6,112 |
-| Clang x86-64 | 6,555 |
-| GCC x86-32 | 6,947 |
-| GCC PowerPC | 7,540 |
-| GCC MSP430 | 9,146 |
-| TCC x86 | 9,887 |
-| GCC AVR5 (ATmega328P) | 10,806 |
-| GCC AVR ATtiny85 | 11,382 |
-| GCC 68HC11 | 16,392 |
+| Target | Core | Full |
+|--------|-----:|-----:|
+| RP2040 (Cortex-M0+) | 2.6 KB | 4.2 KB |
+| STM32 (Cortex-M4) | 2.6 KB | 4.2 KB |
+| RISC-V 32 (rv32imac) | 3.0 KB | 4.7 KB |
+| ESP32 (Xtensa) | 3.5 KB | 5.2 KB |
+| 68k | 3.5 KB | 5.3 KB |
+| x86-64 (GCC) | 3.5 KB | 5.7 KB |
+| x86-32 | 4.5 KB | 6.8 KB |
+| MSP430 (16-bit) | 5.9 KB | 8.9 KB |
+| 68HC11 | 10.8 KB | 16.0 KB |
+| AVR (ATmega328P) | 7.0 KB | 10.6 KB |
 <!-- SIZE_TABLE_END -->
 
 ### Lean build options
 
-Two compile-time `#define` guards let you strip optional subsystems
+Three compile-time `#define` guards let you strip optional subsystems
 for ROM-constrained targets. Define them before including `FR_math.h`
 (or pass `-D` on the compiler command line):
 
 | Define | What it removes | Typical savings |
 |---|---|---|
+| `FR_CORE_ONLY` | Everything below (print + waves) | ~1.9 KB |
 | `FR_NO_PRINT` | `FR_printNumF`, `FR_printNumD`, `FR_printNumH`, `FR_numstr` | ~1.3 KB |
 | `FR_NO_WAVES` | `fr_wave_*` (6 shapes), `fr_adsr_*` (ADSR envelope), `FR_HZ2BAM_INC` | ~0.6 KB |
 
-With both guards enabled the core math library (trig, inverse trig, log/exp,
-sqrt, hypot) compiles to ~3.5 KB on x86-64 / clang -Os.
+`FR_CORE_ONLY` is a convenience shorthand that defines both
+`FR_NO_PRINT` and `FR_NO_WAVES` in one step.
 
 ```c
 /* Example: headless sensor node — math only, no print, no audio */
-#define FR_NO_PRINT
-#define FR_NO_WAVES
+#define FR_CORE_ONLY
 #include "FR_math.h"
 ```
 

@@ -113,9 +113,9 @@ static double stats_mean_pct(const stats_t *s) {
 static int g_showpeak = 0;
 
 /* Print one accuracy table row, optionally with peak-error input */
-static void acc_row(const char *name, const stats_t *s, double lsb, const char *note) {
-    printf("| %s | %.1f | %.4f | %.4f | %s",
-           name, s->max_abs_err / lsb, s->max_pct_err, stats_mean_pct(s), note);
+static void acc_row(const char *name, const stats_t *s, const char *note) {
+    printf("| %s | %.4f | %.4f | %s",
+           name, s->max_pct_err, stats_mean_pct(s), note);
     if (g_showpeak)
         printf(" | %.4g", s->worst_pct_input);
     printf(" |\n");
@@ -1784,16 +1784,15 @@ static void section_accuracy_table(void) {
 
     printf("<!-- ACCURACY_TABLE_START -->\n");
     if (g_showpeak) {
-        printf("| Function | Max err (LSB) | Max err (%%) | Avg err (%%) | Note | Peak at |\n");
-        printf("|---|---:|---:|---:|---|---:|\n");
+        printf("| Function | Max err (%%) | Avg err (%%) | Note | Peak at |\n");
+        printf("|---|---:|---:|---|---:|\n");
     } else {
-        printf("| Function | Max err (LSB) | Max err (%%) | Avg err (%%) | Note |\n");
-        printf("|---|---:|---:|---:|---|\n");
+        printf("| Function | Max err (%%) | Avg err (%%) | Note |\n");
+        printf("|---|---:|---:|---|\n");
     }
 
     const int R = 16;
     const double scale = (double)(1L << R);
-    const double lsb = 1.0 / scale;
 
     /* Persistent stats so we can print diagnostics after the table */
     stats_t st_sincos, st_tan, st_asincos, st_atan2;
@@ -1820,7 +1819,7 @@ static void section_accuracy_table(void) {
             stats_add(&st, d, frd(FR_SinI(d), FR_TRIG_OUT_PREC), sin(rad));
             stats_add(&st, d, frd(FR_CosI(d), FR_TRIG_OUT_PREC), cos(rad));
         }
-        acc_row("sin / cos", &st, lsb, "65536-pt sweep + specials");
+        acc_row("sin / cos", &st, "65536-pt sweep + specials");
     }
 
     /* --- tan --- */
@@ -1841,7 +1840,7 @@ static void section_accuracy_table(void) {
             double rad = d * M_PI / 180.0;
             stats_add(&st, d, frd(FR_TanI(d), FR_TRIG_OUT_PREC), tan(rad));
         }
-        acc_row("tan", &st, lsb, "65536-pt sweep (skip poles)");
+        acc_row("tan", &st, "65536-pt sweep (skip poles)");
     }
 
     /* --- asin / acos --- */
@@ -1856,7 +1855,7 @@ static void section_accuracy_table(void) {
             rad = FR_acos((s32)i, 15, R);
             stats_add(&st, xd, frd(rad, R), acos(xd));
         }
-        acc_row("asin / acos", &st, lsb, "65536-pt; sqrt approx near boundary");
+        acc_row("asin / acos", &st, "65536-pt; sqrt approx near boundary");
     }
 
     /* --- atan2 --- */
@@ -1901,7 +1900,7 @@ static void section_accuracy_table(void) {
             s32 r = FR_atan2(fy, fx, R);
             stats_add(&st, specials_deg[si], frd(r, R), atan2(y, x));
         }
-        acc_row("atan2", &st, lsb, "65536x5 radii; asin/acos+hypot_fast8");
+        acc_row("atan2", &st, "65536x5 radii; asin/acos+hypot_fast8");
     }
 
     /* --- atan --- */
@@ -1918,7 +1917,7 @@ static void section_accuracy_table(void) {
             if (fabs(ref) < 0.01) continue;
             stats_add(&st, x, frd(r, R), ref);
         }
-        acc_row("atan", &st, lsb, "20001-pt sweep [-10,10]; via FR_atan2");
+        acc_row("atan", &st, "20001-pt sweep [-10,10]; via FR_atan2");
     }
 
     /* --- sqrt --- */
@@ -1937,7 +1936,7 @@ static void section_accuracy_table(void) {
             s32 r = FR_sqrt(fr, R);
             stats_add(&st, x, frd(r, R), sqrt(x));
         }
-        acc_row("sqrt", &st, lsb, "Round-to-nearest");
+        acc_row("sqrt", &st, "Round-to-nearest");
     }
 
     /* --- log2 --- */
@@ -1958,7 +1957,7 @@ static void section_accuracy_table(void) {
             s32 r = FR_log2(fr, (u16)R, (u16)R);
             stats_add(&st, x, frd(r, R), log2(x));
         }
-        acc_row("log2", &st, lsb, "65-entry mantissa table");
+        acc_row("log2", &st, "65-entry mantissa table");
     }
 
     /* --- pow2 --- */
@@ -1971,7 +1970,7 @@ static void section_accuracy_table(void) {
             double ref = pow(2.0, x);
             stats_add(&st, x, frd(r, R), ref);
         }
-        acc_row("pow2", &st, lsb, "65-entry fraction table");
+        acc_row("pow2", &st, "65-entry fraction table");
     }
 
     /* --- ln, log10 --- */
@@ -1988,7 +1987,7 @@ static void section_accuracy_table(void) {
             ref = log10(inputs[i]);
             stats_add(&st, inputs[i], frd(r, R), ref);
         }
-        acc_row("ln, log10", &st, lsb, "Via FR_MULK28 from log2");
+        acc_row("ln, log10", &st, "Via FR_MULK28 from log2");
     }
 
     /* --- exp (FR_EXP) --- */
@@ -2002,7 +2001,7 @@ static void section_accuracy_table(void) {
             if (ref > 32000.0 || ref < 1e-6) continue; /* skip overflow/underflow */
             stats_add(&st, x, frd(r, R), ref);
         }
-        acc_row("exp", &st, lsb, "FR_MULK28 + FR_pow2");
+        acc_row("exp", &st, "FR_MULK28 + FR_pow2");
     }
 
     /* --- exp_fast (FR_EXP_FAST) --- */
@@ -2016,7 +2015,7 @@ static void section_accuracy_table(void) {
             if (ref > 32000.0 || ref < 1e-6) continue;
             stats_add(&st, x, frd(r, R), ref);
         }
-        acc_row("exp_fast", &st, lsb, "Shift-only scaling");
+        acc_row("exp_fast", &st, "Shift-only scaling");
     }
 
     /* --- pow10 (FR_POW10) --- */
@@ -2030,7 +2029,7 @@ static void section_accuracy_table(void) {
             if (ref > 32000.0 || ref < 1e-6) continue;
             stats_add(&st, x, frd(r, R), ref);
         }
-        acc_row("pow10", &st, lsb, "FR_MULK28 + FR_pow2");
+        acc_row("pow10", &st, "FR_MULK28 + FR_pow2");
     }
 
     /* --- pow10_fast (FR_POW10_FAST) --- */
@@ -2044,7 +2043,7 @@ static void section_accuracy_table(void) {
             if (ref > 32000.0 || ref < 1e-6) continue;
             stats_add(&st, x, frd(r, R), ref);
         }
-        acc_row("pow10_fast", &st, lsb, "Shift-only scaling");
+        acc_row("pow10_fast", &st, "Shift-only scaling");
     }
 
     /* --- hypot (exact) --- */
@@ -2061,7 +2060,7 @@ static void section_accuracy_table(void) {
             double ref = hypot(cases[i].x, cases[i].y);
             stats_add(&st, ref, frd(r, R), ref);
         }
-        acc_row("hypot (exact)", &st, lsb, "64-bit intermediate");
+        acc_row("hypot (exact)", &st, "64-bit intermediate");
     }
 
     /* --- hypot_fast8 (8-seg) --- */
@@ -2078,7 +2077,7 @@ static void section_accuracy_table(void) {
             double ref = hypot(cases[i].x, cases[i].y);
             if (ref > 0) stats_add(&st, ref, frd(r, R), ref);
         }
-        acc_row("hypot_fast8 (8-seg)", &st, lsb, "Shift-only, no multiply");
+        acc_row("hypot_fast8 (8-seg)", &st, "Shift-only, no multiply");
     }
 
     printf("<!-- ACCURACY_TABLE_END -->\n");
