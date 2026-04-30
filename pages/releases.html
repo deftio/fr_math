@@ -159,7 +159,7 @@ with v2.0.0 except where noted.</p>
   <li><code>FR_DIV(x, xr, y, yr)</code> &mdash; fixed-point division with
       64-bit pre-scaling. Now <strong>rounds to nearest</strong>
       (&le; 0.5 LSB error) instead of truncating.
-      <code>FR_DIV_TRUNC</code> preserves the old truncating behaviour
+      <code>FR_DIV_TRUNC</code> preserves the old truncating behavior
       for backward compatibility. <code>FR_DIV32</code> is the 32-bit-only
       truncating path.</li>
   <li><code>FR_MOD(x, xr, y, yr)</code> &mdash; fixed-point modulus.</li>
@@ -190,7 +190,7 @@ with v2.0.0 except where noted.</p>
 <tr><td>FR_atan signature</td><td><code>(input, radix)</code> &rarr; s16 degrees</td><td><code>(input, radix, out_radix)</code> &rarr; s32 radians</td></tr>
 <tr><td>FR_atan2 signature</td><td><code>(y, x)</code> &rarr; s16 degrees</td><td><code>(y, x, out_radix)</code> &rarr; s32 radians</td></tr>
 <tr><td>FR_BAM2RAD</td><td>off by 1024&times; (bug)</td><td>correct</td></tr>
-<tr><td>FR_DIV rounding</td><td>truncates toward zero</td><td>rounds to nearest (use <code>FR_DIV_TRUNC</code> for old behaviour)</td></tr>
+<tr><td>FR_DIV rounding</td><td>truncates toward zero</td><td>rounds to nearest (use <code>FR_DIV_TRUNC</code> for old behavior)</td></tr>
 </tbody>
 </table>
 
@@ -231,7 +231,7 @@ mandatory.</p>
       dropped.</li>
   <li><code>FR_atan</code>, <code>FR_Tan</code>, <code>FR_TanI</code>:
       wiring and overflow fixes.</li>
-  <li><code>FR_printNumD/F/H</code>: fixed undefined behaviour on
+  <li><code>FR_printNumD/F/H</code>: fixed undefined behavior on
       <code>INT_MIN</code> and a broken fraction extraction in the
       v1 code.</li>
   <li><code>FR_DEG2RAD</code> / <code>FR_RAD2DEG</code>: macro bodies
@@ -251,7 +251,7 @@ mandatory.</p>
       <code>FR_BAM2DEG</code>, <code>FR_RAD2BAM</code>,
       <code>FR_BAM2RAD</code>. BAM (16 bits per full circle) is the
       natural integer representation for phase accumulators and
-      gives zero quantisation at the wraparound.</li>
+      gives zero quantization at the wraparound.</li>
   <li><strong>Square root and hypot</strong>: <code>FR_sqrt</code>
       uses a digit-by-digit integer isqrt on <code>int64_t</code>;
       <code>FR_hypot</code> computes <code>sqrt(x&sup2; + y&sup2;)</code>
@@ -313,8 +313,8 @@ mandatory.</p>
 <h3>Test suite</h3>
 
 <p>v2 ships with <strong>42 tests</strong> across six test binaries
-and a characterisation suite (<code>test_tdd.cpp</code>) that pins
-numerical behaviour to bit-exact reference values. Overall line
+and a characterization suite (<code>test_tdd.cpp</code>) that pins
+numerical behavior to bit-exact reference values. Overall line
 coverage is <strong>99%</strong> on the library sources.</p>
 
 <h2>v1.0.3 &mdash; 2025</h2>

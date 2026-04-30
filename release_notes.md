@@ -1,5 +1,51 @@
 # FR_Math Release Notes
 
+## Version 2.0.8 (2026)
+
+Tangent accuracy rewrite and trig rounding fix.
+
+### BAM-native tangent table
+
+- **New `fr_tan_bam(u16 bam)`** function with a dedicated 65-entry octant
+  lookup table (`gFR_TAN_TAB_O` in `FR_trig_table.h`, 130 bytes ROM).
+  First octant uses direct table + lerp; second octant uses the
+  reciprocal identity `tan(x) = 1/tan(90-x)` with one 32-bit division.
+  No 64-bit intermediates anywhere in the tan path.
+- **`FR_TanI`, `FR_Tan`, `fr_tan`** are now thin wrappers over
+  `fr_tan_bam`. The old sin/cos division implementation is removed.
+- Peak error: 0.17% (BAM), 0.60% (deg r7), 0.17% (rad r16).
+
+### Round-to-nearest fix for radian/degree wrappers
+
+- `fr_cos`, `fr_sin`, `fr_tan`, `FR_Cos`, `FR_Sin`, `FR_Tan` now add
+  0.5 LSB (`1 << (radix-1)`) before the `>> radix` shift when converting
+  from radians/degrees to BAM. This rounds to the nearest BAM value
+  instead of truncating, eliminating a systematic 1-BAM rounding error
+  that caused ~1% peak error near zero crossings.
+- Radian-path sin/cos/tan now match BAM-native accuracy (0.16-0.17%
+  peak, was ~1.03%).
+
+### Conversion macro trimming
+
+- `FR_DEG2BAM`: 10 terms (~28 bits) reduced to 7 terms (~18 bits)
+- `FR_RAD2BAM`: 9 terms (~27 bits) reduced to 7 terms (~21 bits)
+- `FR_DEG2RAD`: 3 terms (~13 bits) extended to 5 terms (~17 bits)
+- 18 bits of precision gives 4 bits of headroom over the 14-bit
+  effective BAM resolution of the trig tables. Verified: reverting to
+  the old full-precision macros changes sin/cos peak error by <0.04%.
+
+### Other
+
+- `FR_TRIG_MINVAL` fixed: was `-FR_TRIG_MASK` (-65535), now
+  `-FR_TRIG_MAXVAL` (-2147483647) to properly pair with `FR_TRIG_MAXVAL`
+  for tan saturation clamping.
+- Accuracy table in all docs now shows separate BAM/deg/rad rows for
+  sin/cos and tan, matching the TDD characterization report.
+- `fr_tan_bam` added to function listings across README, docs, HTML
+  pages, and llms.txt.
+
+---
+
 ## Version 2.0.7 (2026)
 
 README restructure, accuracy table cleanup, and expanded cross-compile support.

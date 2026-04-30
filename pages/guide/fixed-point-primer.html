@@ -294,7 +294,7 @@ you want to think of an FR_Math value as a &ldquo;number with a
 radix&rdquo;, think of the radix as a <em>type annotation that lives
 in your source code</em>, not a runtime field.</p>
 
-<h2>Quantisation and loss of precision</h2>
+<h2>Quantization and loss of precision</h2>
 
 <p>Fixing the radix also fixes the smallest representable
 fractional step. At radix <em>N</em>, that step is
@@ -302,7 +302,7 @@ fractional step. At radix <em>N</em>, that step is
 the round-trip into the integer. Any real value smaller than the
 step rounds to zero; any real value landing between two adjacent
 steps rounds to one of them. The difference between the ideal
-value and its stored form is called <strong>quantisation
+value and its stored form is called <strong>quantization
 error</strong>, and it is the main price paid for doing
 fractional math in integer registers.</p>
 
@@ -323,7 +323,7 @@ number to radix 16 and the picture changes:</p>
 error                         =  0.00000153  (&lt; 0.002 %)
 </code></pre>
 
-<p>This behaviour isn&rsquo;t a bug &mdash; it is the same
+<p>This behavior isn&rsquo;t a bug &mdash; it is the same
 compromise IEEE-754 floating point makes with its mantissa. The
 difference is that a float hides the trade-off behind a variable
 exponent, while fixed-point puts it on a ledger that the
@@ -336,7 +336,7 @@ step the application cares about. Any coarser and small signals
 vanish; any finer and integer headroom is being spent for no
 benefit.</p>
 
-<p>A second consequence worth recording: quantisation error
+<p>A second consequence worth recording: quantization error
 <em>accumulates</em>. Summing a million low-radix values sums
 the errors too. Signal-processing pipelines with long feedback
 paths are the main reason to carry accumulators at a wider radix
@@ -406,7 +406,7 @@ per-character output callback <code>f</code>, which makes it
 usable on targets without stdio &mdash; a UART write, an LCD
 glyph pusher, a ring-buffer append. The <code>pad</code>
 parameter sets a minimum field width and <code>prec</code> sets
-the number of fractional digits. Rounding behaviour matches the
+the number of fractional digits. Rounding behavior matches the
 hand-rolled version: excess fractional digits are truncated, and
 negative values are handled without the two&rsquo;s-complement
 trap described above.</p>
@@ -415,7 +415,7 @@ trap described above.</p>
 
 <p>Once you&rsquo;ve chosen a radix, the everyday operations behave
 almost like integer math &mdash; with one or two twists per
-operation that you just have to internalise. Let&rsquo;s walk
+operation that you just have to internalize. Let&rsquo;s walk
 through them.</p>
 
 <h3>Addition and subtraction</h3>
@@ -489,7 +489,7 @@ gives you two spellings of the same idea:</p>
       doesn&rsquo;t fire. <strong>Rounds to nearest</strong> &mdash;
       adds 0.5&nbsp;LSB before the shift.</li>
   <li><code>FR_FixMulSat(a, b, r)</code> &mdash; same shape with
-      the same round-to-nearest behaviour, but also saturates to
+      the same round-to-nearest behavior, but also saturates to
       <code>FR_OVERFLOW_POS</code> /
       <code>FR_OVERFLOW_NEG</code> if the result wouldn&rsquo;t
       fit. Prefer this one by default unless you&rsquo;ve proven
@@ -555,7 +555,7 @@ s32 right = ((s64)a &lt;&lt; 4) / b;
       division truncates toward zero for both signs, so
       <code>&minus;7 / 2 == &minus;3</code> (not
       <code>&minus;4</code>). Fixed-point division inherits
-      that behaviour. Round-to-nearest can be layered on top by
+      that behavior. Round-to-nearest can be layered on top by
       adding <code>b / 2</code> (for a positive numerator) or
       <code>&minus;b / 2</code> (for a negative numerator) to
       the pre-scaled numerator before the divide.</li>
@@ -581,7 +581,7 @@ for you:</p>
   <li>Going to a <em>smaller</em> radix &mdash; the low bits are
       dropped. Precision is lost; headroom grows. This is a good
       place to add <code>&plusmn; (1 &lt;&lt; (from_r - to_r - 1))</code>
-      before the shift if you want round-to-nearest behaviour.</li>
+      before the shift if you want round-to-nearest behavior.</li>
 </ul>
 
 <p>The value is conserved as closely as the destination radix can
@@ -644,7 +644,7 @@ and store the result back into a 32-bit register without thinking
 about it, you will eventually pass a pair of inputs whose product
 doesn&rsquo;t fit, and plain C will hand you wrap-around garbage
 with no warning. A signed 32-bit multiply that overflows is not a
-runtime error in C &mdash; it&rsquo;s undefined behaviour that
+runtime error in C &mdash; it&rsquo;s undefined behavior that
 happens to look like data most of the time.</p>
 
 <p>FR_Math defends against this in three layers, and it&rsquo;s
@@ -743,12 +743,12 @@ you actually need 15 integer bits on that particular signal.</p>
 <h2>A worked example: one-pole IIR low-pass filter</h2>
 
 <p>The sections up to this point have introduced the pieces
-individually: scaling, notation, quantisation, arithmetic,
+individually: scaling, notation, quantization, arithmetic,
 overflow, and radix choice. A small end-to-end example is the
 fastest way to see how those pieces fit together on a real
 pipeline. The filter walked through below is a single-pole
 infinite-impulse-response (IIR) low-pass &mdash; about the
-simplest entry in the DSP catalogue, but realistic enough to
+simplest entry in the DSP catalog, but realistic enough to
 exercise nearly every decision the primer has covered so far.</p>
 
 <p>In floating point, the filter is one line of arithmetic:</p>
@@ -790,7 +790,7 @@ radix can be picked:</p>
       &plusmn;32767 output range. But because it accumulates
       small updates on every sample, it will drift and lose
       precision unless carried at a higher radix than the raw
-      input. This is the quantisation-error accumulation noted
+      input. This is the quantization-error accumulation noted
       earlier in the primer, showing up in practice.</li>
 </ul>
 
@@ -889,7 +889,7 @@ mix of sine tones, step inputs, and silence is enough to
 exercise the relevant paths &mdash; and reports the worst-case
 delta. For a radix-15 one-pole IIR the expected worst-case
 difference is on the order of a few LSB, comparable to the
-inherent quantisation of the 16-bit output format and not
+inherent quantization of the 16-bit output format and not
 audible in normal listening. Anything substantially larger
 indicates a radix choice that is too tight, a rounding mode
 that is drifting, or a missing int64 promotion on the
@@ -973,13 +973,13 @@ you could pass any signed angle into?</strong> Because the
 <code>u16</code> wraparound <em>is</em> the angular modulus &mdash;
 that&rsquo;s the whole feature. Adding two <code>u16</code> BAM
 values automatically gives you the right answer modulo a full
-revolution, with zero quantisation error at the boundary and no
+revolution, with zero quantization error at the boundary and no
 <code>% 65536</code> in sight. If BAM were <code>s32</code>, every
 read of the table would have to explicitly mask off the top bits
 (and handle negative values) before the quadrant extraction
 (<code>bam &gt;&gt; 14</code>) made any sense. You would have traded
 one free operation for two slow ones on every sample, just to get
-back the same behaviour. So instead, the public trig entry points
+back the same behavior. So instead, the public trig entry points
 (<code>FR_CosI</code>, <code>FR_Cos</code>, <code>fr_cos</code>, and
 friends) <em>all</em> take signed angles &mdash; in degrees,
 fixed-radix degrees, or radians &mdash; and only the internal

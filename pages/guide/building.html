@@ -119,7 +119,7 @@ binaries to keep compile times low:</p>
 <tr><td><code>test_log_exp</code></td><td>Log base 2 / ln / log10 and their inverses.</td></tr>
 <tr><td><code>test_2d</code></td><td>2D transforms, determinants, inverses.</td></tr>
 <tr><td><code>test_full_coverage</code></td><td>Dark-corner cases: overflow sentinels, edge radixes, round-trips.</td></tr>
-<tr><td><code>test_tdd</code></td><td>Characterisation tests pinned to bit-exact reference values.</td></tr>
+<tr><td><code>test_tdd</code></td><td>Characterization tests pinned to bit-exact reference values.</td></tr>
 </tbody>
 </table>
 
@@ -137,12 +137,12 @@ make test</code></pre>
 
 <h3>Running the TDD pins after a change</h3>
 
-<p><code>test_tdd.cpp</code> is a characterisation suite. It records
+<p><code>test_tdd.cpp</code> is a characterization suite. It records
 exact bit patterns for a sample of inputs and fails loudly if those
-patterns drift. Any change that modifies the numerical behaviour of
+patterns drift. Any change that modifies the numerical behavior of
 the library will break this suite &mdash; that&rsquo;s the point.</p>
 
-<p>If you <em>intended</em> to change the numerical behaviour (e.g.
+<p>If you <em>intended</em> to change the numerical behavior (e.g.
 you improved a polynomial approximation), update the pinned values in
 <code>tests/test_tdd.cpp</code> and note the change in
 <code>release_notes.md</code> along with any updates to the

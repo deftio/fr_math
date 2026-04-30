@@ -86,8 +86,16 @@ s32 fr_cos_bam(u16 bam)
 	d  = lo - hi;                                      /* >= 0: cos monotonic   */
 	v  = lo - (((d * (s32)frac) + FR_TRIG_FRAC_HALF) >> FR_TRIG_FRAC_BITS);
 
-	/* Shift s0.15 → s15.16 */
-	v <<= 1;
+	if (v < 0x40) {
+		/* Near zero crossing: redo interpolation with 3 extra bits of
+		 * precision to reduce rounding error when the result is small. */
+		s32 lo3 = (s32)gFR_COS_TAB_Q[idx] << 3;
+		s32 d3  = lo3 - ((s32)gFR_COS_TAB_Q[idx + 1] << 3);
+		v = lo3 - (((d3 * (s32)frac) + FR_TRIG_FRAC_HALF) >> FR_TRIG_FRAC_BITS);
+		v = (v + 2) >> 2;               /* s0.18 → s15.16 with rounding */
+	} else {
+		v <<= 1;                         /* s0.15 → s15.16              */
+	}
 
 	return (q == 1 || q == 2) ? -v : v;
 }
@@ -100,19 +108,6 @@ s32 fr_sin_bam(u16 bam)
 	return fr_cos_bam((u16)(bam - FR_BAM_QUADRANT));
 }
 
-/* Convert radians at given radix to BAM with rounding.
- * One radian = 65536 / (2*pi) ≈ 10430.378 BAM units.
- * We use the more precise scaled constant 10430378 / 1000 to keep error
- * bounded across a wide range of radians.
- */
-static u16 fr_rad_to_bam(s32 rad, u16 radix)
-{
-	int64_t scaled = ((int64_t)rad * 10430378LL) / 1000;
-	if (radix > 0)
-		scaled >>= radix;
-	return (u16)((u32)scaled & 0xffff);
-}
-
 s32 fr_cos(s32 rad, u16 radix)
 {
 	return fr_cos_bam(fr_rad_to_bam(rad, radix));
@@ -123,70 +118,131 @@ s32 fr_sin(s32 rad, u16 radix)
 	return fr_sin_bam(fr_rad_to_bam(rad, radix));
 }
 
-/* fr_tan: returns sin/cos at s15.16 (radix 16). Saturates if cos is near zero. */
+/*=======================================================
+ * BAM-native tangent: fr_tan_bam
+ *
+ * Uses a 65-entry octant table (gFR_TAN_TAB_O) for the first octant
+ * [0, 45°] and the reciprocal identity tan(x) = 1/tan(90°-x) for the
+ * second octant (45°, 90°). Result is s15.16 with saturation at the
+ * poles.
+ *
+ * No 64-bit intermediates. One 32-bit division only in the >45° path.
+ */
+s32 fr_tan_bam(u16 bam)
+{
+	u32 q   = ((u32)bam >> 14) & 0x3;          /* quadrant (top 2 bits) */
+	u32 inq = (u32)bam & 0x3FFFu;              /* in-quadrant (14 bits) */
+	s32 sign = 1;
+	u32 idx, frac;
+	s32 lo, hi, raw;
+
+	/* Exact zeros: bam lands exactly on 0° or 180° */
+	if (inq == 0 && (q == 0 || q == 2))
+		return 0;
+
+	/* Poles: bam lands exactly on 90° or 270° */
+	if (inq == 0 && (q == 1 || q == 3))
+		return (q == 1) ? FR_TRIG_MAXVAL : -FR_TRIG_MAXVAL;
+
+	/* Q1 (90°..180°) and Q3 (270°..360°): reflect and negate */
+	if (q == 1 || q == 3) {
+		inq = 0x4000u - inq;
+		sign = -1;
+	}
+
+	/* Now inq is in (0, 0x4000) = (0°, 90°) exclusive.
+	 * Split into first octant [0, 45°) and second octant [45°, 90°). */
+	if (inq < FR_TAN_OCTANT) {
+		/* First octant: direct table lookup + lerp.
+		 * inq is 13 bits; top FR_TAN_TABLE_BITS index the table,
+		 * bottom FR_TAN_FRAC_BITS drive interpolation. */
+		idx  = inq >> FR_TAN_FRAC_BITS;
+		frac = inq &  FR_TAN_FRAC_MASK;
+		lo = (s32)gFR_TAN_TAB_O[idx];
+		hi = (s32)gFR_TAN_TAB_O[idx + 1];
+		raw = lo + (((hi - lo) * (s32)frac + FR_TAN_FRAC_HALF) >> FR_TAN_FRAC_BITS);
+		/* raw is in u0.15. Shift to s15.16. */
+		raw <<= 1;
+	} else {
+		/* Second octant: tan(x) = 1 / tan(90° - x).
+		 * complement is in (0, 0x2000] = (0°, 45°]. */
+		u32 comp = 0x4000u - inq;
+
+		/* Look up tan(complement) from the table */
+		idx  = comp >> FR_TAN_FRAC_BITS;
+		frac = comp &  FR_TAN_FRAC_MASK;
+		lo = (s32)gFR_TAN_TAB_O[idx];
+		hi = (s32)gFR_TAN_TAB_O[idx + 1];
+		raw = lo + (((hi - lo) * (s32)frac + FR_TAN_FRAC_HALF) >> FR_TAN_FRAC_BITS);
+
+		/* raw is tan(complement) in u0.15. Compute 1/raw in s15.16.
+		 * 1.0 in s15.16 = 0x10000. We want (1<<16) / (raw_in_0.15)
+		 * = (1<<16) * (1<<15) / raw_raw = (1<<31) / raw.
+		 * Use unsigned to avoid overflow: 0x80000000 / raw. */
+		if (raw < 2) {
+			/* Near pole: saturate */
+			raw = FR_TRIG_MAXVAL;
+		} else {
+			raw = (s32)(0x80000000u / (u32)raw);
+		}
+	}
+
+	return (sign < 0) ? -raw : raw;
+}
+
+/* fr_tan: returns tan at s15.16 (radix 16). Uses BAM-native table.
+ * At exact poles, fr_tan_bam's sign convention is based on BAM quadrant
+ * which loses the original approach direction. Fix up: if the result
+ * saturates, the sign should match the sign of the radian input. */
 s32 fr_tan(s32 rad, u16 radix)
 {
-	u16 bam = fr_rad_to_bam(rad, radix);
-	s32 s   = fr_sin_bam(bam);
-	s32 c   = fr_cos_bam(bam);
-	if (c == 0)
-		return (s >= 0) ? FR_TRIG_MAXVAL : -FR_TRIG_MAXVAL;
-	return (s32)(((int64_t)s << FR_TRIG_OUT_PREC) / c);
+	s32 result = fr_tan_bam(fr_rad_to_bam(rad, radix));
+	if (result == FR_TRIG_MAXVAL && rad < 0)
+		return -FR_TRIG_MAXVAL;
+	if (result == -FR_TRIG_MAXVAL && rad > 0)
+		return FR_TRIG_MAXVAL;
+	return result;
 }
 
 /*=======================================================
  * Integer-degree and fixed-radix-degree trig wrappers
- *
- * FR_CosI / FR_SinI are macros in the header (zero cost). The fixed-radix
- * variants here convert s.r degrees to BAM in one shot using a precomputed
- * reciprocal of 360 to avoid division on multiply-poor cores like 8051.
- *
- * Math: bam = deg * (65536 / 360) = deg * 182.0444...
- * In s.16 fixed point: 65536 / 360 = 0xB60B (rounded). So
- *   bam_u16 = (deg_s.r * 0xB60B) >> r
- * gives bam in u16 BAM units. The constant 0xB60B contains the divide by
- * 360 baked in; the shift `>> r` strips the input radix.
  */
-static u16 fr_deg_radix_to_bam(s16 deg, u16 radix)
+s32 FR_Cos(s32 deg, u16 radix)
 {
-	/* 0xB60B ≈ (65536/360) * 256 — the ×256 prescale keeps 32-bit math
-	 * friendly to 8051-class MCUs.  We must shift out both the input
-	 * fraction bits (radix) AND the 8-bit prescale, hence radix + 8.
-	 * The +half term rounds to nearest, matching FR_DEG2BAM behaviour.
-	 */
-	s32  v     = (s32)deg * 0xB60BL;
-	u16  shift = radix + 8;
-	return (u16)((u32)((v + (1L << (shift - 1))) >> shift) & 0xffff);
+	u16 bam = (radix == 0) ? FR_DEG2BAM_I(deg) : (u16)((FR_DEG2BAM(deg) + (1 << (radix - 1))) >> radix);
+	return fr_cos_bam(bam);
 }
 
-s32 FR_Cos(s16 deg, u16 radix)
+s32 FR_Sin(s32 deg, u16 radix)
 {
-	return fr_cos_bam(fr_deg_radix_to_bam(deg, radix));
+	u16 bam = (radix == 0) ? FR_DEG2BAM_I(deg) : (u16)((FR_DEG2BAM(deg) + (1 << (radix - 1))) >> radix);
+	return fr_sin_bam(bam);
 }
 
-s32 FR_Sin(s16 deg, u16 radix)
+s32 FR_TanI(s32 deg)
 {
-	return fr_sin_bam(fr_deg_radix_to_bam(deg, radix));
+	/* Exact pole: deg mod 180 == ±90. Sign matches input sign
+	 * (positive deg → +MAXVAL, negative deg → -MAXVAL). */
+	s32 rem = deg % 180;
+	if (rem == 90 || rem == -90)
+		return (deg > 0) ? FR_TRIG_MAXVAL : -FR_TRIG_MAXVAL;
+	return fr_tan_bam(FR_DEG2BAM_I(deg));
 }
 
-s32 FR_TanI(s16 deg)
+s32 FR_Tan(s32 deg, u16 radix)
 {
-	u16 bam = FR_DEG2BAM(deg);
-	s32 s   = fr_sin_bam(bam);
-	s32 c   = fr_cos_bam(bam);
-	if (c == 0)
-		return (s >= 0) ? FR_TRIG_MAXVAL : -FR_TRIG_MAXVAL;
-	return (s32)(((int64_t)s << FR_TRIG_OUT_PREC) / c);
-}
-
-s32 FR_Tan(s16 deg, u16 radix)
-{
-	u16 bam = fr_deg_radix_to_bam(deg, radix);
-	s32 s   = fr_sin_bam(bam);
-	s32 c   = fr_cos_bam(bam);
-	if (c == 0)
-		return (s >= 0) ? FR_TRIG_MAXVAL : -FR_TRIG_MAXVAL;
-	return (s32)(((int64_t)s << FR_TRIG_OUT_PREC) / c);
+	/* Check for exact integer poles before using the shift-only DEG2BAM
+	 * macro, which can map to the wrong BAM quadrant for large angles.
+	 * Only trigger when fractional bits are zero (exact pole). */
+	s32 frac_mask = (1 << radix) - 1;
+	if ((deg & frac_mask) == 0) {
+		s32 deg_int = deg >> radix;
+		s32 rem = deg_int % 180;
+		if (rem == 90 || rem == -90)
+			return (deg >= 0) ? FR_TRIG_MAXVAL : -FR_TRIG_MAXVAL;
+	}
+	u16 bam = (radix == 0) ? FR_DEG2BAM_I(deg) : (u16)((FR_DEG2BAM(deg) + (1 << (radix - 1))) >> radix);
+	return fr_tan_bam(bam);
 }
 
 /*=======================================================
@@ -275,7 +331,7 @@ s32 FR_acos(s32 input, u16 radix, u16 out_radix)
 	{
 		s32 one = (s32)1 << radix;
 		if (input_abs >= one)
-			return sign ? FR_BAM2RAD(FR_BAM_HALF, out_radix) : 0;
+			return sign ? FR_CHRDX(FR_kPI, FR_kPREC, out_radix) : 0;
 	}
 
 	v = FR_CHRDX(input_abs, radix, FR_TRIG_PREC); /* |input| at s0.15 */
@@ -297,7 +353,7 @@ s32 FR_acos(s32 input, u16 radix, u16 out_radix)
 		s32 rad_native  = FR_sqrt(two_omx, radix);   /* radians at caller radix */
 		s32 rad_out     = FR_CHRDX(rad_native, radix, out_radix);
 		if (sign)
-			rad_out = FR_BAM2RAD(FR_BAM_HALF, out_radix) - rad_out;
+			rad_out = FR_CHRDX(FR_kPI, FR_kPREC, out_radix) - rad_out;
 		return rad_out;
 	}
 
@@ -362,7 +418,7 @@ s32 FR_acos(s32 input, u16 radix, u16 out_radix)
 		u16 bam = (u16)(((u32)idx << FR_TRIG_FRAC_BITS) + (u32)frac);
 		if (sign)
 			bam = (u16)(FR_BAM_HALF - bam);  /* mirror: pi - angle */
-		return FR_BAM2RAD(bam, out_radix);
+		return FR_CHRDX(FR_Q2RAD(bam), 14, out_radix);
 	}
 }
 
@@ -370,7 +426,7 @@ s32 FR_acos(s32 input, u16 radix, u16 out_radix)
 s32 FR_asin(s32 input, u16 radix, u16 out_radix)
 {
 	/* asin(x) = pi/2 - acos(x) */
-	s32 half_pi = FR_BAM2RAD(FR_BAM_QUADRANT, out_radix);
+	s32 half_pi = FR_CHRDX(FR_kQ2RAD, FR_kPREC, out_radix);
 	return half_pi - FR_acos(input, radix, out_radix);
 }
 
@@ -394,12 +450,12 @@ s32 FR_atan2(s32 y, s32 x, u16 out_radix)
 	/* Axis cases — exact angles, no divide. */
 	if (x == 0)
 	{
-		if (y > 0) return  FR_BAM2RAD(FR_BAM_QUADRANT, out_radix);     /*  pi/2 */
-		if (y < 0) return -FR_BAM2RAD(FR_BAM_QUADRANT, out_radix);     /* -pi/2 */
+		if (y > 0) return  FR_CHRDX(FR_kQ2RAD, FR_kPREC, out_radix);     /*  pi/2 */
+		if (y < 0) return -FR_CHRDX(FR_kQ2RAD, FR_kPREC, out_radix);     /* -pi/2 */
 		return 0;
 	}
 	if (y == 0)
-		return (x > 0) ? 0 : FR_BAM2RAD(FR_BAM_HALF, out_radix);      /* 0 or pi */
+		return (x > 0) ? 0 : FR_CHRDX(FR_kPI, FR_kPREC, out_radix);      /* 0 or pi */
 
 	ax = (x < 0) ? -x : x;
 	ay = (y < 0) ? -y : y;
@@ -443,7 +499,7 @@ s32 FR_atan2(s32 y, s32 x, u16 out_radix)
 		if (cos_val < FR_ATAN2_SMALL)
 		{
 			/* angle ≈ pi/2 - cos_val (symmetric small-angle identity) */
-			s32 half_pi = FR_BAM2RAD(FR_BAM_QUADRANT, out_radix);
+			s32 half_pi = FR_CHRDX(FR_kQ2RAD, FR_kPREC, out_radix);
 			q1_angle = half_pi - FR_CHRDX(cos_val, FR_TRIG_PREC, out_radix);
 		}
 		else
@@ -453,7 +509,7 @@ s32 FR_atan2(s32 y, s32 x, u16 out_radix)
 	/* Apply quadrant from signs of x and y.
 	 * q1_angle is always positive [0..pi/2]. */
 	{
-		s32 pi = FR_BAM2RAD(FR_BAM_HALF, out_radix);
+		s32 pi = FR_CHRDX(FR_kPI, FR_kPREC, out_radix);
 		if (x > 0)
 			return (y > 0) ? q1_angle : -q1_angle;
 		/* x < 0: mirror across y-axis */

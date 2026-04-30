@@ -284,7 +284,7 @@ coverage across the library sources.
   conventions work.
 - **[API Reference](api-reference.md)**
   — per-symbol inputs, outputs, precision, and saturation
-  behaviour.
+  behavior.
 - **[Examples](examples.md)** —
   runnable snippets for common tasks.
 - **[Building & Testing](building.md)**

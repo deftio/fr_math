@@ -1,7 +1,7 @@
 # API Reference
 
 Every public symbol, grouped by topic. Each entry lists the radix
-convention, the precision, and the error / saturation behaviour. All
+convention, the precision, and the error / saturation behavior. All
 types are from `FR_defs.h`: `s8 s16 s32 s64` for
 signed and `u8 u16 u32 u64` for unsigned integers (these are
 aliases for the `<stdint.h>` types).
@@ -12,7 +12,7 @@ Most entries list **inputs**, **output**,
 **radix handling** and **precision**
 separately, because in a mixed-radix library those four things are
 what actually lets you plan an arithmetic pipeline without hidden
-quantisation. If you are new to fixed-point, the
+quantization. If you are new to fixed-point, the
 [Fixed-Point Primer](fixed-point-primer.md) explains the
 notation first; come back here once you're comfortable reading
 `s15.16` and `s0.15`.
@@ -118,7 +118,7 @@ so call sites read as intent:
 | --- | --- | --- | --- |
 | `I2FR(i, r)` | `i`: integer; `r`: target radix in bits | `s32` at radix `r` | `(i) << (r)`. No bounds check. Use when you know `|i|` fits in `32 − r` signed bits. |
 | `FR2I(x, r)` | `x`: fixed-point at radix `r` | integer | `(x) >> (r)`. Truncates toward **−∞** (C's signed shift). `FR2I(-1, 4) == -1`, not 0. |
-| `FR_INT(x, r)` | `x`: fixed-point at radix `r` | integer | Truncates toward **zero**. `FR_INT(-1, 4) == 0`. Useful when you want C's normal integer-cast behaviour. |
+| `FR_INT(x, r)` | `x`: fixed-point at radix `r` | integer | Truncates toward **zero**. `FR_INT(-1, 4) == 0`. Useful when you want C's normal integer-cast behavior. |
 | `FR_NUM(i, f, d, r)` | `i`: integer part; `f`: decimal fraction digits; `d`: number of digits in `f`; `r`: target radix | `s32` at radix `r` | Build a fixed-point literal from decimal. `FR_NUM(12, 34, 2, 10)` is 12.34 at s.10. Rounds toward zero; for round-to-nearest, add half an LSB at the call site. |
 | `FR_numstr(s, r)` | `s`: null-terminated decimal string (e.g. `"3.14159"`); `r`: target radix | `s32` at radix `r` | Runtime string-to-fixed-point parser (inverse of `FR_printNumF`). Handles signs, leading whitespace, and leading-zero fractions like `"0.05"`. Up to 9 fractional digits. No malloc, no strtod, no libm. Returns 0 for NULL or empty input. |
 | `FR2D(x, r)` | `x`: fixed-point at radix `r` | `double` | Debug-only: `x / (double)(1 << r)`. Pulls in `libm` — compile it out of release builds. |
@@ -157,13 +157,13 @@ so call sites read as intent:
 | `FR_MAX(a, b)` | Two values of the same type | The larger of the two | Evaluates each argument once. |
 | `FR_CLAMP(x, lo, hi)` | `x`: value; `lo`, `hi`: bounds | `x` clamped to `[lo, hi]` | Equivalent to `FR_MIN(FR_MAX(x, lo), hi)`. |
 | `FR_DIV(x, xr, y, yr)` | `x`: numerator at radix `xr`; `y`: denominator at radix `yr` | `s32` at radix `xr` | Pre-scales the numerator in a 64-bit intermediate and **rounds to nearest** (adds half the divisor before truncating, with correct sign handling). Worst-case error ≤ 0.5 LSB. Works correctly across the full Q16.16 range. |
-| `FR_DIV_TRUNC(x, xr, y, yr)` | same as `FR_DIV` | `s32` at radix `xr` | `((s64)(x) << (yr)) / (s32)(y)`. Truncating division (rounds toward zero). This was the behaviour of `FR_DIV` in v2.0.0; use it when you need exact backward compatibility or when the truncation bias is acceptable. |
+| `FR_DIV_TRUNC(x, xr, y, yr)` | same as `FR_DIV` | `s32` at radix `xr` | `((s64)(x) << (yr)) / (s32)(y)`. Truncating division (rounds toward zero). This was the behavior of `FR_DIV` in v2.0.0; use it when you need exact backward compatibility or when the truncation bias is acceptable. |
 | `FR_DIV32(x, xr, y, yr)` | same as `FR_DIV` | `s32` at radix `xr` | `((s32)(x) << (yr)) / (s32)(y)`. 32-bit-only truncating path — requires `|x| < 2^(31 − yr)` to avoid overflow in the intermediate shift. Use on tiny targets (PIC, AVR, 8051) where 64-bit ops pull in unwanted compiler runtime code. |
 | `FR_MOD(x, y)` | `x`, `y`: same radix | remainder at the same radix | `(x) % (y)`. Standard C remainder semantics. |
 
 ## Arithmetic
 
-FR_Math splits arithmetic into three flavours. The
+FR_Math splits arithmetic into three flavors. The
 **macros** (`FR_ADD`, `FR_SUB`)
 are mixed-radix, inline, and wrap on overflow. The **s.16
 helper functions** (`FR_FixMuls`,
@@ -346,7 +346,7 @@ Four shifts plus three adds — cheap on an 8051, AVR, or any
 hand-written DSP inner loop — and the answer has at most
 ±0.5 LSB of truncation error. The same discipline applies to
 the other direction: in `FR_DEG2BAM` the divide-by-360 is
-a compile-time constant, so any optimising compiler folds it into a
+a compile-time constant, so any optimizing compiler folds it into a
 multiply-by-reciprocal (or, on a weaker toolchain, a runtime call
 that you can inline yourself).
 

@@ -60,8 +60,43 @@ static const short gFR_COS_TAB_Q[FR_TRIG_TABLE_SIZE] = {
     12539, 12167, 11793, 11417, 11039, 10659, 10278,  9896,
      9512,  9126,  8739,  8351,  7962,  7571,  7179,  6786,
      6393,  5998,  5602,  5205,  4808,  4410,  4011,  3612,
-     3212,  2811,  2410,  2009,  1608,  1206,   804,   402,
+     3212,  2811,  2410,  2009,  1608,  1206,   804,   401,
         0
+};
+
+/* ---- Tangent table: 65 entries covering one octant [0, pi/4] ----
+ *
+ * gFR_TAN_TAB_O[i] = round(tan(i * pi/4 / 64) * 32768)  for i = 0..64
+ *
+ * Output format: u0.15 stored as u16 (unsigned, 15 fractional bits).
+ * Entry[64] = 32768 (tan 45° = 1.0 exactly) requires u16; it does not
+ * fit in s16.
+ *
+ * The table is used by fr_tan_bam() in FR_math.c. The first-octant
+ * lookup gives a raw result in u0.15 which is then shifted to s15.16.
+ * Second-octant (>45°) uses the reciprocal identity:
+ *   tan(pi/2 - x) = 1/tan(x)
+ *
+ * 130 bytes ROM.
+ */
+#define FR_TAN_TABLE_BITS  (6)
+#define FR_TAN_TABLE_SIZE  ((1 << FR_TAN_TABLE_BITS) + 1)  /* 65 */
+#define FR_TAN_FRAC_BITS   (13 - FR_TAN_TABLE_BITS)        /* 7 */
+#define FR_TAN_FRAC_MAX    (1 << FR_TAN_FRAC_BITS)         /* 128 */
+#define FR_TAN_FRAC_MASK   (FR_TAN_FRAC_MAX - 1)           /* 0x7F */
+#define FR_TAN_FRAC_HALF   (FR_TAN_FRAC_MAX >> 1)          /* 64 */
+#define FR_TAN_OCTANT      (1 << 13)                        /* 8192 */
+
+static const unsigned short gFR_TAN_TAB_O[FR_TAN_TABLE_SIZE] = {
+        0,   402,   804,  1207,  1610,  2013,  2417,  2822,
+     3227,  3634,  4042,  4450,  4861,  5272,  5686,  6101,
+     6518,  6937,  7358,  7782,  8208,  8637,  9068,  9503,
+     9940, 10381, 10825, 11273, 11725, 12180, 12640, 13104,
+    13573, 14046, 14525, 15009, 15498, 15993, 16494, 17001,
+    17515, 18035, 18563, 19098, 19640, 20191, 20750, 21318,
+    21895, 22481, 23078, 23685, 24302, 24931, 25572, 26226,
+    26892, 27572, 28266, 28975, 29699, 30440, 31198, 31973,
+    32768
 };
 
 #ifdef __cplusplus

@@ -425,7 +425,7 @@ The `XFormPtI16` fast path takes `s16`
 coordinates in and writes `s16` out. It's a tiny
 bit lossier than the `s32` form, but it sidesteps all
 the fixed-point conversion on the hot path — useful inside
-the inner loop of a scanline rasteriser where you already know
+the inner loop of a scanline rasterizer where you already know
 your coordinates fit in 16 bits.
 
 *Caveats:* the output is narrowed to `s16`,
@@ -511,7 +511,7 @@ int main(void)
         FR_printNumF(buf_putc, val, 16, 0, 8);
         printf("    16     16  0x%08x  %s\n", (unsigned)val, buf);
         /* Expected: "3.14158630" — good through 5 digits, then
-         * quantisation noise appears.  This is the sweet spot for
+         * quantization noise appears.  This is the sweet spot for
          * most embedded work: 16 bits of fraction fits in an s32
          * with 15 bits of integer range (±32767). */
     }
@@ -562,7 +562,7 @@ at radix 8 the value is `0x324` — only 10 significant bits —
 so the decimal rendering can only faithfully reproduce about two
 fractional digits. At radix 24 the value is `0x03243F6A` — 26
 significant bits — and seven decimal digits survive. The
-eighth digit (`5` vs `4`) shows the quantisation floor: `2^−24 ≈
+eighth digit (`5` vs `4`) shows the quantization floor: `2^−24 ≈
 6 × 10^−8`, so the last digit is always uncertain.
 
 ## See also

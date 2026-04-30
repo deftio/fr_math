@@ -27,7 +27,7 @@ Common radix choices:
 - `src/FR_math.h`   — all public declarations, macros, constants
 - `src/FR_math.c`   — all function implementations (~42KB)
 - `src/FR_defs.h`   — type aliases: s8, s16, s32, u8, u16, u32
-- `src/FR_trig_table.h` — precomputed sine table (256 entries)
+- `src/FR_trig_table.h` — precomputed cosine quadrant table (129 entries) + tangent octant table (65 entries)
 - `src/FR_math_2D.h` / `src/FR_math_2D.cpp` — optional 2D transform class (C++)
 
 ## Types
@@ -82,6 +82,7 @@ s32 fr_tan(s32 rad, u16 radix);
 // BAM (Binary Angle Measurement) — u16 where 65536 = 360 degrees:
 s32 fr_cos_bam(u16 bam);
 s32 fr_sin_bam(u16 bam);
+s32 fr_tan_bam(u16 bam);
 
 // Degree API at any radix:
 s32 FR_Cos(s16 deg, u16 radix);

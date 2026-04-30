@@ -35,11 +35,15 @@ number of fractional bits available. All functions support radix 0 to 30.
 <!-- ACCURACY_TABLE_START -->
 | Function | Max err (%) | Avg err (%) | Note |
 |---|---:|---:|---|
-| sin / cos | 0.7169 | 0.0100 | 65536-pt sweep + specials |
-| tan | 0.7118 | 0.0162 | 65536-pt sweep (skip poles) |
-| asin / acos | 0.7025 | 0.0105 | 65536-pt; sqrt approx near boundary |
-| atan2 | 0.4953 | 0.0268 | 65536x5 radii; asin/acos+hypot_fast8 |
-| atan | 0.2985 | 0.0159 | 20001-pt sweep [-10,10]; via FR_atan2 |
+| sin/cos (BAM) | 0.1646 | 0.0058 | 65536 BAM; 129-entry quadrant table |
+| sin/cos (deg) | 0.5909 | 0.0091 | 65536-pt deg r7 + specials |
+| sin/cos (rad) | 0.1646 | 0.0059 | 65536-pt rad r16 |
+| tan (BAM) | 0.1704 | 0.0065 | 65536 BAM; 65-entry octant table |
+| tan (deg) | 0.6000 | 0.0140 | 65536-pt deg r7 + specials |
+| tan (rad) | 0.1704 | 0.0065 | 65536-pt rad r16 |
+| asin / acos | 1.9776 | 0.0308 | 65536-pt; sqrt approx near boundary |
+| atan2 | 0.4953 | 0.0238 | 65536x5 radii; asin/acos+hypot_fast8 |
+| atan | 0.2985 | 0.0153 | 20001-pt sweep [-10,10]; via FR_atan2 |
 | sqrt | 0.0003 | 0.0000 | Round-to-nearest |
 | log2 | 0.2479 | 0.0045 | 65-entry mantissa table |
 | pow2 | 0.1373 | 0.0057 | 65-entry fraction table |
@@ -59,7 +63,7 @@ number of fractional bits available. All functions support radix 0 to 30.
 | Arithmetic | `FR_ADD`, `FR_SUB`, `FR_DIV`, `FR_DIV32`, `FR_MOD`, `FR_FixMuls`, `FR_FixMulSat`, `FR_CHRDX` |
 | Utility | `FR_MIN`, `FR_MAX`, `FR_CLAMP`, `FR_ABS`, `FR_SGN` |
 | Trig (integer deg) | `FR_Sin`, `FR_Cos`, `FR_Tan`, `FR_SinI`, `FR_CosI`, `FR_TanI` |
-| Trig (radian/BAM) | `fr_sin`, `fr_cos`, `fr_tan`, `fr_sin_bam`, `fr_cos_bam`, `fr_sin_deg`, `fr_cos_deg` |
+| Trig (radian/BAM) | `fr_sin`, `fr_cos`, `fr_tan`, `fr_sin_bam`, `fr_cos_bam`, `fr_tan_bam`, `fr_sin_deg`, `fr_cos_deg` |
 | Inverse trig | `FR_atan`, `FR_atan2`, `FR_asin`, `FR_acos` |
 | Log / exp | `FR_log2`, `FR_ln`, `FR_log10`, `FR_pow2`, `FR_EXP`, `FR_POW10`, `FR_EXP_FAST`, `FR_POW10_FAST`, `FR_MULK28` |
 | Roots | `FR_sqrt`, `FR_hypot`, `FR_hypot_fast8` |

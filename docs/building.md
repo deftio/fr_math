@@ -101,7 +101,7 @@ binaries to keep compile times low:
 | `test_log_exp` | Log base 2 / ln / log10 and their inverses. |
 | `test_2d` | 2D transforms, determinants, inverses. |
 | `test_full_coverage` | Dark-corner cases: overflow sentinels, edge radixes, round-trips. |
-| `test_tdd` | Characterisation tests pinned to bit-exact reference values. |
+| `test_tdd` | Characterization tests pinned to bit-exact reference values. |
 
 As of v2.0.0 the suite contains **42 tests** across
 those binaries and covers **99%** of the library source.
@@ -119,12 +119,12 @@ make test
 
 ### Running the TDD pins after a change
 
-`test_tdd.cpp` is a characterisation suite. It records
+`test_tdd.cpp` is a characterization suite. It records
 exact bit patterns for a sample of inputs and fails loudly if those
-patterns drift. Any change that modifies the numerical behaviour of
+patterns drift. Any change that modifies the numerical behavior of
 the library will break this suite — that's the point.
 
-If you *intended* to change the numerical behaviour (e.g.
+If you *intended* to change the numerical behavior (e.g.
 you improved a polynomial approximation), update the pinned values in
 `tests/test_tdd.cpp` and note the change in
 `release_notes.md` along with any updates to the

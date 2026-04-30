@@ -5,7 +5,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>API Reference — FR_Math</title>
-  <meta name="description" content="Complete FR_Math API reference: inputs, outputs, radix, precision, and saturation behaviour for every public symbol.">
+  <meta name="description" content="Complete FR_Math API reference: inputs, outputs, radix, precision, and saturation behavior for every public symbol.">
   <link rel="stylesheet" href="../assets/main.css">
 </head>
 <body>
@@ -18,7 +18,7 @@
 <h1>API Reference</h1>
 
 <p>Every public symbol, grouped by topic. Each entry lists the radix
-convention, the precision, and the error / saturation behaviour. All
+convention, the precision, and the error / saturation behavior. All
 types are from <code>FR_defs.h</code>: <code>s8 s16 s32 s64</code> for
 signed and <code>u8 u16 u32 u64</code> for unsigned integers (these are
 aliases for the <code>&lt;stdint.h&gt;</code> types).</p>
@@ -29,7 +29,7 @@ aliases for the <code>&lt;stdint.h&gt;</code> types).</p>
 <strong>radix handling</strong> and <strong>precision</strong>
 separately, because in a mixed-radix library those four things are
 what actually lets you plan an arithmetic pipeline without hidden
-quantisation. If you are new to fixed-point, the
+quantization. If you are new to fixed-point, the
 <a href="fixed-point-primer.html">Fixed-Point Primer</a> explains the
 notation first; come back here once you&rsquo;re comfortable reading
 <code>s15.16</code> and <code>s0.15</code>.</p>
@@ -162,7 +162,7 @@ so call sites read as intent:</p>
   <td><code>FR_INT(x, r)</code></td>
   <td><code>x</code>: fixed-point at radix <code>r</code></td>
   <td>integer</td>
-  <td>Truncates toward <strong>zero</strong>. <code>FR_INT(-1, 4) == 0</code>. Useful when you want C&rsquo;s normal integer-cast behaviour.</td>
+  <td>Truncates toward <strong>zero</strong>. <code>FR_INT(-1, 4) == 0</code>. Useful when you want C&rsquo;s normal integer-cast behavior.</td>
 </tr>
 <tr>
   <td><code>FR_NUM(i, f, d, r)</code></td>
@@ -316,7 +316,7 @@ so call sites read as intent:</p>
   <td><code>FR_DIV_TRUNC(x, xr, y, yr)</code></td>
   <td><code>x</code>: numerator at radix <code>xr</code>; <code>y</code>: denominator at radix <code>yr</code></td>
   <td><code>((s64)(x) &lt;&lt; (yr)) / (s32)(y)</code></td>
-  <td>Truncating division (rounds toward zero). This was the behaviour of <code>FR_DIV</code> in v2.0.0; use it when you need exact backward compatibility or when the truncation bias is acceptable.</td>
+  <td>Truncating division (rounds toward zero). This was the behavior of <code>FR_DIV</code> in v2.0.0; use it when you need exact backward compatibility or when the truncation bias is acceptable.</td>
 </tr>
 <tr>
   <td><code>FR_DIV32(x, xr, y, yr)</code></td>
@@ -335,7 +335,7 @@ so call sites read as intent:</p>
 
 <h2>Arithmetic</h2>
 
-<p>FR_Math splits arithmetic into three flavours. The
+<p>FR_Math splits arithmetic into three flavors. The
 <strong>macros</strong> (<code>FR_ADD</code>, <code>FR_SUB</code>)
 are mixed-radix, inline, and wrap on overflow. The <strong>s.16
 helper functions</strong> (<code>FR_FixMuls</code>,
@@ -564,7 +564,7 @@ s16 deg = (s16)(x &gt;&gt; 13);
 hand-written DSP inner loop &mdash; and the answer has at most
 &plusmn;0.5 LSB of truncation error. The same discipline applies to
 the other direction: in <code>FR_DEG2BAM</code> the divide-by-360 is
-a compile-time constant, so any optimising compiler folds it into a
+a compile-time constant, so any optimizing compiler folds it into a
 multiply-by-reciprocal (or, on a weaker toolchain, a runtime call
 that you can inline yourself).</p>
 
