@@ -161,8 +161,17 @@ s32 fr_tan_bam(u16 bam)
 		lo = (s32)gFR_TAN_TAB_O[idx];
 		hi = (s32)gFR_TAN_TAB_O[idx + 1];
 		raw = lo + (((hi - lo) * (s32)frac + FR_TAN_FRAC_HALF) >> FR_TAN_FRAC_BITS);
-		/* raw is in u0.15. Shift to s15.16. */
-		raw <<= 1;
+
+		if (raw < 0x40) {
+			/* Near zero: redo interpolation with 4 extra bits of
+			 * precision to reduce rounding error when result is small. */
+			s32 lo4 = (s32)gFR_TAN_TAB_O[idx] << 4;
+			s32 hi4 = (s32)gFR_TAN_TAB_O[idx + 1] << 4;
+			raw = lo4 + (((hi4 - lo4) * (s32)frac + FR_TAN_FRAC_HALF) >> FR_TAN_FRAC_BITS);
+			raw = (raw + 4) >> 3;        /* u0.19 → s15.16 with rounding */
+		} else {
+			raw <<= 1;                   /* u0.15 → s15.16              */
+		}
 	} else {
 		/* Second octant: tan(x) = 1 / tan(90° - x).
 		 * complement is in (0, 0x2000] = (0°, 45°]. */
@@ -175,13 +184,19 @@ s32 fr_tan_bam(u16 bam)
 		hi = (s32)gFR_TAN_TAB_O[idx + 1];
 		raw = lo + (((hi - lo) * (s32)frac + FR_TAN_FRAC_HALF) >> FR_TAN_FRAC_BITS);
 
-		/* raw is tan(complement) in u0.15. Compute 1/raw in s15.16.
-		 * 1.0 in s15.16 = 0x10000. We want (1<<16) / (raw_in_0.15)
-		 * = (1<<16) * (1<<15) / raw_raw = (1<<31) / raw.
-		 * Use unsigned to avoid overflow: 0x80000000 / raw. */
-		if (raw < 2) {
-			/* Near pole: saturate */
-			raw = FR_TRIG_MAXVAL;
+		if (raw < 0x40) {
+			/* Near pole: redo interpolation with 4 extra bits of
+			 * precision. The reciprocal amplifies small interpolation
+			 * errors, so extra precision significantly helps here.
+			 * Result: (2^31 / raw_hp) << 4 = 2^35 / raw_hp. */
+			s32 lo4 = (s32)gFR_TAN_TAB_O[idx] << 4;
+			s32 hi4 = (s32)gFR_TAN_TAB_O[idx + 1] << 4;
+			s32 raw_hp = lo4 + (((hi4 - lo4) * (s32)frac + FR_TAN_FRAC_HALF) >> FR_TAN_FRAC_BITS);
+			if (raw_hp < 32) {
+				raw = FR_TRIG_MAXVAL;
+			} else {
+				raw = (s32)((0x80000000u / (u32)raw_hp) << 4);
+			}
 		} else {
 			raw = (s32)(0x80000000u / (u32)raw);
 		}
