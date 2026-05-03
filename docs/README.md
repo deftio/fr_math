@@ -43,30 +43,32 @@ or any tooling. If you want the browser version, look in
 Errors below are measured at Q16.16 (s15.16). All functions accept any
 radix — Q16.16 is just the reference point for the table. See the
 [TDD report](../build/test_tdd_report.md) for sweeps at radixes 8, 12,
-16, and 24. Percent errors skip expected values near zero (|expected| < 0.01).
+16, and 24.
 
 <!-- ACCURACY_TABLE_START -->
-| Function | Max err (%) | Avg err (%) | Note |
+| Function | Max err (%)*| Avg err (%) | Note |
 |---|---:|---:|---|
-| sin/cos (BAM) | 0.1646 | 0.0058 | 65536 BAM; 129-entry quadrant table |
-| sin/cos (deg) | 0.5909 | 0.0091 | 65536-pt deg r7 + specials |
-| sin/cos (rad) | 0.1646 | 0.0059 | 65536-pt rad r16 |
-| tan (BAM) | 0.1704 | 0.0065 | 65536 BAM; 65-entry octant table |
-| tan (deg) | 0.6000 | 0.0140 | 65536-pt deg r7 + specials |
-| tan (rad) | 0.1704 | 0.0065 | 65536-pt rad r16 |
-| asin / acos | 1.9776 | 0.0308 | 65536-pt; sqrt approx near boundary |
-| atan2 | 0.4953 | 0.0238 | 65536x5 radii; asin/acos+hypot_fast8 |
-| atan | 0.2985 | 0.0153 | 20001-pt sweep [-10,10]; via FR_atan2 |
-| sqrt | 0.0003 | 0.0000 | Round-to-nearest |
-| log2 | 0.2479 | 0.0045 | 65-entry mantissa table |
-| pow2 | 0.1373 | 0.0057 | 65-entry fraction table |
-| ln, log10 | 0.0015 | 0.0004 | Via FR_MULK28 from log2 |
-| exp | 0.0719 | 0.0051 | FR_MULK28 + FR_pow2 |
-| exp_fast | 0.0719 | 0.0064 | Shift-only scaling |
-| pow10 | 0.1163 | 0.0075 | FR_MULK28 + FR_pow2 |
-| pow10_fast | 0.1163 | 0.0100 | Shift-only scaling |
-| hypot (exact) | 0.0001 | 0.0000 | 64-bit intermediate |
-| hypot_fast8 (8-seg) | 0.0977 | 0.0508 | Shift-only, no multiply |
+| sin/cos (BAM) | 0.4578 | 0.0076 | fr_sin_bam/fr_cos_bam direct; 129-entry table |
+| sin/cos (deg) | 0.4578 | 0.0076 | FR_Sin/FR_Cos ±360° s15.16; FR_DEG2BAM |
+| sin/cos (rad) | 0.6104 | 0.0085 | fr_sin/fr_cos via fr_rad_to_bam ±2π r16 |
+| tan (BAM) | 0.5823 | 0.0008 | fr_tan_bam 65536-pt full; ±maxint at poles |
+| tan (deg) | 0.5311 | 0.0008 | FR_Tan ±360° s15.16 full; sat at poles |
+| tan (rad) | 13.4069 | 0.0029 | fr_tan ±2π r16 full; sat at poles |
+| asin / acos | 0.8743 | 0.0301 | 65536-pt; sqrt approx near boundary |
+| atan2 | 0.5100 | 0.0237 | 65536x5 radii; asin/acos+hypot_fast8 |
+| atan | 0.3390 | 0.0154 | 20001-pt full sweep [-10,10]; via FR_atan2 |
+| sqrt | 0.0239 | 0.0000 | Round-to-nearest |
+| log2 | 0.0286 | 0.0029 | 65-entry mantissa table |
+| pow2 | 0.0019 | 0.0003 | 65-entry fraction table |
+| ln, log10 | 0.0004 | 0.0000 | Via FR_MULK28 from log2 |
+| exp | 0.0003 | 0.0000 | FR_MULK28 + FR_pow2 |
+| exp_fast | 0.0009 | 0.0001 | Shift-only scaling |
+| pow10 | 0.0007 | 0.0000 | FR_MULK28 + FR_pow2 |
+| pow10_fast | 0.0028 | 0.0002 | Shift-only scaling |
+| hypot (exact) | 0.0000 | 0.0000 | 64-bit intermediate |
+| hypot_fast8 (8-seg) | 0.0915 | 0.0320 | Shift-only, no multiply |
+
+*Relative error; reference clamped to 1% of full-scale output.
 <!-- ACCURACY_TABLE_END -->
 
 ## What's in the box
@@ -75,8 +77,8 @@ radix — Q16.16 is just the reference point for the table. See the
 | --- | --- |
 | Arithmetic | `FR_ADD`, `FR_SUB`, `FR_DIV`, `FR_DIV32`, `FR_MOD`, `FR_FixMuls`, `FR_FixMulSat`, `FR_CHRDX` |
 | Utility | `FR_MIN`, `FR_MAX`, `FR_CLAMP`, `FR_ABS`, `FR_SGN` |
-| Trig (integer deg) | `FR_Sin`, `FR_Cos`, `FR_Tan`, `FR_SinI`, `FR_CosI`, `FR_TanI` |
-| Trig (radian/BAM) | `fr_sin`, `fr_cos`, `fr_tan`, `fr_sin_bam`, `fr_cos_bam`, `fr_tan_bam`, `fr_sin_deg`, `fr_cos_deg` |
+| Trig (degree) | `fr_sin_deg`, `fr_cos_deg`, `fr_tan_deg`, `FR_SinI`, `FR_CosI`, `FR_TanI` |
+| Trig (radian/BAM) | `fr_sin`, `fr_cos`, `fr_tan`, `fr_sin_bam`, `fr_cos_bam`, `fr_tan_bam` |
 | Inverse trig | `FR_atan`, `FR_atan2`, `FR_asin`, `FR_acos` |
 | Log / exp | `FR_log2`, `FR_ln`, `FR_log10`, `FR_pow2`, `FR_EXP`, `FR_POW10`, `FR_EXP_FAST`, `FR_POW10_FAST`, `FR_MULK28` |
 | Roots | `FR_sqrt`, `FR_hypot`, `FR_hypot_fast8` |
@@ -167,18 +169,23 @@ s32 two  = I2FR(2, R);              /* 2.0 → raw 131072              */
  *
  * MixedCase FR_ names are functions — they contain loops, tables, or
  * multi-step algorithms where inlining would waste ROM:
- *   FR_Cos, FR_sqrt, FR_atan2, FR_log2, FR_pow2, FR_printNumF ...
+ *   FR_sqrt, FR_atan2, FR_log2, FR_pow2, FR_printNumF ...
  *
- * lowercase fr_ names are v2 functions (radian trig, wave generators,
- * ADSR envelopes):
- *   fr_sin, fr_cos, fr_tan, fr_wave_tri, fr_adsr_step ...
+ * lowercase fr_ names are v2 functions (degree/radian/BAM trig, wave
+ * generators, ADSR envelopes):
+ *   fr_sin_deg, fr_cos_deg, fr_tan_deg, fr_sin, fr_cos, fr_tan,
+ *   fr_wave_tri, fr_adsr_step ...
+ *
+ * Legacy aliases: FR_Cos, FR_Sin, FR_Tan still work — they are
+ * macros that map to fr_cos_deg, fr_sin_deg, fr_tan_deg.  New code
+ * should use the fr_ names directly.
  *
  * Some macros wrap functions: FR_EXP(x,r) scales x then calls
  * FR_pow2 — one-liner convenience, heavy lifting in the function.
  */
 
 /* ---- Math functions ---- */
-s32 c45   = FR_Cos(45, 0);                /* cos(45°) = 0.7071       */
+s32 c45   = fr_cos_deg(45, 0);            /* cos(45°) = 0.7071       */
 s32 s30   = fr_sin(FR_numstr("0.5236", R), R); /* sin(0.5236 rad)    */
 s32 root2 = FR_sqrt(two, R);              /* sqrt(2)  = 1.4142       */
 s32 angle = FR_atan2(I2FR(1,R), I2FR(1,R), R); /* atan2(1,1) rad     */

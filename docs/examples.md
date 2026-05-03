@@ -57,15 +57,15 @@ int main(void)
 ## 2. Trig — integer degrees vs radian vs BAM
 
 FR_Math supports three angle conventions and this example hits
-all three: integer degrees through the legacy
-`FR_Sin` / `FR_Cos` API, the radian-native
+all three: fixed-point degrees through the
+`fr_sin_deg` / `fr_cos_deg` API, the radian-native
 `fr_sin` / `fr_cos` (radian at a chosen
 input radix), and BAM-native `fr_sin_bam` /
 `fr_cos_bam`. All three paths feed the same 129-entry
 quadrant cosine table under the hood and should produce nearly
 identical results.
 
-*Caveats:* the `radix` parameter on `FR_Sin(deg, radix)` is
+*Caveats:* the `radix` parameter on `fr_sin_deg(deg, radix)` is
 the radix of the *degree input*, not the output. All sin/cos
 functions return **s15.16** — that is, `s32` at radix 16,
 where 1.0 = 65536 (`FR_TRIG_ONE`). The values compared below

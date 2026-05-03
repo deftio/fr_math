@@ -291,7 +291,7 @@ bits = 16. Going wider would only add noise, not precision.
 
 "But what if I want to pass in any signed angle without worrying
 about conversion?" That is exactly what `FR_CosI(deg)`,
-`FR_Cos(deg, radix)`, and `fr_cos(rad, radix)` are for. All three
+`fr_cos_deg(deg, radix)`, and `fr_cos(rad, radix)` are for. All three
 take *signed* inputs and reduce them to BAM for you. The only place
 you actually see a `u16` is at the internal `fr_cos_bam` /
 `fr_sin_bam` boundary, which you only call by hand if you *want*
@@ -405,35 +405,35 @@ represents exactly 1.0 in the s15.16 output format.
 | `fr_sin` | `s32 fr_sin(s32 rad, u16 radix)` | Same convention. |
 | `fr_tan` | `s32 fr_tan(s32 rad, u16 radix)` | Returns at **radix 16** (`FR_TRIG_OUT_PREC`). Computed as `(sin << 16) / cos`; saturates to `±INT32_MAX` (`FR_TRIG_MAXVAL`) near π/2 + kπ where cos → 0. |
 
-### Integer-degree wrappers (legacy API)
+### Degree wrappers (current and legacy)
 
-The uppercase legacy API takes an angle in degrees.
-`FR_SinI`, `FR_CosI` and `FR_TanI`
-take plain integer degrees — the trailing *I* denotes
-*integer*. The variants *without* the `I`
-suffix (`FR_Sin`, `FR_Cos`, `FR_Tan`)
-accept a `radix` argument and treat the degree value as
-*fixed-point*, so you can pass fractional degrees like
-42.375°.
+The primary degree-based API uses lowercase `fr_` names.
+These are functions (not macros) that take a degree value as
+fixed-point at a caller-chosen radix:
+
+| Function | Signature | Notes |
+| --- | --- | --- |
+| `fr_sin_deg` | `s32 fr_sin_deg(s32 deg, u16 radix)` | `deg` is fixed-point degrees at `radix`. Returns s15.16. |
+| `fr_cos_deg` | `s32 fr_cos_deg(s32 deg, u16 radix)` | Same. |
+| `fr_tan_deg` | `s32 fr_tan_deg(s32 deg, u16 radix)` | Returns at radix 16; saturates to `±INT32_MAX` near 90° / 270°. |
+
+Pass `radix = 0` for plain integer degrees, or a higher radix
+for fractional degrees (e.g. 42.375° at radix 4).
+
+**Integer-degree macros** (`FR_SinI`, `FR_CosI`, `FR_TanI`)
+take plain integer degrees -- the trailing *I* denotes
+*integer*. These remain unchanged:
 
 | Symbol | Signature | Kind |
 | --- | --- | --- |
-| `FR_SinI` | `FR_SinI(deg)` → `s32` (s15.16) | Macro: `fr_sin_bam(FR_DEG2BAM(deg))`. Zero-cost inline. |
-| `FR_CosI` | `FR_CosI(deg)` → `s32` (s15.16) | Macro: `fr_cos_bam(FR_DEG2BAM(deg))`. |
+| `FR_SinI` | `FR_SinI(deg)` -> `s32` (s15.16) | Macro: `fr_sin_bam(FR_DEG2BAM(deg))`. Zero-cost inline. |
+| `FR_CosI` | `FR_CosI(deg)` -> `s32` (s15.16) | Macro: `fr_cos_bam(FR_DEG2BAM(deg))`. |
 | `FR_TanI` | `s32 FR_TanI(s16 deg)` | Function. Returns at radix 16; saturates to `±INT32_MAX` near 90° / 270°. |
-| `FR_Sin` | `s32 FR_Sin(s16 deg, u16 radix)` | `deg` is fixed-point at `radix`. Returns s15.16. |
-| `FR_Cos` | `s32 FR_Cos(s16 deg, u16 radix)` | Same. |
-| `FR_Tan` | `s32 FR_Tan(s16 deg, u16 radix)` | Returns at radix 16; saturates to `±INT32_MAX` near 90° / 270°. |
 
-### Degree wrappers on the BAM path
-
-If you're using the lowercase family and want to skip the
-radix entirely, two convenience macros cover pure integer degrees:
-
-| Macro | Expansion |
-| --- | --- |
-| `fr_cos_deg(deg)` | `fr_cos_bam(FR_DEG2BAM(deg))` |
-| `fr_sin_deg(deg)` | `fr_sin_bam(FR_DEG2BAM(deg))` |
+**Legacy aliases.** The uppercase `FR_Sin`, `FR_Cos`, and
+`FR_Tan` macros still work -- they map directly to
+`fr_sin_deg`, `fr_cos_deg`, and `fr_tan_deg` respectively.
+New code should use the `fr_` names.
 
 ## Inverse trigonometry
 

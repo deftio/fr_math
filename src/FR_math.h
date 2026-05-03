@@ -258,7 +258,7 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 /*================================================
  * Constants used in Trig tables, definitions
  *
- * FR_TRIG_PREC     — internal table precision (s0.15, kept for table indexing)
+ * FR_TRIG_PREC     — internal table precision (u0.15, sine table)
  * FR_TRIG_OUT_PREC — output precision of sin/cos/tan (s15.16 since v2.0.1)
  * FR_TRIG_ONE      — exact 1.0 in output format (1 << 16 = 65536)
  *
@@ -328,8 +328,10 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 #define FR_RAD2DEG(x) (((x) << 6) - ((x) << 3) + (x) + ((x) >> 2) + (((x) >> 4) - ((x) >> 6)) - ((x) >> 10))
 
 /* FR_DEG2BAM(x): multiply by 65536/360 ≈ 182.0449 (7 terms, ~18 bits).
- * CAUTION: overflows s32 when |x| > ~256 deg at s15.16 (x<<7 term).
- * For safe conversion at any radix, use fr_deg_to_bam() instead. */
+ * Intermediate terms overflow s32 when |x| > ~256 deg at s15.16 (x<<7 term),
+ * but the overflow is harmless when the result is truncated to u16 BAM
+ * (two's complement wrapping preserves modular correctness).
+ * For full-precision s32 BAM (sub-BAM interpolation), use fr_deg_to_bam(). */
 #define FR_DEG2BAM(x) (((x)<<7)+((x)<<6)-((x)<<3)-((x)<<1)+((x)>>5)+((x)>>6)-((x)>>9))
 
 /* FR_BAM2DEG(x): multiply by 360/65536 = 0.00549316 (4 terms, exact) */
@@ -337,9 +339,9 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 
 /* FR_RAD2BAM(x): multiply by 65536/(2*pi) ≈ 10430.378 (7 terms, ~21 bits).
  * CAUTION: overflows s32 when |x| > ~4 rad at s15.16 (x<<13 term).
- * For safe conversion at any radix, use fr_rad_to_bam() instead. */
-#define FR_RAD2BAM(x) (((x)<<13)+((x)<<11)+((x)<<7)+((x)<<6)-((x)<<1)+((x)>>1)-((x)>>3))
-
+ * For safe conversion at any radix, use fr_rad_to_bam() instead. 
+ * #define FR_RAD2BAM(x) (((x)<<13)+((x)<<11)+((x)<<7)+((x)<<6)-((x)<<1)+((x)>>1)-((x)>>3)) */
+#define FR_RAD2BAM(x) (((x)<<13)+((x)<<11)+((x)<<7)+((x)<<6)-((x)<<1)+((x)>>1)-((x)>>3)+((x)>>8)-((x)>>11)-((x)>>14))
 /* ── Overflow-safe rad/deg to BAM conversion functions ─────────────
  *
  * These replace the FR_RAD2BAM / FR_DEG2BAM macros for callers that
@@ -353,52 +355,25 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
  * fr_deg_to_bam: reduce to [-90, 90) + quadrant offset.  ±360° safe.
  */
 
-/* Constants at radix 16 */
-#define FR_PI_R16       205887   /* round(pi * 65536) */
-#define FR_TWO_PI_R16   411775   /* round(2*pi * 65536) */
-#define FR_D90_R16      5898240  /* 90 * 65536 */
-#define FR_D180_R16     11796480 /* 180 * 65536 */
-#define FR_D360_R16     23592960 /* 360 * 65536 */
+/* Pi constants at any radix: FR_PI(r) = round(pi * 2^r), etc.
+ * Compiler evaluates at compile time when r is a constant.
+ * Max safe radix: FR_PI r<=29, FR_TWO_PI r<=28, FR_HALF_PI r<=30. */
+#define FR_PI(r)             ((s32)(3.14159265358979323846  * (1LL << (r)) + 0.5))
+#define FR_TWO_PI(r)         ((s32)(6.28318530717958647692  * (1LL << (r)) + 0.5))
+#define FR_HALF_PI(r)        ((s32)(1.57079632679489661923  * (1LL << (r)) + 0.5))
+#define FR_THREE_HALF_PI(r)  ((s32)(4.71238898038468985769  * (1LL << (r)) + 0.5))
 
-static u16 __attribute__((unused)) fr_rad_to_bam(s32 rad, u16 radix)
-{
-    /* Normalize to radix 16 */
-    s32 r = (radix > 16) ? (rad >> (radix - 16))
-          : (radix < 16) ? (rad << (16 - radix))
-          : rad;
+/* Convenience aliases at radix 16 */
+#define FR_PI_R16       FR_PI(16)
+#define FR_TWO_PI_R16   FR_TWO_PI(16)
 
-    /* Reduce to [-pi, pi] — one conditional pass, covers ±2*pi input */
-    if (r >  FR_PI_R16) r -= FR_TWO_PI_R16;
-    if (r < -FR_PI_R16) r += FR_TWO_PI_R16;
+/* Degree constants at radix 16 (exact — no truncation) */
+#define FR_D90_R16      ((s32)90  << 16)
+#define FR_D180_R16     ((s32)180 << 16)
+#define FR_D360_R16     ((s32)360 << 16)
 
-    /* Shift terms reordered: interleave negatives early to keep all
-     * intermediate sums within s32.  Same 7-term decomposition as
-     * FR_RAD2BAM, just reordered.  Safe for |r| <= 205887 (pi). */
-    s32 bam = (r<<13)-(r<<1)+(r<<11)-(r>>3)+(r<<7)+(r<<6)+(r>>1);
-    return (u16)((bam + (1 << 15)) >> 16);
-}
-
-static u16 __attribute__((unused)) fr_deg_to_bam(s32 deg, u16 radix)
-{
-    /* Normalize to radix 16 */
-    s32 d = (radix > 16) ? (deg >> (radix - 16))
-          : (radix < 16) ? (deg << (16 - radix))
-          : deg;
-
-    /* Reduce to [-180, 180) — covers ±360 input */
-    if (d >=  FR_D180_R16) d -= FR_D360_R16;
-    if (d <  -FR_D180_R16) d += FR_D360_R16;
-
-    /* Reduce to [-90, 90) with BAM quadrant offset.
-     * Needed because 182 * 11796480 (±180° at r16) overflows s32. */
-    u16 offset = 0;
-    if (d >= FR_D90_R16)      { d -= FR_D180_R16; offset = 32768; }
-    else if (d < -FR_D90_R16) { d += FR_D180_R16; offset = 32768; }
-
-    /* |d| < 90° at r16. Max intermediate = 5898240 * 192 = 1.13B, safe. */
-    s32 bam = (d<<7)+(d<<6)-(d<<3)-(d<<1)+(d>>5)+(d>>6)-(d>>9);
-    return (u16)(offset + (u16)((bam + (1 << 15)) >> 16));
-}
+  u16 fr_rad_to_bam(s32 rad, u16 radix);
+  u16 fr_deg_to_bam(s32 deg, u16 radix);
 
 /* FR_BAM2RAD(x): multiply by 2*pi/65536 ≈ 0.0000959 (5 terms, ~18 bits) */
 #define FR_BAM2RAD(x) (((x)>>13)-((x)>>15)+((x)>>18)+((x)>>21)+((x)>>25))
@@ -441,13 +416,25 @@ static u16 __attribute__((unused)) fr_deg_to_bam(s32 deg, u16 radix)
  *   fr_cos(rad, radix)      — cos of radians at radix,   s15.16 result
  *   fr_sin(rad, radix)      — sin of radians at radix,   s15.16 result
  *   fr_tan(rad, radix)      — tan of radians at radix,   s15.16 result
- *   fr_cos_deg(deg)         — cos of integer degrees,    s15.16 result
- *   fr_sin_deg(deg)         — sin of integer degrees,    s15.16 result
+ *   fr_cos_deg(deg, radix)  — cos of fixed-radix degrees, s15.16 result
+ *   fr_sin_deg(deg, radix)  — sin of fixed-radix degrees, s15.16 result
+ *   fr_tan_deg(deg, radix)  — tan of fixed-radix degrees, s15.16 result
  *
  * All go through the same 129-entry quadrant table with linear interpolation.
  * Worst-case error: ~2 LSB in s15.16 (~3e-5 absolute), except at the four
  * cardinal angles where the result is exact.
+ *
+ * FR_USE_EXTENDED_TRIG_PREC (default: ON) enables sub-BAM interpolation
+ * in fr_sin/fr_cos/fr_tan (the radian/degree-input functions). This adds
+ * one extra multiply per call but recovers ~16 bits of sub-BAM precision.
+ * To disable (faster, no multiply in the trig hot path):
+ *
+ *   #define FR_USE_EXTENDED_TRIG_PREC  0
+ *   #include "FR_math.h"
  */
+#ifndef FR_USE_EXTENDED_TRIG_PREC
+#define FR_USE_EXTENDED_TRIG_PREC  1
+#endif
   s32 fr_cos_bam(u16 bam);
   s32 fr_sin_bam(u16 bam);
   s32 fr_tan_bam(u16 bam);
@@ -458,26 +445,32 @@ static u16 __attribute__((unused)) fr_deg_to_bam(s32 deg, u16 radix)
 /* Integer degrees -> BAM using division (exact at all multiples of 45 deg). */
 #define FR_DEG2BAM_I(deg) ((u16)((((s32)(deg) << 16) + ((deg) >= 0 ? 180 : -180)) / 360))
 
-#define fr_cos_deg(deg)  fr_cos_bam(FR_DEG2BAM_I(deg))
-#define fr_sin_deg(deg)  fr_sin_bam(FR_DEG2BAM_I(deg))
+/* Legacy single-arg integer-degree macros — use FR_CosI / FR_SinI instead */
+/* #define fr_cos_deg(deg)  fr_cos_bam(FR_DEG2BAM_I(deg)) — removed, name reused for 2-arg function */
+/* #define fr_sin_deg(deg)  fr_sin_bam(FR_DEG2BAM_I(deg)) — removed, name reused for 2-arg function */
 
 /*===============================================
- * Integer-degree trig API (thin wrappers over the BAM-native path)
+ * Degree-input trig API
  *
- *   FR_CosI(deg)            — cos of integer degrees,       s15.16 result
- *   FR_SinI(deg)            — sin of integer degrees,       s15.16 result
- *   FR_TanI(deg)            — tan of integer degrees,       s15.16 result
- *   FR_Cos(deg, radix)      — cos of fixed-radix degrees,   s15.16 result
- *   FR_Sin(deg, radix)      — sin of fixed-radix degrees,   s15.16 result
- *   FR_Tan(deg, radix)      — tan of fixed-radix degrees,   s15.16 result
+ *   FR_CosI(deg)              — cos of integer degrees,       s15.16 result
+ *   FR_SinI(deg)              — sin of integer degrees,       s15.16 result
+ *   FR_TanI(deg)              — tan of integer degrees,       s15.16 result
+ *   fr_cos_deg(deg, radix)    — cos of fixed-radix degrees,   s15.16 result
+ *   fr_sin_deg(deg, radix)    — sin of fixed-radix degrees,   s15.16 result
+ *   fr_tan_deg(deg, radix)    — tan of fixed-radix degrees,   s15.16 result
  */
 #define FR_CosI(deg)  fr_cos_bam(FR_DEG2BAM_I(deg))
 #define FR_SinI(deg)  fr_sin_bam(FR_DEG2BAM_I(deg))
 
-  s32 FR_Cos(s32 deg, u16 radix);
-  s32 FR_Sin(s32 deg, u16 radix);
+  s32 fr_cos_deg(s32 deg, u16 radix);
+  s32 fr_sin_deg(s32 deg, u16 radix);
   s32 FR_TanI(s32 deg);
-  s32 FR_Tan(s32 deg, u16 radix);
+  s32 fr_tan_deg(s32 deg, u16 radix);
+
+  /* Legacy macros — use fr_sin_deg/fr_cos_deg/fr_tan_deg in new code */
+  #define FR_Sin  fr_sin_deg
+  #define FR_Cos  fr_cos_deg
+  #define FR_Tan  fr_tan_deg
 
   /* Inverse trig — output in radians at caller-specified radix (s32).
    * FR_atan2 returns radians at radix 16 (s15.16).

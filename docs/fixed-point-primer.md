@@ -862,8 +862,8 @@ generation of each symbol:
 | Prefix | What it is | Example |
 | --- | --- | --- |
 | `FR_XXX()` | `UPPERCASE` macro — inline, zero call overhead. | `FR_ADD`, `FR_ABS`, `FR2I` |
-| `FR_Xxx()` | Mixed-case C function — the classic v1 API. Integer-degree trig and related. | `FR_Sin`, `FR_log2`, `FR_sqrt` |
-| `fr_xxx()` | Lowercase C function — v2 additions (radian / BAM trig, wave generators, ADSR). | `fr_sin`, `fr_wave_tri`, `fr_adsr_step` |
+| `FR_Xxx()` | Mixed-case C function — the classic v1 API. Log, sqrt, inverse trig, and related. | `FR_log2`, `FR_sqrt`, `FR_atan2` |
+| `fr_xxx()` | Lowercase C function — v2 API (degree/radian/BAM trig, wave generators, ADSR). `fr_sin_deg`, `fr_cos_deg`, `fr_tan_deg` are the current degree-based trig names. `FR_Sin`/`FR_Cos`/`FR_Tan` remain as legacy aliases. | `fr_sin_deg`, `fr_sin`, `fr_wave_tri`, `fr_adsr_step` |
 | `s8, s16, s32` | Signed integer typedefs (aliases for `int8_t`, `int16_t`, `int32_t`). | — |
 | `u8, u16, u32` | Unsigned integer typedefs. | — |
 
@@ -923,7 +923,7 @@ explicitly mask off the top bits (and handle negative values)
 before the quadrant extraction (`bam >> 14`) made any sense. You
 would have traded one free operation for two slow ones on every
 sample, just to get back the same behavior. So instead, the public
-trig entry points (`FR_CosI`, `FR_Cos`, `fr_cos`, and friends)
+trig entry points (`FR_CosI`, `fr_cos_deg`, `fr_cos`, and friends)
 *all* take signed angles — in degrees, fixed-radix degrees, or
 radians — and only the internal `fr_cos_bam` / `fr_sin_bam`
 primitives see the `u16`. In practice you will never construct a

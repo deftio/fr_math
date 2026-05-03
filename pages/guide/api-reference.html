@@ -507,7 +507,7 @@ bits = 16. Going wider would only add noise, not precision.</p>
 
 <p>&ldquo;But what if I want to pass in any signed angle without
 worrying about conversion?&rdquo; That is exactly what
-<code>FR_CosI(deg)</code>, <code>FR_Cos(deg, radix)</code>, and
+<code>FR_CosI(deg)</code>, <code>fr_cos_deg(deg, radix)</code>, and
 <code>fr_cos(rad, radix)</code> are for. All three take
 <em>signed</em> inputs and reduce them to BAM for you. The only
 place you actually see a <code>u16</code> is at the internal
@@ -628,16 +628,18 @@ radix.</p>
 </tbody>
 </table>
 
-<h3>Integer-degree wrappers (legacy API)</h3>
+<h3>Degree wrappers</h3>
 
-<p>The uppercase legacy API takes an angle in degrees.
+<p>The degree API takes an angle in degrees.
 <code>FR_SinI</code>, <code>FR_CosI</code> and <code>FR_TanI</code>
 take plain integer degrees &mdash; the trailing <em>I</em> denotes
-<em>integer</em>. The variants <em>without</em> the <code>I</code>
-suffix (<code>FR_Sin</code>, <code>FR_Cos</code>, <code>FR_Tan</code>)
-accept a <code>radix</code> argument and treat the degree value as
-<em>fixed-point</em>, so you can pass fractional degrees like
-42.375&deg;.</p>
+<em>integer</em>. The primary degree wrappers with a
+<code>radix</code> argument are <code>fr_sin_deg</code>,
+<code>fr_cos_deg</code>, and <code>fr_tan_deg</code> &mdash; they
+treat the degree value as <em>fixed-point</em>, so you can pass
+fractional degrees like 42.375&deg;. The uppercase names
+<code>FR_Sin</code>, <code>FR_Cos</code>, and <code>FR_Tan</code>
+are legacy aliases that map to the same functions.</p>
 
 <table>
 <thead><tr><th>Symbol</th><th>Signature</th><th>Kind</th></tr></thead>
@@ -645,24 +647,23 @@ accept a <code>radix</code> argument and treat the degree value as
 <tr><td><code>FR_SinI</code></td><td><code>FR_SinI(deg)</code> &rarr; <code>s32</code> (s15.16)</td><td>Macro: <code>fr_sin_bam(FR_DEG2BAM(deg))</code>. Zero-cost inline.</td></tr>
 <tr><td><code>FR_CosI</code></td><td><code>FR_CosI(deg)</code> &rarr; <code>s32</code> (s15.16)</td><td>Macro: <code>fr_cos_bam(FR_DEG2BAM(deg))</code>.</td></tr>
 <tr><td><code>FR_TanI</code></td><td><code>s32 FR_TanI(s16 deg)</code></td><td>Function. Returns at radix 16; saturates to <code>&plusmn;INT32_MAX</code> near 90&deg; / 270&deg;.</td></tr>
-<tr><td><code>FR_Sin</code></td><td><code>s32 FR_Sin(s16 deg, u16 radix)</code></td><td><code>deg</code> is fixed-point at <code>radix</code>. Returns s15.16.</td></tr>
-<tr><td><code>FR_Cos</code></td><td><code>s32 FR_Cos(s16 deg, u16 radix)</code></td><td>Same.</td></tr>
-<tr><td><code>FR_Tan</code></td><td><code>s32 FR_Tan(s16 deg, u16 radix)</code></td><td>Returns at radix 16; saturates to <code>&plusmn;INT32_MAX</code> near 90&deg; / 270&deg;.</td></tr>
+<tr><td><code>fr_sin_deg</code></td><td><code>s32 fr_sin_deg(s32 deg, u16 radix)</code></td><td>Function. <code>deg</code> is fixed-point at <code>radix</code>. Returns s15.16.</td></tr>
+<tr><td><code>fr_cos_deg</code></td><td><code>s32 fr_cos_deg(s32 deg, u16 radix)</code></td><td>Function. Same.</td></tr>
+<tr><td><code>fr_tan_deg</code></td><td><code>s32 fr_tan_deg(s32 deg, u16 radix)</code></td><td>Function. Returns at radix 16; saturates to <code>&plusmn;INT32_MAX</code> near 90&deg; / 270&deg;.</td></tr>
+<tr><td><code>FR_Sin</code></td><td><code>FR_Sin(deg, radix)</code></td><td>Legacy macro alias for <code>fr_sin_deg</code>.</td></tr>
+<tr><td><code>FR_Cos</code></td><td><code>FR_Cos(deg, radix)</code></td><td>Legacy macro alias for <code>fr_cos_deg</code>.</td></tr>
+<tr><td><code>FR_Tan</code></td><td><code>FR_Tan(deg, radix)</code></td><td>Legacy macro alias for <code>fr_tan_deg</code>.</td></tr>
 </tbody>
 </table>
 
-<h3>Degree wrappers on the BAM path</h3>
+<h3>Degree-to-BAM path</h3>
 
-<p>If you&rsquo;re using the lowercase family and want to skip the
-radix entirely, two convenience macros cover pure integer degrees:</p>
-
-<table>
-<thead><tr><th>Macro</th><th>Expansion</th></tr></thead>
-<tbody>
-<tr><td><code>fr_cos_deg(deg)</code></td><td><code>fr_cos_bam(FR_DEG2BAM(deg))</code></td></tr>
-<tr><td><code>fr_sin_deg(deg)</code></td><td><code>fr_sin_bam(FR_DEG2BAM(deg))</code></td></tr>
-</tbody>
-</table>
+<p><code>fr_cos_deg</code>, <code>fr_sin_deg</code>, and
+<code>fr_tan_deg</code> are now functions (not macros). They accept
+a fixed-point degree value with a <code>radix</code> argument,
+convert to BAM internally, and call the BAM core. For plain integer
+degrees with no radix parameter, use <code>FR_CosI</code> /
+<code>FR_SinI</code> / <code>FR_TanI</code> instead.</p>
 
 <h2>Inverse trigonometry</h2>
 

@@ -57,6 +57,10 @@ help:
 	@echo "  size-report      Multi-architecture size report"
 	@echo "  size-simple      Size report for current platform"
 	@echo ""
+	@echo "Tools:"
+	@echo "  tools            Build diagnostic tools"
+	@echo "  trig-neighborhood  Build function neighborhood explorer"
+	@echo ""
 	@echo "Maintenance:"
 	@echo "  clean            Remove build artifacts"
 	@echo "  cleanall         Remove build artifacts and backups"
@@ -210,6 +214,19 @@ size-simple: lib
 		echo "File sizes:"; \
 		ls -lh $(BUILD_DIR)/*.o; \
 	fi
+
+# Tools
+TOOLS_DIR = tools
+
+.PHONY: tools
+tools: dirs trig-neighborhood
+
+.PHONY: trig-neighborhood
+trig-neighborhood: $(BUILD_DIR)/trig_neighborhood
+
+$(BUILD_DIR)/trig_neighborhood: $(TOOLS_DIR)/trig_neighborhood.cpp $(SRC_DIR)/FR_math.c $(HEADERS)
+	$(CC) -I$(SRC_DIR) $(LIB_WARN) -Os -c $(SRC_DIR)/FR_math.c -o $(BUILD_DIR)/tool_FR_math.o
+	$(CXX) $(CXXFLAGS) $(TOOLS_DIR)/trig_neighborhood.cpp $(BUILD_DIR)/tool_FR_math.o $(LDFLAGS) -o $@
 
 # Clean
 .PHONY: clean

@@ -96,7 +96,7 @@ binaries to keep compile times low:
 | Binary | What it checks |
 | --- | --- |
 | `test_basic` | Radix conversions, `FR_ADD`, `FR_FixMuls`, rounding. |
-| `test_trig` | Integer-degree trig (`FR_Sin` et al.). |
+| `test_trig` | Integer-degree trig (`fr_sin_deg` et al.). |
 | `test_trig_radians` | Radian / BAM trig and the v2 `fr_sin` API. |
 | `test_log_exp` | Log base 2 / ln / log10 and their inverses. |
 | `test_2d` | 2D transforms, determinants, inverses. |

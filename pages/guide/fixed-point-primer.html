@@ -911,8 +911,8 @@ generation of each symbol:</p>
 <thead><tr><th>Prefix</th><th>What it is</th><th>Example</th></tr></thead>
 <tbody>
 <tr><td><code>FR_XXX()</code></td><td><code>UPPERCASE</code> macro &mdash; inline, zero call overhead.</td><td><code>FR_ADD</code>, <code>FR_ABS</code>, <code>FR2I</code></td></tr>
-<tr><td><code>FR_Xxx()</code></td><td>Mixed-case C function &mdash; the classic v1 API. Integer-degree trig and related.</td><td><code>FR_Sin</code>, <code>FR_log2</code>, <code>FR_sqrt</code></td></tr>
-<tr><td><code>fr_xxx()</code></td><td>Lowercase C function &mdash; v2 additions (radian / BAM trig, wave generators, ADSR).</td><td><code>fr_sin</code>, <code>fr_wave_tri</code>, <code>fr_adsr_step</code></td></tr>
+<tr><td><code>FR_Xxx()</code></td><td>Mixed-case C function or legacy alias. <code>FR_Sin</code>/<code>FR_Cos</code>/<code>FR_Tan</code> are legacy aliases for <code>fr_sin_deg</code>/<code>fr_cos_deg</code>/<code>fr_tan_deg</code>.</td><td><code>FR_log2</code>, <code>FR_sqrt</code>, <code>FR_Sin</code> (legacy)</td></tr>
+<tr><td><code>fr_xxx()</code></td><td>Lowercase C function &mdash; the current API for degree wrappers, radian / BAM trig, wave generators, ADSR.</td><td><code>fr_sin_deg</code>, <code>fr_cos_deg</code>, <code>fr_sin</code>, <code>fr_wave_tri</code>, <code>fr_adsr_step</code></td></tr>
 <tr><td><code>s8, s16, s32</code></td><td>Signed integer typedefs (aliases for <code>int8_t</code>, <code>int16_t</code>, <code>int32_t</code>).</td><td>&mdash;</td></tr>
 <tr><td><code>u8, u16, u32</code></td><td>Unsigned integer typedefs.</td><td>&mdash;</td></tr>
 </tbody>
@@ -980,7 +980,7 @@ read of the table would have to explicitly mask off the top bits
 (<code>bam &gt;&gt; 14</code>) made any sense. You would have traded
 one free operation for two slow ones on every sample, just to get
 back the same behavior. So instead, the public trig entry points
-(<code>FR_CosI</code>, <code>FR_Cos</code>, <code>fr_cos</code>, and
+(<code>FR_CosI</code>, <code>fr_cos_deg</code>, <code>fr_cos</code>, and
 friends) <em>all</em> take signed angles &mdash; in degrees,
 fixed-radix degrees, or radians &mdash; and only the internal
 <code>fr_cos_bam</code> / <code>fr_sin_bam</code> primitives see
