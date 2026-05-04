@@ -13,9 +13,9 @@
       "double_reference": "std::sin",
       "sweep": "65536-pt, [-pi, +pi]",
       "speed": {
-        "fr_math_ns_per_call": 5.6,
-        "libfixmath_ns_per_call": 10.6,
-        "fr_math_speedup": 1.91,
+        "fr_math_ns_per_call": 7.4,
+        "libfixmath_ns_per_call": 12.7,
+        "fr_math_speedup": 1.72,
         "faster": "fr_math"
       },
       "accuracy_vs_double": {
@@ -43,9 +43,9 @@
       "double_reference": "std::cos",
       "sweep": "65536-pt, [-pi, +pi]",
       "speed": {
-        "fr_math_ns_per_call": 8.9,
-        "libfixmath_ns_per_call": 13.3,
-        "fr_math_speedup": 1.50,
+        "fr_math_ns_per_call": 9.9,
+        "libfixmath_ns_per_call": 13.2,
+        "fr_math_speedup": 1.34,
         "faster": "fr_math"
       },
       "accuracy_vs_double": {
@@ -73,19 +73,19 @@
       "double_reference": "std::tan",
       "sweep": "65536-pt, [-1.2, 1.2] rad",
       "speed": {
-        "fr_math_ns_per_call": 7.1,
-        "libfixmath_ns_per_call": 32.6,
-        "fr_math_speedup": 4.57,
+        "fr_math_ns_per_call": 14.1,
+        "libfixmath_ns_per_call": 37.2,
+        "fr_math_speedup": 2.64,
         "faster": "fr_math"
       },
       "accuracy_vs_double": {
         "fr_math": {
-          "max_abs_error": 1.98158306e-04,
-          "mean_abs_error": 3.37019908e-05,
-          "max_error_lsb": 13.0,
-          "mean_error_lsb": 2.2,
-          "max_rel_error_pct": 0.1551,
-          "mean_rel_error_pct": 0.0055
+          "max_abs_error": 5.06554437e-04,
+          "mean_abs_error": 5.84009618e-05,
+          "max_error_lsb": 33.2,
+          "mean_error_lsb": 3.8,
+          "max_rel_error_pct": 0.5850,
+          "mean_rel_error_pct": 0.0122
         },
         "libfixmath": {
           "max_abs_error": 1.82495961e-02,
@@ -104,9 +104,9 @@
       "double_reference": "std::asin",
       "sweep": "65536-pt, [-0.999, 0.999]",
       "speed": {
-        "fr_math_ns_per_call": 9.7,
-        "libfixmath_ns_per_call": 49.5,
-        "fr_math_speedup": 5.11,
+        "fr_math_ns_per_call": 11.9,
+        "libfixmath_ns_per_call": 64.0,
+        "fr_math_speedup": 5.38,
         "faster": "fr_math"
       },
       "accuracy_vs_double": {
@@ -134,9 +134,9 @@
       "double_reference": "std::acos",
       "sweep": "65536-pt, [-0.999, 0.999]",
       "speed": {
-        "fr_math_ns_per_call": 8.4,
-        "libfixmath_ns_per_call": 50.7,
-        "fr_math_speedup": 6.03,
+        "fr_math_ns_per_call": 11.1,
+        "libfixmath_ns_per_call": 65.0,
+        "fr_math_speedup": 5.88,
         "faster": "fr_math"
       },
       "accuracy_vs_double": {
@@ -164,9 +164,9 @@
       "double_reference": "std::atan",
       "sweep": "65536-pt, [-50, 50]",
       "speed": {
-        "fr_math_ns_per_call": 8.1,
-        "libfixmath_ns_per_call": 11.0,
-        "fr_math_speedup": 1.37,
+        "fr_math_ns_per_call": 10.8,
+        "libfixmath_ns_per_call": 14.8,
+        "fr_math_speedup": 1.36,
         "faster": "fr_math"
       },
       "accuracy_vs_double": {
@@ -194,9 +194,9 @@
       "double_reference": "std::atan2",
       "sweep": "65536-pt, 5 radii x 360 deg",
       "speed": {
-        "fr_math_ns_per_call": 15.9,
-        "libfixmath_ns_per_call": 10.9,
-        "fr_math_speedup": 0.69,
+        "fr_math_ns_per_call": 20.8,
+        "libfixmath_ns_per_call": 13.7,
+        "fr_math_speedup": 0.66,
         "faster": "libfixmath"
       },
       "accuracy_vs_double": {
@@ -225,9 +225,9 @@
       "double_reference": "std::sqrt",
       "sweep": "65536-pt, [0.01, 100]",
       "speed": {
-        "fr_math_ns_per_call": 18.6,
-        "libfixmath_ns_per_call": 19.9,
-        "fr_math_speedup": 1.07,
+        "fr_math_ns_per_call": 24.8,
+        "libfixmath_ns_per_call": 26.2,
+        "fr_math_speedup": 1.05,
         "faster": "fr_math"
       },
       "accuracy_vs_double": {
@@ -255,9 +255,9 @@
       "double_reference": "std::exp",
       "sweep": "65536-pt, [-5, 5]",
       "speed": {
-        "fr_math_ns_per_call": 3.0,
-        "libfixmath_ns_per_call": 64.7,
-        "fr_math_speedup": 21.28,
+        "fr_math_ns_per_call": 4.0,
+        "libfixmath_ns_per_call": 84.6,
+        "fr_math_speedup": 21.04,
         "faster": "fr_math"
       },
       "accuracy_vs_double": {
@@ -285,9 +285,9 @@
       "double_reference": "std::log",
       "sweep": "65536-pt, [0.01, 100]",
       "speed": {
-        "fr_math_ns_per_call": 9.0,
-        "libfixmath_ns_per_call": 453.2,
-        "fr_math_speedup": 50.53,
+        "fr_math_ns_per_call": 11.2,
+        "libfixmath_ns_per_call": 583.3,
+        "fr_math_speedup": 51.87,
         "faster": "fr_math"
       },
       "accuracy_vs_double": {
@@ -315,9 +315,9 @@
       "double_reference": "std::log2",
       "sweep": "65536-pt, [0.01, 100]",
       "speed": {
-        "fr_math_ns_per_call": 8.5,
-        "libfixmath_ns_per_call": 39.4,
-        "fr_math_speedup": 4.63,
+        "fr_math_ns_per_call": 11.3,
+        "libfixmath_ns_per_call": 51.1,
+        "fr_math_speedup": 4.53,
         "faster": "fr_math"
       },
       "accuracy_vs_double": {
@@ -345,8 +345,8 @@
       "double_reference": "double a*b",
       "sweep": "65536-pt, a in [-50,50], b in [-2,2]",
       "speed": {
-        "fr_math_ns_per_call": 0.9,
-        "libfixmath_ns_per_call": 1.2,
+        "fr_math_ns_per_call": 1.2,
+        "libfixmath_ns_per_call": 1.6,
         "fr_math_speedup": 1.33,
         "faster": "fr_math"
       },
@@ -375,9 +375,9 @@
       "double_reference": "double a/b",
       "sweep": "65536-pt, a/b in [-50,50]/[0.5,50]",
       "speed": {
-        "fr_math_ns_per_call": 0.9,
-        "libfixmath_ns_per_call": 5.3,
-        "fr_math_speedup": 6.10,
+        "fr_math_ns_per_call": 1.2,
+        "libfixmath_ns_per_call": 6.9,
+        "fr_math_speedup": 5.96,
         "faster": "fr_math"
       },
       "accuracy_vs_double": {
@@ -406,7 +406,7 @@
       "double_reference": "std::hypot",
       "sweep": "65536-pt, 5 radii x 360 deg",
       "speed": {
-        "fr_math_ns_per_call": 19.9
+        "fr_math_ns_per_call": 26.2
       },
       "accuracy_vs_double": {
         "fr_math": {
@@ -425,7 +425,7 @@
       "double_reference": "std::hypot",
       "sweep": "65536-pt, 5 radii x 360 deg",
       "speed": {
-        "fr_math_ns_per_call": 2.6
+        "fr_math_ns_per_call": 3.2
       },
       "accuracy_vs_double": {
         "fr_math": {

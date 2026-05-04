@@ -2,26 +2,23 @@
 [![CI](https://github.com/deftio/fr_math/actions/workflows/ci.yml/badge.svg)](https://github.com/deftio/fr_math/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen.svg)](#building-and-testing)
 [![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://deftio.github.io/fr_math/)
-[![Version](https://img.shields.io/badge/version-2.0.7-blue.svg)](release_notes.md)  
-  
+[![Version](https://img.shields.io/badge/version-2.0.8-blue.svg)](release_notes.md)
+
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-library-teal.svg)](https://registry.platformio.org/libraries/deftio/fr_math)
 [![Arduino](https://img.shields.io/badge/Arduino-library-teal.svg)](https://github.com/deftio/fr_math)
 [![ESP Component](https://img.shields.io/badge/ESP--IDF-component-teal.svg)](https://components.espressif.com/components/deftio/fr_math)
 
-
 # FR_Math: A C Language Fixed-Point Math Library for Embedded Systems
 
-FR_Math is a compact, integer-only fixed-point math library built for
-systems where floating point is too slow, too big, or unavailable. Designed for embedded targets ranging from
-legacy 16 MHz 68k processors to modern Cortex-M and RISC-V cores, it
-provides a full suite of math primitives — trigonometry, logarithms,
-roots, transforms, and signal generators — while remaining
-deterministic, portable, and small. Unlike traditional fixed-point
-libraries, FR_Math lets the caller choose the binary point per
-operation, trading precision and range explicitly instead of locking
-into a single format. Pure C (C99/C11/C17) with an optional C++
-2D-transform wrapper. Compiles under Arduino. Zero dependencies
-beyond `<stdint.h>`.
+See: **[Documentation & Guide](https://deftio.github.io/fr_math/)** — for API reference, examples, fixed-point primer, build instructions.  
+
+ 
+**FR_Math** is a compact, integer-only fixed-point math library built for systems where floating point is too slow, too big, or unavailable. Designed for embedded targets ranging from legacy 16 MHz 68k processors to modern Cortex-M and RISC-V cores, it provides a full suite of math primitives — trigonometry, logarithms, roots, transforms, and signal generators — while remaining deterministic, portable, and small.  Optional print utility functions are also provided for pretty printing out fixed point numbers over serial links or buffers.
+ 
+Unlike most fixed-point libraries, FR_Math lets the caller choose the binary point (raddix) per operation, trading precision and range explicitly instead of locking into a single format. FR_math is Pure C (C99/C11/C17,with) with C++ wrappers.
+Compiles under Arduino, PlatformIO, Espressif, many older embedded targets.   
+Zero dependencies beyond `<stdint.h>`.
+
 
 ### Measured accuracy
 
@@ -29,49 +26,46 @@ Errors below are measured at Q16.16 (s15.16). All functions accept any
 radix — Q16.16 is just the reference point for the table.
 
 At other radixes (3-bit, 24-bit, etc.) accuracy will differ due to the
-number of fractional bits available. All functions support radix 0 to 30.
+number of fractional bits available.
 
-<!-- ACCURACY_TABLE_START -->
-| Function | Max err (%)*| Avg err (%) | Peak at | Note |
-|---|---:|---:|---:|---|
-| sin/cos (BAM) | 0.4578 | 0.0076 | 94 | fr_sin_bam/fr_cos_bam direct; 129-entry table |
-| sin/cos (deg) | 0.4578 | 0.0076 | -359.5 | FR_Sin/FR_Cos ±360° s15.16; FR_DEG2BAM |
-| sin/cos (rad) | 0.6104 | 0.0085 | -4.721 | fr_sin/fr_cos via fr_rad_to_bam ±2π r16 |
-| tan (BAM) | 0.5823 | 0.0008 | 16360 | fr_tan_bam 65536-pt full; ±maxint at poles |
-| tan (deg) | 0.5311 | 0.0008 | -270.1 | FR_Tan ±360° s15.16 full; sat at poles |
-| tan (rad) | 13.4069 | 0.0029 | -4.713 | fr_tan ±2π r16 full; sat at poles |
-| asin / acos | 0.8743 | 0.0301 | 0.0123 | 65536-pt; sqrt approx near boundary |
-| atan2 | 0.5100 | 0.0237 | -2.571 | 65536x5 radii; asin/acos+hypot_fast8 |
-| atan | 0.3390 | 0.0154 | -0.018 | 20001-pt full sweep [-10,10]; via FR_atan2 |
-| sqrt | 0.0239 | 0.0000 | 0.0001 | Round-to-nearest |
-| log2 | 0.0286 | 0.0029 | 0.895 | 65-entry mantissa table |
-| pow2 | 0.0019 | 0.0003 | 3.36 | 65-entry fraction table |
-| ln, log10 | 0.0004 | 0.0000 | 50 | Via FR_MULK28 from log2 |
-| exp | 0.0003 | 0.0000 | 3.91 | FR_MULK28 + FR_pow2 |
-| exp_fast | 0.0009 | 0.0001 | 3.92 | Shift-only scaling |
-| pow10 | 0.0007 | 0.0000 | 1.97 | FR_MULK28 + FR_pow2 |
-| pow10_fast | 0.0028 | 0.0002 | 1.99 | Shift-only scaling |
-| hypot (exact) | 0.0000 | 0.0000 | 0 | 64-bit intermediate |
-| hypot_fast8 (8-seg) | 0.0915 | 0.0320 | 1000 | Shift-only, no multiply |
+| Function | Max err (%)* | Avg err (%) | Note |
+| --- | --- | --- | --- |
+| sin/cos (BAM) | 0.1526 | 0.0030 | fr_sin_bam/fr_cos_bam direct; 129-entry table |
+| sin/cos (deg) | 0.1526 | 0.0029 | FR_Sin/FR_Cos ±360° s15.16; FR_DEG2BAM |
+| sin/cos (rad) | 0.1828 | 0.0033 | fr_sin/fr_cos via fr_rad_to_bam ±2π r16 |
+| tan (BAM) | 0.5823 | 0.0008 | fr_tan_bam 65536-pt full; ±maxint at poles |
+| tan (deg) | 0.5311 | 0.0008 | fr_tan_deg ±360° s15.16 full; sat at poles |
+| tan (rad) | 0.0386 | 0.0001 | fr_tan ±2π r16; r24 pole bypass |
+| asin / acos | 0.7771 | 0.0280 | 65536-pt; sqrt approx near boundary |
+| atan2 | 0.2564 | 0.0237 | 65536x5 radii; asin/acos+hypot_fast8 |
+| atan | 0.2425 | 0.0155 | 20001-pt full sweep [-10,10]; via FR_atan2 |
+| sqrt | 0.0000 | 0.0000 | Round-to-nearest |
+| log2 | 0.0116 | 0.0016 | 65-entry mantissa table |
+| pow2 | 0.0018 | 0.0004 | 65-entry fraction table |
+| ln, log10 | 0.0004 | 0.0000 | Via FR_MULK28 from log2 |
+| exp | 0.0003 | 0.0000 | FR_MULK28 + FR_pow2 |
+| exp_fast | 0.0009 | 0.0001 | Shift-only scaling |
+| pow10 | 0.0005 | 0.0000 | FR_MULK28 + FR_pow2 |
+| pow10_fast | 0.0022 | 0.0002 | Shift-only scaling |
+| hypot (exact) | 0.0000 | 0.0000 | 64-bit intermediate |
+| hypot_fast8 (8-seg) | 0.0915 | 0.0320 | Shift-only, no multiply |
 
-*Relative error; reference clamped to 1% of full-scale output. "Peak at" = input that produced max error.
-<!-- ACCURACY_TABLE_END -->
-
+ 
 ### What's in the box
 
 | Area | Functions |
-|---|---|
-| Arithmetic | `FR_ADD`, `FR_SUB`, `FR_DIV`, `FR_DIV32`, `FR_MOD`, `FR_FixMuls`, `FR_FixMulSat`, `FR_CHRDX` |
-| Utility | `FR_MIN`, `FR_MAX`, `FR_CLAMP`, `FR_ABS`, `FR_SGN` |
-| Trig (degree) | `fr_sin_deg`, `fr_cos_deg`, `fr_tan_deg`, `FR_SinI`, `FR_CosI`, `FR_TanI` |
-| Trig (radian/BAM) | `fr_sin`, `fr_cos`, `fr_tan`, `fr_sin_bam`, `fr_cos_bam`, `fr_tan_bam` |
-| Inverse trig | `FR_atan`, `FR_atan2`, `FR_asin`, `FR_acos` |
-| Log / exp | `FR_log2`, `FR_ln`, `FR_log10`, `FR_pow2`, `FR_EXP`, `FR_POW10`, `FR_EXP_FAST`, `FR_POW10_FAST`, `FR_MULK28` |
-| Roots | `FR_sqrt`, `FR_hypot`, `FR_hypot_fast8` |
-| Wave generators | `fr_wave_sqr`, `fr_wave_pwm`, `fr_wave_tri`, `fr_wave_saw`, `fr_wave_tri_morph`, `fr_wave_noise` |
-| Envelope | `fr_adsr_init`, `fr_adsr_trigger`, `fr_adsr_release`, `fr_adsr_step` |
-| 2D transforms | `FR_Matrix2D_CPT` (mul, add, sub, det, inv, setrotate, XFormPtI, XFormPtI16) |
-| Formatted output | `FR_printNumD`, `FR_printNumF`, `FR_printNumH`, `FR_numstr` |
+| --- | --- |
+| Arithmetic | FR_ADD, FR_SUB, FR_DIV, FR_DIV32, FR_MOD, FR_FixMuls, FR_FixMulSat, FR_CHRDX |
+| Utility | FR_MIN, FR_MAX, FR_CLAMP, FR_ABS, FR_SGN |
+| Trig (radian/BAM) | fr_sin, fr_cos, fr_tan, fr_sin_bam, fr_cos_bam, fr_tan_bam |
+| Trig (degree) | fr_sin_deg, fr_cos_deg, fr_tan_deg, FR_SinI, FR_CosI, FR_TanI |
+| Inverse trig | FR_atan, FR_atan2, FR_asin, FR_acos |
+| Log / exp | FR_log2, FR_ln, FR_log10, FR_pow2, FR_EXP, FR_POW10, FR_EXP_FAST, FR_POW10_FAST, FR_MULK28 |
+| Roots | FR_sqrt, FR_hypot, FR_hypot_fast8 |
+| Wave generators | fr_wave_sqr, fr_wave_pwm, fr_wave_tri, fr_wave_saw, fr_wave_tri_morph, fr_wave_noise |
+| Envelope | fr_adsr_init, fr_adsr_trigger, fr_adsr_release, fr_adsr_step |
+| 2D transforms | FR_Matrix2D_CPT (mul, add, sub, det, inv, setrotate, XFormPtI, XFormPtI16) |
+| Formatted output | FR_printNumD, FR_printNumF, FR_printNumH, FR_numstr |
 
 ### Library size (FR_math.c only, `-Os`)
 
@@ -80,24 +74,28 @@ sizes may vary depending on optimization and linker settings. Sizes
 include all code and internal tables; everything is ROMable.
 
 <!-- SIZE_TABLE_START -->
-| Target | Core | Full |
-|--------|-----:|-----:|
-| RP2040 (Cortex-M0+) | 2.6 KB | 4.2 KB |
-| STM32 (Cortex-M4) | 2.6 KB | 4.2 KB |
-| RISC-V 32 (rv32imac) | 3.0 KB | 4.7 KB |
-| ESP32 (Xtensa) | 3.5 KB | 5.2 KB |
-| 68k | 3.5 KB | 5.3 KB |
-| x86-64 (GCC) | 3.5 KB | 5.7 KB |
-| x86-32 | 4.5 KB | 6.8 KB |
-| MSP430 (16-bit) | 5.9 KB | 8.9 KB |
-| 68HC11 | 10.8 KB | 16.0 KB |
-| AVR (ATmega328P) | 7.0 KB | 10.6 KB |
+| Target | Lean | Core | Full |
+| --- | ---:| ---:| ---:|
+| Cortex-M4 (STM32) | 3.3 KB | 4.4 KB | 5.5 KB |
+| Cortex-M0 (RP2040) | 3.4 KB | 4.5 KB | 5.7 KB |
+| RISC-V rv64 | 4.0 KB | 5.5 KB | 6.8 KB |
+| RISC-V rv32 | 4.1 KB | 5.5 KB | 6.8 KB |
+| Xtensa LX106 (ESP8266) | 4.2 KB | 5.8 KB | 7.3 KB |
+| 68k | 4.4 KB | 6.2 KB | 7.8 KB |
+| x86-64 (GCC) | 4.6 KB | 6.1 KB | 8.0 KB |
+| AArch64 (ARM64) | 4.8 KB | 6.6 KB | 8.7 KB |
+| x86-32 | 5.3 KB | 7.2 KB | 9.2 KB |
+| MSP430 (16-bit) | 7.8 KB | 10.7 KB | 12.8 KB |
+| AVR (ATmega328P) | 9.2 KB | 12.8 KB | 15.4 KB |
+| 68HC11 | 13.3 KB | 18.4 KB | 22.6 KB |
 <!-- SIZE_TABLE_END -->
 
-Core = compiled with `-DFR_CORE_ONLY` (math only, no print, no waves).
+Lean = `-DFR_LEAN -DFR_NO_PRINT` (radian trig, inv trig, log/exp, sqrt).
+Core = `-DFR_CORE_ONLY` (+ degree trig, BAM tan, log10, hypot).
+Full = all features (+ print, waves, ADSR).
 The optional 2D module adds ~1 KB.
 \* MSP430, 68HC11, and AVR are 8/16-bit — every 32-bit operation expands to multiple instructions.
-See [`docker/`](docker/) for the cross-compile setup.
+See [Building & Testing](docs/building.md) for the full cross-compile setup.
 
 ### Lean build options
 
@@ -106,10 +104,10 @@ for ROM-constrained targets. Define them before including `FR_math.h`
 (or pass `-D` on the compiler command line):
 
 | Define | What it removes | Typical savings |
-|---|---|---|
-| `FR_CORE_ONLY` | Everything below (print + waves) | ~1.9 KB |
-| `FR_NO_PRINT` | `FR_printNumF`, `FR_printNumD`, `FR_printNumH`, `FR_numstr` | ~1.3 KB |
-| `FR_NO_WAVES` | `fr_wave_*` (6 shapes), `fr_adsr_*` (ADSR envelope), `FR_HZ2BAM_INC` | ~0.6 KB |
+| --- | --- | --- |
+| FR_CORE_ONLY | Everything below (print + waves) | ~1.9 KB |
+| FR_NO_PRINT | FR_printNumF, FR_printNumD, FR_printNumH, FR_numstr | ~1.3 KB |
+| FR_NO_WAVES | fr_wave_* (6 shapes), fr_adsr_* (ADSR envelope), FR_HZ2BAM_INC | ~0.6 KB |
 
 `FR_CORE_ONLY` is a convenience shorthand that defines both
 `FR_NO_PRINT` and `FR_NO_WAVES` in one step.
@@ -134,7 +132,7 @@ make lib       # build static library
 make test      # run all tests (unit, TDD characterization, 2D)
 ```
 
-## Quick taste
+## Example
 
 ```c
 #include "FR_math.h"
@@ -216,22 +214,24 @@ The full docs ship in two forms — pick whichever fits how you read.
 **Terminal / editor (plain markdown):**
 
 - [docs/README.md](docs/README.md) — same content as plain markdown.
-  - [getting-started.md](docs/getting-started.md) | [fixed-point-primer.md](docs/fixed-point-primer.md) | [api-reference.md](docs/api-reference.md)
-  - [examples.md](docs/examples.md) | [building.md](docs/building.md) | [releases.md](docs/releases.md)
+- [getting-started.md](docs/getting-started.md) | [fixed-point-primer.md](docs/fixed-point-primer.md) | [api-reference.md](docs/api-reference.md)
+- [examples.md](docs/examples.md) | [building.md](docs/building.md) | [releases.md](docs/releases.md)
 
 ## History
 
 FR_Math has been in service since 2000, originally built for graphics
 transforms on 16 MHz 68k Palm Pilots. It shipped inside Trumpetsoft's
 *Inkstorm* on PalmOS, then moved forward through ARM, x86, MIPS,
-RISC-V, and various 8/16-bit embedded targets. v2.0.7 is the current
-release with a full test suite, bit-exact numerical specification, and
-CI on every push.
-
+RISC-V, and various 8/16-bit embedded targets.   
+The current release now has a full test suite, bit-exact numerical specification, and
+CI on every push and better documentation.
+ 
 ## License
 
 BSD-2-Clause — see [LICENSE.txt](LICENSE.txt).
 (c) 2000-2026 M. Chatterjee
+
+PRs and suggestions are welcome.  Please be detailed as embedded systems can involve many tradeoffs.
 
 ## For AI coding agents
 

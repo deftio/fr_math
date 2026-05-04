@@ -9,7 +9,7 @@ or libraries. Pure C99, zero dependencies beyond `<stdint.h>`.
 - Repository: https://github.com/deftio/fr_math
 - Documentation: https://deftio.github.io/fr_math/
 - License: BSD-2-Clause
-- Version: 2.0.7
+- Version: 2.0.8
 
 ## Key concept: radix parameter
 
@@ -25,9 +25,8 @@ Common radix choices:
 ## Source files
 
 - `src/FR_math.h`   — all public declarations, macros, constants
-- `src/FR_math.c`   — all function implementations (~42KB)
+- `src/FR_math.c`   — all function implementations (trig tables inlined, ~45KB)
 - `src/FR_defs.h`   — type aliases: s8, s16, s32, u8, u16, u32
-- `src/FR_trig_table.h` — precomputed cosine quadrant table (129 entries) + tangent octant table (65 entries)
 - `src/FR_math_2D.h` / `src/FR_math_2D.cpp` — optional 2D transform class (C++)
 
 ## Types

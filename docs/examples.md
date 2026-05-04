@@ -1,7 +1,7 @@
 # Examples
 
 Short, runnable snippets for the most common FR_Math tasks. Each
-example compiles cleanly against the v2.0.0 library with:
+example compiles cleanly against the v2.0.8 library with:
 
 ```bash
 cc -Isrc example.c src/FR_math.c -o example

@@ -32,11 +32,15 @@
 #ifndef __FR_Math_h__
 #define __FR_Math_h__
 
-#define FR_MATH_VERSION     "2.0.7"
-#define FR_MATH_VERSION_HEX  0x020007  /* major << 16 | minor << 8 | patch */
+#define FR_MATH_VERSION     "2.0.8"
+#define FR_MATH_VERSION_HEX  0x020008  /* major << 16 | minor << 8 | patch */
 
 #ifdef FR_CORE_ONLY
 #define FR_NO_PRINT
+#define FR_NO_WAVES
+#endif
+
+#ifdef FR_LEAN
 #define FR_NO_WAVES
 #endif
 
@@ -373,7 +377,9 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 #define FR_D360_R16     ((s32)360 << 16)
 
   u16 fr_rad_to_bam(s32 rad, u16 radix);
+#ifndef FR_LEAN
   u16 fr_deg_to_bam(s32 deg, u16 radix);
+#endif
 
 /* FR_BAM2RAD(x): multiply by 2*pi/65536 ≈ 0.0000959 (5 terms, ~18 bits) */
 #define FR_BAM2RAD(x) (((x)>>13)-((x)>>15)+((x)>>18)+((x)>>21)+((x)>>25))
@@ -424,20 +430,16 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
  * Worst-case error: ~2 LSB in s15.16 (~3e-5 absolute), except at the four
  * cardinal angles where the result is exact.
  *
- * FR_USE_EXTENDED_TRIG_PREC (default: ON) enables sub-BAM interpolation
- * in fr_sin/fr_cos/fr_tan (the radian/degree-input functions). This adds
- * one extra multiply per call but recovers ~16 bits of sub-BAM precision.
- * To disable (faster, no multiply in the trig hot path):
- *
- *   #define FR_USE_EXTENDED_TRIG_PREC  0
- *   #include "FR_math.h"
+ * The radian and degree wrappers (fr_sin, fr_cos, fr_tan, etc.) range-reduce
+ * their input, convert to u16 BAM, and call the BAM-native functions. Small-
+ * angle bypasses at the zero crossings (sin≈0, cos≈0, tan≈0) use the linear
+ * approximation sin(δ)≈δ to avoid BAM quantization error where it matters most.
  */
-#ifndef FR_USE_EXTENDED_TRIG_PREC
-#define FR_USE_EXTENDED_TRIG_PREC  1
-#endif
   s32 fr_cos_bam(u16 bam);
   s32 fr_sin_bam(u16 bam);
+#ifndef FR_LEAN
   s32 fr_tan_bam(u16 bam);
+#endif
   s32 fr_cos(s32 rad, u16 radix);
   s32 fr_sin(s32 rad, u16 radix);
   s32 fr_tan(s32 rad, u16 radix);
@@ -449,6 +451,7 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 /* #define fr_cos_deg(deg)  fr_cos_bam(FR_DEG2BAM_I(deg)) — removed, name reused for 2-arg function */
 /* #define fr_sin_deg(deg)  fr_sin_bam(FR_DEG2BAM_I(deg)) — removed, name reused for 2-arg function */
 
+#ifndef FR_LEAN
 /*===============================================
  * Degree-input trig API
  *
@@ -471,6 +474,7 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
   #define FR_Sin  fr_sin_deg
   #define FR_Cos  fr_cos_deg
   #define FR_Tan  fr_tan_deg
+#endif /* FR_LEAN */
 
   /* Inverse trig — output in radians at caller-specified radix (s32).
    * FR_atan2 returns radians at radix 16 (s15.16).
@@ -487,7 +491,9 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 
   s32 FR_log2(s32 input, u16 radix, u16 output_radix);
   s32 FR_ln(s32 input, u16 radix, u16 output_radix);
+#ifndef FR_LEAN
   s32 FR_log10(s32 input, u16 radix, u16 output_radix);
+#endif
 
   /* Power */
   s32 FR_pow2(s32 input, u16 radix);
@@ -535,7 +541,9 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
  * can check `result == FR_DOMAIN_ERROR` to detect domain errors.
  */
   s32 FR_sqrt(s32 input, u16 radix);
+#ifndef FR_LEAN
   s32 FR_hypot(s32 x, s32 y, u16 radix);
+#endif
 
   /* Fast approximate magnitude — shift-only, no multiply, no 64-bit.
    * Based on piecewise-linear approximation of sqrt(x*x + y*y).

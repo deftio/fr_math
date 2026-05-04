@@ -48,23 +48,23 @@ radix — Q16.16 is just the reference point for the table. See the
 <!-- ACCURACY_TABLE_START -->
 | Function | Max err (%)*| Avg err (%) | Note |
 |---|---:|---:|---|
-| sin/cos (BAM) | 0.4578 | 0.0076 | fr_sin_bam/fr_cos_bam direct; 129-entry table |
-| sin/cos (deg) | 0.4578 | 0.0076 | FR_Sin/FR_Cos ±360° s15.16; FR_DEG2BAM |
-| sin/cos (rad) | 0.6104 | 0.0085 | fr_sin/fr_cos via fr_rad_to_bam ±2π r16 |
+| sin/cos (BAM) | 0.1526 | 0.0030 | fr_sin_bam/fr_cos_bam direct; 129-entry table |
+| sin/cos (deg) | 0.1526 | 0.0029 | FR_Sin/FR_Cos ±360° s15.16; FR_DEG2BAM |
+| sin/cos (rad) | 0.1828 | 0.0033 | fr_sin/fr_cos via fr_rad_to_bam ±2π r16 |
 | tan (BAM) | 0.5823 | 0.0008 | fr_tan_bam 65536-pt full; ±maxint at poles |
-| tan (deg) | 0.5311 | 0.0008 | FR_Tan ±360° s15.16 full; sat at poles |
-| tan (rad) | 13.4069 | 0.0029 | fr_tan ±2π r16 full; sat at poles |
-| asin / acos | 0.8743 | 0.0301 | 65536-pt; sqrt approx near boundary |
-| atan2 | 0.5100 | 0.0237 | 65536x5 radii; asin/acos+hypot_fast8 |
-| atan | 0.3390 | 0.0154 | 20001-pt full sweep [-10,10]; via FR_atan2 |
-| sqrt | 0.0239 | 0.0000 | Round-to-nearest |
-| log2 | 0.0286 | 0.0029 | 65-entry mantissa table |
-| pow2 | 0.0019 | 0.0003 | 65-entry fraction table |
+| tan (deg) | 0.5311 | 0.0008 | fr_tan_deg ±360° s15.16 full; sat at poles |
+| tan (rad) | 0.0386 | 0.0001 | fr_tan ±2π r16; r24 pole bypass |
+| asin / acos | 0.7771 | 0.0280 | 65536-pt; sqrt approx near boundary |
+| atan2 | 0.2564 | 0.0237 | 65536x5 radii; asin/acos+hypot_fast8 |
+| atan | 0.2425 | 0.0155 | 20001-pt full sweep [-10,10]; via FR_atan2 |
+| sqrt | 0.0000 | 0.0000 | Round-to-nearest |
+| log2 | 0.0116 | 0.0016 | 65-entry mantissa table |
+| pow2 | 0.0018 | 0.0004 | 65-entry fraction table |
 | ln, log10 | 0.0004 | 0.0000 | Via FR_MULK28 from log2 |
 | exp | 0.0003 | 0.0000 | FR_MULK28 + FR_pow2 |
 | exp_fast | 0.0009 | 0.0001 | Shift-only scaling |
-| pow10 | 0.0007 | 0.0000 | FR_MULK28 + FR_pow2 |
-| pow10_fast | 0.0028 | 0.0002 | Shift-only scaling |
+| pow10 | 0.0005 | 0.0000 | FR_MULK28 + FR_pow2 |
+| pow10_fast | 0.0022 | 0.0002 | Shift-only scaling |
 | hypot (exact) | 0.0000 | 0.0000 | 64-bit intermediate |
 | hypot_fast8 (8-seg) | 0.0915 | 0.0320 | Shift-only, no multiply |
 
@@ -221,14 +221,14 @@ understand *how* the radix notation works first.
 | Multiply-free option | No | No | Yes (e.g. `FR_EXP_FAST`, `FR_hypot_fast8`) |
 | Wave generators | No | No | 6 shapes + ADSR |
 | Dependencies | None | ARM only | None |
-| Code size (Cortex-M0, -Os) | 2.4 KB | ~40 KB+ | 4.2 KB |
+| Code size (Cortex-M0, -Os) | 2.4 KB | ~40 KB+ | 3.4 KB lean / 5.7 KB full |
 
 Sizes measured with `arm-none-eabi-gcc -mcpu=cortex-m0 -mthumb -Os`.
 libfixmath covers trig/sqrt/exp in Q16.16 only; FR_Math includes
 log/ln/log10, wave generators, ADSR, print helpers, and variable radix.
 CMSIS-DSP estimate is for the math function subset only.
-See [`docker/build_sizes.sh`](../docker/build_sizes.sh) for the build
-script.
+See [`scripts/crossbuild-docker.sh`](../scripts/crossbuild-docker.sh) for
+the build script.
 
 ## History
 

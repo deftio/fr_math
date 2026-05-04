@@ -53,23 +53,23 @@ report</a> for sweeps at radixes 8, 12, 16, and 24.</p>
 <table>
 <thead><tr><th>Function</th><th>Max err (%)*</th><th>Avg err (%)</th><th>Note</th></tr></thead>
 <tbody>
-<tr><td>sin/cos (BAM)</td><td>0.4578</td><td>0.0076</td><td>fr_sin_bam/fr_cos_bam direct; 129-entry table</td></tr>
-<tr><td>sin/cos (deg)</td><td>0.4578</td><td>0.0076</td><td>FR_Sin/FR_Cos ±360° s15.16; FR_DEG2BAM</td></tr>
-<tr><td>sin/cos (rad)</td><td>0.6104</td><td>0.0085</td><td>fr_sin/fr_cos via fr_rad_to_bam ±2π r16</td></tr>
+<tr><td>sin/cos (BAM)</td><td>0.1526</td><td>0.0030</td><td>fr_sin_bam/fr_cos_bam direct; 129-entry table</td></tr>
+<tr><td>sin/cos (deg)</td><td>0.1526</td><td>0.0029</td><td>FR_Sin/FR_Cos ±360° s15.16; FR_DEG2BAM</td></tr>
+<tr><td>sin/cos (rad)</td><td>0.1828</td><td>0.0033</td><td>fr_sin/fr_cos via fr_rad_to_bam ±2π r16</td></tr>
 <tr><td>tan (BAM)</td><td>0.5823</td><td>0.0008</td><td>fr_tan_bam 65536-pt full; ±maxint at poles</td></tr>
-<tr><td>tan (deg)</td><td>0.5311</td><td>0.0008</td><td>FR_Tan ±360° s15.16 full; sat at poles</td></tr>
-<tr><td>tan (rad)</td><td>13.4069</td><td>0.0029</td><td>fr_tan ±2π r16 full; sat at poles</td></tr>
-<tr><td>asin / acos</td><td>0.8743</td><td>0.0301</td><td>65536-pt; sqrt approx near boundary</td></tr>
-<tr><td>atan2</td><td>0.5100</td><td>0.0237</td><td>65536x5 radii; asin/acos+hypot_fast8</td></tr>
-<tr><td>atan</td><td>0.3390</td><td>0.0154</td><td>20001-pt full sweep [-10,10]; via FR_atan2</td></tr>
-<tr><td>sqrt</td><td>0.0239</td><td>0.0000</td><td>Round-to-nearest</td></tr>
-<tr><td>log2</td><td>0.0286</td><td>0.0029</td><td>65-entry mantissa table</td></tr>
-<tr><td>pow2</td><td>0.0019</td><td>0.0003</td><td>65-entry fraction table</td></tr>
+<tr><td>tan (deg)</td><td>0.5311</td><td>0.0008</td><td>fr_tan_deg ±360° s15.16 full; sat at poles</td></tr>
+<tr><td>tan (rad)</td><td>0.0386</td><td>0.0001</td><td>fr_tan ±2π r16; r24 pole bypass</td></tr>
+<tr><td>asin / acos</td><td>0.7771</td><td>0.0280</td><td>65536-pt; sqrt approx near boundary</td></tr>
+<tr><td>atan2</td><td>0.2564</td><td>0.0237</td><td>65536x5 radii; asin/acos+hypot_fast8</td></tr>
+<tr><td>atan</td><td>0.2425</td><td>0.0155</td><td>20001-pt full sweep [-10,10]; via FR_atan2</td></tr>
+<tr><td>sqrt</td><td>0.0000</td><td>0.0000</td><td>Round-to-nearest</td></tr>
+<tr><td>log2</td><td>0.0116</td><td>0.0016</td><td>65-entry mantissa table</td></tr>
+<tr><td>pow2</td><td>0.0018</td><td>0.0004</td><td>65-entry fraction table</td></tr>
 <tr><td>ln, log10</td><td>0.0004</td><td>0.0000</td><td>Via FR_MULK28 from log2</td></tr>
 <tr><td>exp</td><td>0.0003</td><td>0.0000</td><td>FR_MULK28 + FR_pow2</td></tr>
 <tr><td>exp_fast</td><td>0.0009</td><td>0.0001</td><td>Shift-only scaling</td></tr>
-<tr><td>pow10</td><td>0.0007</td><td>0.0000</td><td>FR_MULK28 + FR_pow2</td></tr>
-<tr><td>pow10_fast</td><td>0.0028</td><td>0.0002</td><td>Shift-only scaling</td></tr>
+<tr><td>pow10</td><td>0.0005</td><td>0.0000</td><td>FR_MULK28 + FR_pow2</td></tr>
+<tr><td>pow10_fast</td><td>0.0022</td><td>0.0002</td><td>Shift-only scaling</td></tr>
 <tr><td>hypot (exact)</td><td>0.0000</td><td>0.0000</td><td>64-bit intermediate</td></tr>
 <tr><td>hypot_fast8 (8-seg)</td><td>0.0915</td><td>0.0320</td><td>Shift-only, no multiply</td></tr>
 </tbody>
@@ -102,21 +102,24 @@ characterization suite</a> in the repo.</p>
 
 <h2>Lean build options</h2>
 
-<p>Two compile-time <code>#define</code> guards let you strip optional subsystems
+<p>Compile-time <code>#define</code> guards let you strip optional subsystems
 for ROM-constrained targets. Define them before including
 <code>FR_math.h</code> (or pass <code>-D</code> on the compiler command line):</p>
 
 <table>
 <thead><tr><th>Define</th><th>What it removes</th><th>Typical savings</th></tr></thead>
 <tbody>
+<tr><td><code>FR_LEAN</code></td><td>Degree trig, BAM tan, angle converters, <code>FR_log10</code>, <code>FR_hypot</code>, waves + ADSR</td><td>~3.7 KB</td></tr>
 <tr><td><code>FR_NO_PRINT</code></td><td><code>FR_printNumF</code>, <code>FR_printNumD</code>, <code>FR_printNumH</code>, <code>FR_numstr</code></td><td>~1.3 KB</td></tr>
 <tr><td><code>FR_NO_WAVES</code></td><td><code>fr_wave_*</code> (6 shapes), <code>fr_adsr_*</code> (ADSR envelope), <code>FR_HZ2BAM_INC</code></td><td>~0.6 KB</td></tr>
 </tbody>
 </table>
 
-<p>With both guards enabled the core math library (trig, inverse trig, log/exp,
-sqrt, hypot) compiles to ~3.5 KB on x86-64 / clang -Os. On Thumb-2 this
-would be roughly 2.6 KB.</p>
+<p><code>FR_LEAN</code> keeps only radian trig (sin, cos, tan), inverse trig,
+sqrt, log2, ln, exp, pow2, and arithmetic &mdash; comparable to libfixmath&rsquo;s
+API but at 4.7 KB text vs libfixmath&rsquo;s 4.9 KB + 112 KB BSS.
+With <code>FR_LEAN</code> + <code>FR_NO_PRINT</code> the library compiles to
+~4.7 KB on x86-64 / clang -Os.</p>
 
 <pre><code class="language-c">/* Example: headless sensor node &mdash; math only, no print, no audio */
 #define FR_NO_PRINT
@@ -237,7 +240,7 @@ want to understand <em>how</em> the radix notation works first.</p>
 <tr><td>Multiply-free option</td><td>No</td><td>No</td><td>Yes (e.g. <code>FR_EXP_FAST</code>, <code>FR_hypot_fast8</code>)</td></tr>
 <tr><td>Wave generators</td><td>No</td><td>No</td><td>6 shapes + ADSR</td></tr>
 <tr><td>Dependencies</td><td>None</td><td>ARM only</td><td>None</td></tr>
-<tr><td>Code size (Cortex-M0, -Os)</td><td>2.4 KB</td><td>~40 KB+</td><td>4.2 KB</td></tr>
+<tr><td>Code size (Cortex-M0, -Os)</td><td>2.4 KB</td><td>~40 KB+</td><td>3.4 KB lean / 5.7 KB full</td></tr>
 </tbody>
 </table>
 
@@ -246,7 +249,7 @@ want to understand <em>how</em> the radix notation works first.</p>
 FR_Math includes log/ln/log10, wave generators, ADSR, print helpers,
 and variable radix. CMSIS-DSP estimate is for the math function subset
 only. See
-<a href="https://github.com/deftio/fr_math/blob/master/docker/build_sizes.sh">docker/build_sizes.sh</a>
+<a href="https://github.com/deftio/fr_math/blob/master/scripts/crossbuild-docker.sh">scripts/crossbuild-docker.sh</a>
 for the build script.</small></p>
 
 <h2>History</h2>

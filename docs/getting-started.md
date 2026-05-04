@@ -13,8 +13,8 @@ manager integration and no install step. Either:
 
 - Copy `src/FR_math.c`, `src/FR_math.h`,
   `src/FR_defs.h` (and optionally
-  `src/FR_math_2D.cpp`, `src/FR_math_2D.h`,
-  and `src/FR_trig_table.h`) into the target project, **or**
+  `src/FR_math_2D.cpp`, `src/FR_math_2D.h`)
+  into the target project, **or**
 - Add FR_Math as a git submodule and point the build system at
   `src/`.
 

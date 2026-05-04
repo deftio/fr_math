@@ -54,7 +54,8 @@ help:
 	@echo "  coverage         Generate coverage report (gcov)"
 	@echo "  coverage-basic   Basic coverage info without lcov"
 	@echo "  coverage-html    HTML coverage report (requires lcov)"
-	@echo "  size-report      Multi-architecture size report"
+	@echo "  size-report      Multi-architecture size report (Docker)"
+	@echo "  size-update      Size report + patch doc files"
 	@echo "  size-simple      Size report for current platform"
 	@echo ""
 	@echo "Tools:"
@@ -196,10 +197,15 @@ coverage-html: clean dirs
 	@echo "HTML report: $(COV_DIR)/html/index.html"
 	@genhtml $(COV_DIR)/coverage.info --output-directory $(COV_DIR)/html
 
-# Size report - multi-architecture
+# Size report - multi-architecture (Docker cross-compilation)
 .PHONY: size-report
 size-report: dirs
-	@scripts/size_report.sh
+	@scripts/crossbuild_sizes.sh
+
+# Size report + patch doc files
+.PHONY: size-update
+size-update: dirs
+	@scripts/crossbuild_sizes.sh --update
 
 # Simple size report for current platform
 .PHONY: size-simple
@@ -214,6 +220,33 @@ size-simple: lib
 		echo "File sizes:"; \
 		ls -lh $(BUILD_DIR)/*.o; \
 	fi
+
+# Lean build: only functions with libfixmath equivalents (radian trig,
+# inverse trig, sqrt, log2, ln, exp, mul/div — no degree trig, no BAM
+# tan, no waves, no hypot exact, no log10).
+.PHONY: size-lean
+size-lean: dirs
+	@echo "=== LEAN Build (FR_LEAN — libfixmath-equivalent API only) ==="
+	@$(CC) -I$(SRC_DIR) $(LIB_WARN) -DFR_LEAN -DFR_NO_PRINT -Os -c $(SRC_DIR)/FR_math.c -o $(BUILD_DIR)/FR_math_lean.o
+	@size $(BUILD_DIR)/FR_math_lean.o
+	@echo ""
+
+# Full build: everything (default — all trig, waves, ADSR, print, etc.)
+.PHONY: size-full
+size-full: dirs
+	@echo "=== FULL Build (all features) ==="
+	@$(CC) -I$(SRC_DIR) $(LIB_WARN) -Os -c $(SRC_DIR)/FR_math.c -o $(BUILD_DIR)/FR_math_full.o
+	@size $(BUILD_DIR)/FR_math_full.o
+	@echo ""
+
+# Side-by-side lean vs full size comparison
+.PHONY: size-compare
+size-compare: size-lean size-full
+	@echo "=== Lean vs Full Comparison ==="
+	@LEAN=$$(size $(BUILD_DIR)/FR_math_lean.o | tail -1 | awk '{print $$1}'); \
+	 FULL=$$(size $(BUILD_DIR)/FR_math_full.o | tail -1 | awk '{print $$1}'); \
+	 echo "  Lean text: $${LEAN} bytes"; \
+	 echo "  Full text: $${FULL} bytes"
 
 # Tools
 TOOLS_DIR = tools
@@ -232,7 +265,7 @@ $(BUILD_DIR)/trig_neighborhood: $(TOOLS_DIR)/trig_neighborhood.cpp $(SRC_DIR)/FR
 .PHONY: clean
 clean:
 	rm -rf $(BUILD_DIR) $(COV_DIR)
-	rm -f *.o *.gcda *.gcno *.exe *.info
+	rm -f *.o *.gcda *.gcno *.gcov *.exe *.info
 
 .PHONY: cleanall
 cleanall: clean
@@ -250,7 +283,7 @@ coverage-basic: clean dirs
 	@echo ""
 	@echo "=== Basic Coverage Info ==="
 	@if command -v gcov >/dev/null 2>&1; then \
-		gcov $(SRC_DIR)/FR_math.c -o $(BUILD_DIR) | grep -E "File|Lines executed"; \
+		cd $(BUILD_DIR) && gcov FR_math.o | grep -E "File|Lines executed"; \
 		echo ""; \
 		echo "For detailed coverage report, install lcov and run: make coverage"; \
 	else \

@@ -14,9 +14,8 @@ Integer-only, zero dependencies, caller-selectable radix (binary point).
 ```
 src/                  Core library (this is what ships)
   FR_math.h           Public API — all macros, function declarations, constants
-  FR_math.c           All function implementations
+  FR_math.c           All function implementations (trig tables inlined)
   FR_defs.h           Type aliases (s8, s16, s32, u8, u16, u32)
-  FR_trig_table.h     Precomputed sine table
   FR_math_2D.h/.cpp   Optional C++ 2D transform class
 
 tests/                Test suite (7 programs, run via `make test`)

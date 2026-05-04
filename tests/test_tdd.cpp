@@ -2567,7 +2567,7 @@ static void section_accuracy_table(void) {
             double deg = actual_angle * 180.0 / M_PI;
             stats_add(&st, deg, frd(fr_tan(rad_fp, 16), FR_TRIG_OUT_PREC), q16(tan_ref(actual_angle)), TAN_CLAMP);
         }
-        SWEEP_ROW("fr_tan", "(s32 rad, u16 radix)", "-360", "+360", 131072, "0.0055 deg", st, "near-π bypass; s64 lerp near poles");
+        SWEEP_ROW("fr_tan", "(s32 rad, u16 radix)", "-360", "+360", 131072, "0.0055 deg", st, "sign extract + small-angle bypass at 0/pi/2pi; r24 cot(d)~1/d near poles; BAM table elsewhere");
     }
     /* FR_SinI */
     {

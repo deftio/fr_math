@@ -181,18 +181,24 @@ static s32 eval(Func f, double val, int radix, int out_radix,
         case F_SIN: {
             s32 rad_fp = tofix(rad, radix);
             *input_fp = rad_fp;
+            double actual_rad = (double)rad_fp / (double)(1 << radix);
+            *expected = qN(sin(actual_rad), 16);
             raw = fr_sin(rad_fp, (u16)radix);
             break;
         }
         case F_COS: {
             s32 rad_fp = tofix(rad, radix);
             *input_fp = rad_fp;
+            double actual_rad = (double)rad_fp / (double)(1 << radix);
+            *expected = qN(cos(actual_rad), 16);
             raw = fr_cos(rad_fp, (u16)radix);
             break;
         }
         case F_TAN: {
             s32 rad_fp = tofix(rad, radix);
             *input_fp = rad_fp;
+            double actual_rad = (double)rad_fp / (double)(1 << radix);
+            *expected = qN(tan_ref(actual_rad), 16);
             raw = fr_tan(rad_fp, (u16)radix);
             break;
         }
@@ -211,18 +217,29 @@ static s32 eval(Func f, double val, int radix, int out_radix,
         case F_SIN_DEG: {
             s32 deg_fp = tofix(val, radix);
             *input_fp = deg_fp;
+            double actual_deg = (double)deg_fp / (double)(1 << radix);
+            double actual_rad2 = actual_deg * M_PI / 180.0;
+            if (is_sin(f)) *expected = qN(sin(actual_rad2), 16);
+            else if (is_cos(f)) *expected = qN(cos(actual_rad2), 16);
+            else *expected = qN(tan_ref(actual_rad2), 16);
             raw = fr_sin_deg(deg_fp, (u16)radix);
             break;
         }
         case F_COS_DEG: {
             s32 deg_fp = tofix(val, radix);
             *input_fp = deg_fp;
+            double actual_deg = (double)deg_fp / (double)(1 << radix);
+            double actual_rad2 = actual_deg * M_PI / 180.0;
+            *expected = qN(cos(actual_rad2), 16);
             raw = fr_cos_deg(deg_fp, (u16)radix);
             break;
         }
         case F_TAN_DEG: {
             s32 deg_fp = tofix(val, radix);
             *input_fp = deg_fp;
+            double actual_deg = (double)deg_fp / (double)(1 << radix);
+            double actual_rad2 = actual_deg * M_PI / 180.0;
+            *expected = qN(tan_ref(actual_rad2), 16);
             raw = fr_tan_deg(deg_fp, (u16)radix);
             break;
         }
