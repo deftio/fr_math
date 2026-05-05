@@ -706,52 +706,11 @@ do_wait_release() {
 }
 
 # -----------------------------------------------------------------------
-# Step 15: Publish to PlatformIO registry
+# Step 15: Registry publishing (handled by CI)
 # -----------------------------------------------------------------------
-
-do_pio_publish() {
-    step_header "Publish to PlatformIO registry"
-
-    if ! command -v pio &>/dev/null; then
-        echo "  pio CLI not found. Skipping."
-        echo "  Install: pip install platformio"
-        return 0
-    fi
-
-    # Check if already published at this version
-    local pio_info
-    pio_info=$(pio pkg show deftio/FR_Math 2>/dev/null || true)
-    if echo "$pio_info" | grep -q "$VER_STRING"; then
-        pass "FR_Math $VER_STRING already on PlatformIO registry."
-        return 0
-    fi
-
-    confirm "Publish FR_Math $VER_STRING to PlatformIO?"
-    run_cmd make clean >/dev/null 2>&1
-    run_cmd pio pkg publish . --no-interactive
-    pass "Published to PlatformIO registry."
-}
-
-# -----------------------------------------------------------------------
-# Step 16: Publish to ESP-IDF Component Registry
-# -----------------------------------------------------------------------
-
-do_idf_publish() {
-    step_header "Publish to ESP-IDF Component Registry"
-
-    if ! command -v compote &>/dev/null; then
-        echo "  compote CLI not found. Skipping."
-        echo "  Install: pip install idf-component-manager"
-        return 0
-    fi
-
-    confirm "Publish FR_Math $VER_STRING to ESP-IDF Component Registry?"
-    echo "  --- Packing component ---"
-    run_cmd compote component pack --name fr_math
-    echo "  --- Uploading component ---"
-    run_cmd compote component upload --name fr_math --namespace deftio
-    pass "Published to ESP-IDF Component Registry."
-}
+# PlatformIO and Espressif publishing is handled automatically by the
+# Release workflow (.github/workflows/release.yml) after the tag is pushed.
+# No local publish step needed.
 
 # -----------------------------------------------------------------------
 # Step 17: Done
@@ -838,8 +797,6 @@ do_check_git
 
 if $TAG_EXISTS; then
     do_wait_release
-    do_pio_publish
-    do_idf_publish
     do_done
 else
     do_push_branch
@@ -850,7 +807,5 @@ else
     do_verify_master
     do_tag
     do_wait_release
-    do_pio_publish
-    do_idf_publish
     do_done
 fi

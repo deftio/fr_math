@@ -40,7 +40,8 @@
         ['guide/api-reference.html',      'API',             'api-reference.html'],
         ['guide/examples.html',           'Examples',        'examples.html'],
         ['guide/building.html',           'Build &amp; Test','building.html'],
-        ['releases.html',                 'Releases',        'releases.html']
+        ['releases.html',                 'Releases',        'releases.html'],
+        ['https://github.com/deftio/fr_math', 'GitHub',       '']
     ];
 
     // -----------------------------------------------------------------
@@ -50,7 +51,8 @@
     if (headerEl) {
         var navHtml = '';
         for (var i = 0; i < nav.length; i++) {
-            var href       = prefix + nav[i][0];
+            var rawHref    = nav[i][0];
+            var href       = /^https?:\/\//.test(rawHref) ? rawHref : prefix + rawHref;
             var label      = nav[i][1];
             var basename   = nav[i][2];
             var activeAttr = (current === basename) ? ' class="active"' : '';
