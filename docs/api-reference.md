@@ -79,6 +79,8 @@ and in return get float-like ergonomics with integer-only codegen.
 | `FR_OVERFLOW_POS` | `0x7FFFFFFF` (`INT32_MAX`) | Saturating ops when the true result exceeds `+2^31`. |
 | `FR_OVERFLOW_NEG` | `0x80000000` (`INT32_MIN`) | Saturating ops when the true result is below `−2^31`. |
 | `FR_DOMAIN_ERROR` | `0x80000000` (`INT32_MIN`) | Functions with an invalid input, e.g. `FR_sqrt(-1)`, `FR_log2(0)`, `FR_asin(2.0)`. **Shares the bit pattern of `FR_OVERFLOW_NEG`**, so don't mix a `≤ FR_OVERFLOW_NEG` check with a domain check — test for the exact sentinel. |
+| `FR_TRIG_MAXVAL` | `0x7FFFFFFF` (`INT32_MAX`) | Tangent saturation ceiling. Returned by `fr_tan_bam`, `fr_tan`, `fr_tan_deg`, and `FR_TanI` when the angle is near a pole (90° + k·180°). |
+| `FR_TRIG_MINVAL` | `-FR_TRIG_MAXVAL` | Tangent saturation floor. Negative-side pole saturation. |
 
 ### Common numerical constants (`FR_math.h`)
 
@@ -396,6 +398,7 @@ represents exactly 1.0 in the s15.16 output format.
 | --- | --- | --- |
 | `fr_cos_bam` | `s32 fr_cos_bam(u16 bam)` | s15.16, range [−65536, +65536]. Exact at cardinal angles. |
 | `fr_sin_bam` | `s32 fr_sin_bam(u16 bam)` | s15.16. Defined as `fr_cos_bam(bam − FR_BAM_QUADRANT)`. |
+| `fr_tan_bam` | `s32 fr_tan_bam(u16 bam)` | s15.16. Uses a 65-entry octant table for [0, 45°] and the reciprocal identity `tan(x) = 1/tan(90°−x)` for (45°, 90°). Saturates to `±FR_TRIG_MAXVAL` at the poles (90°, 270°). Returns exact 0 at 0° and 180°. No 64-bit intermediates; one 32-bit division only in the >45° path. |
 
 ### Radian-native
 

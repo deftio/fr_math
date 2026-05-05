@@ -53,24 +53,24 @@ report</a> for sweeps at radixes 8, 12, 16, and 24.</p>
 <table>
 <thead><tr><th>Function</th><th>Max err (%)*</th><th>Avg err (%)</th><th>Note</th></tr></thead>
 <tbody>
-<tr><td>sin/cos (BAM)</td><td>0.1526</td><td>0.0030</td><td>fr_sin_bam/fr_cos_bam direct; 129-entry table</td></tr>
-<tr><td>sin/cos (deg)</td><td>0.1526</td><td>0.0029</td><td>FR_Sin/FR_Cos ±360° s15.16; FR_DEG2BAM</td></tr>
-<tr><td>sin/cos (rad)</td><td>0.1828</td><td>0.0033</td><td>fr_sin/fr_cos via fr_rad_to_bam ±2π r16</td></tr>
-<tr><td>tan (BAM)</td><td>0.5823</td><td>0.0008</td><td>fr_tan_bam 65536-pt full; ±maxint at poles</td></tr>
-<tr><td>tan (deg)</td><td>0.5311</td><td>0.0008</td><td>fr_tan_deg ±360° s15.16 full; sat at poles</td></tr>
-<tr><td>tan (rad)</td><td>0.0386</td><td>0.0001</td><td>fr_tan ±2π r16; r24 pole bypass</td></tr>
-<tr><td>asin / acos</td><td>0.7771</td><td>0.0280</td><td>65536-pt; sqrt approx near boundary</td></tr>
-<tr><td>atan2</td><td>0.2564</td><td>0.0237</td><td>65536x5 radii; asin/acos+hypot_fast8</td></tr>
-<tr><td>atan</td><td>0.2425</td><td>0.0155</td><td>20001-pt full sweep [-10,10]; via FR_atan2</td></tr>
+<tr><td>sin/cos (BAM)</td><td>0.1526</td><td>0.0030</td><td>very fast binary angle trig</td></tr>
+<tr><td>sin/cos (deg)</td><td>0.1526</td><td>0.0029</td><td>degree input trig fns</td></tr>
+<tr><td>sin/cos (rad)</td><td>0.1828</td><td>0.0033</td><td>radian (traditional) trig</td></tr>
+<tr><td>tan (BAM)</td><td>0.5823</td><td>0.0008</td><td>binary angle tangent; ±maxint at poles</td></tr>
+<tr><td>tan (deg)</td><td>0.5311</td><td>0.0008</td><td>degree input tangent; saturated at poles</td></tr>
+<tr><td>tan (rad)</td><td>0.0386</td><td>0.0001</td><td>radian (traditional) tangent</td></tr>
+<tr><td>asin / acos</td><td>0.7771</td><td>0.0280</td><td>reverse trig, radian output</td></tr>
+<tr><td>atan2</td><td>0.2564</td><td>0.0237</td><td>reverse tangent, always safe</td></tr>
+<tr><td>atan</td><td>0.2425</td><td>0.0155</td><td>reverse tangent, accepts up to maxint</td></tr>
 <tr><td>sqrt</td><td>0.0000</td><td>0.0000</td><td>Round-to-nearest</td></tr>
-<tr><td>log2</td><td>0.0116</td><td>0.0016</td><td>65-entry mantissa table</td></tr>
-<tr><td>pow2</td><td>0.0018</td><td>0.0004</td><td>65-entry fraction table</td></tr>
-<tr><td>ln, log10</td><td>0.0004</td><td>0.0000</td><td>Via FR_MULK28 from log2</td></tr>
-<tr><td>exp</td><td>0.0003</td><td>0.0000</td><td>FR_MULK28 + FR_pow2</td></tr>
+<tr><td>log2</td><td>0.0116</td><td>0.0016</td><td>shift/add only for speed</td></tr>
+<tr><td>pow2</td><td>0.0018</td><td>0.0004</td><td>shift/add only for speed</td></tr>
+<tr><td>ln, log10</td><td>0.0004</td><td>0.0000</td><td>shift/add only for speed</td></tr>
+<tr><td>exp</td><td>0.0003</td><td>0.0000</td><td>shift/add only for speed</td></tr>
 <tr><td>exp_fast</td><td>0.0009</td><td>0.0001</td><td>Shift-only scaling</td></tr>
-<tr><td>pow10</td><td>0.0005</td><td>0.0000</td><td>FR_MULK28 + FR_pow2</td></tr>
+<tr><td>pow10</td><td>0.0005</td><td>0.0000</td><td>shift/add only for speed</td></tr>
 <tr><td>pow10_fast</td><td>0.0022</td><td>0.0002</td><td>Shift-only scaling</td></tr>
-<tr><td>hypot (exact)</td><td>0.0000</td><td>0.0000</td><td>64-bit intermediate</td></tr>
+<tr><td>hypot (exact)</td><td>0.0000</td><td>0.0000</td><td>Uses 64-bit intermediate</td></tr>
 <tr><td>hypot_fast8 (8-seg)</td><td>0.0915</td><td>0.0320</td><td>Shift-only, no multiply</td></tr>
 </tbody>
 </table>
@@ -258,7 +258,7 @@ for the build script.</small></p>
 built for graphics transforms on 16&nbsp;MHz 68k Palm Pilots (it
 shipped inside Trumpetsoft&rsquo;s <em>Inkstorm</em>), then ported
 forward to ARM, x86, MIPS, RISC-V, and various 8/16-bit embedded
-targets. v2.0.7 is the current release with a full test suite,
+targets. The current release has a full test suite,
 bit-exact numerical specification, and CI on every push.</p>
 
 <h2>License</h2>

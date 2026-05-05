@@ -35,6 +35,7 @@ FR_printNumH	KEYWORD2
 FR_numstr	KEYWORD2
 fr_cos_bam	KEYWORD2
 fr_sin_bam	KEYWORD2
+fr_tan_bam	KEYWORD2
 fr_cos	KEYWORD2
 fr_sin	KEYWORD2
 fr_tan	KEYWORD2

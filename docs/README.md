@@ -48,24 +48,24 @@ radix — Q16.16 is just the reference point for the table. See the
 <!-- ACCURACY_TABLE_START -->
 | Function | Max err (%)*| Avg err (%) | Note |
 |---|---:|---:|---|
-| sin/cos (BAM) | 0.1526 | 0.0030 | fr_sin_bam/fr_cos_bam direct; 129-entry table |
-| sin/cos (deg) | 0.1526 | 0.0029 | FR_Sin/FR_Cos ±360° s15.16; FR_DEG2BAM |
-| sin/cos (rad) | 0.1828 | 0.0033 | fr_sin/fr_cos via fr_rad_to_bam ±2π r16 |
-| tan (BAM) | 0.5823 | 0.0008 | fr_tan_bam 65536-pt full; ±maxint at poles |
-| tan (deg) | 0.5311 | 0.0008 | fr_tan_deg ±360° s15.16 full; sat at poles |
-| tan (rad) | 0.0386 | 0.0001 | fr_tan ±2π r16; r24 pole bypass |
-| asin / acos | 0.7771 | 0.0280 | 65536-pt; sqrt approx near boundary |
-| atan2 | 0.2564 | 0.0237 | 65536x5 radii; asin/acos+hypot_fast8 |
-| atan | 0.2425 | 0.0155 | 20001-pt full sweep [-10,10]; via FR_atan2 |
+| sin/cos (BAM) | 0.1526 | 0.0030 | very fast binary angle trig |
+| sin/cos (deg) | 0.1526 | 0.0029 | degree input trig fns |
+| sin/cos (rad) | 0.1828 | 0.0033 | radian (traditional) trig |
+| tan (BAM) | 0.5823 | 0.0008 | binary angle tangent; ±maxint at poles |
+| tan (deg) | 0.5311 | 0.0008 | degree input tangent; saturated at poles |
+| tan (rad) | 0.0386 | 0.0001 | radian (traditional) tangent |
+| asin / acos | 0.7771 | 0.0280 | reverse trig, radian output |
+| atan2 | 0.2564 | 0.0237 | reverse tangent, always safe |
+| atan | 0.2425 | 0.0155 | reverse tangent, accepts up to maxint |
 | sqrt | 0.0000 | 0.0000 | Round-to-nearest |
-| log2 | 0.0116 | 0.0016 | 65-entry mantissa table |
-| pow2 | 0.0018 | 0.0004 | 65-entry fraction table |
-| ln, log10 | 0.0004 | 0.0000 | Via FR_MULK28 from log2 |
-| exp | 0.0003 | 0.0000 | FR_MULK28 + FR_pow2 |
+| log2 | 0.0116 | 0.0016 | shift/add only for speed |
+| pow2 | 0.0018 | 0.0004 | shift/add only for speed |
+| ln, log10 | 0.0004 | 0.0000 | shift/add only for speed |
+| exp | 0.0003 | 0.0000 | shift/add only for speed |
 | exp_fast | 0.0009 | 0.0001 | Shift-only scaling |
-| pow10 | 0.0005 | 0.0000 | FR_MULK28 + FR_pow2 |
+| pow10 | 0.0005 | 0.0000 | shift/add only for speed |
 | pow10_fast | 0.0022 | 0.0002 | Shift-only scaling |
-| hypot (exact) | 0.0000 | 0.0000 | 64-bit intermediate |
+| hypot (exact) | 0.0000 | 0.0000 | Uses 64-bit intermediate |
 | hypot_fast8 (8-seg) | 0.0915 | 0.0320 | Shift-only, no multiply |
 
 *Relative error; reference clamped to 1% of full-scale output.
@@ -235,9 +235,9 @@ the build script.
 FR_Math has been in service since **2000**, originally built for
 graphics transforms on 16 MHz 68k Palm Pilots (it shipped inside
 Trumpetsoft's *Inkstorm*), then ported forward to ARM, x86, MIPS,
-RISC-V, and various 8/16-bit embedded targets. v2.0.7 is the current
-release with a full test suite, bit-exact numerical
-specification, and CI on every push.
+RISC-V, and various 8/16-bit embedded targets. The current release
+has a full test suite, bit-exact numerical specification, and CI on
+every push.
 
 ## License
 

@@ -18,7 +18,7 @@
 <h1>Examples</h1>
 
 <p>Short, runnable snippets for the most common FR_Math tasks. Each
-example compiles cleanly against the v2.0.8 library with:</p>
+example compiles cleanly against the library with:</p>
 
 <pre><code class="language-bash">cc -Isrc example.c src/FR_math.c -o example
 ./example</code></pre>
@@ -209,19 +209,16 @@ int main(void)
 <h2>5. Arctangent and atan2</h2>
 
 <p>The inverse-trig functions in FR_Math return angles in
-<strong>degrees</strong>, not radians &mdash; the output fits in
-an <code>s16</code> and you can feed it straight back into
-<code>FR_SinI</code> / <code>FR_CosI</code> without any
-conversion. This example exercises both <code>FR_atan</code>
-(single-argument ratio) and <code>FR_atan2</code> (full-circle,
-two-argument).</p>
+<strong>radians</strong> at a caller-chosen output radix. This
+example exercises both <code>FR_atan</code> (single-argument
+ratio) and <code>FR_atan2</code> (full-circle, two-argument).</p>
 
-<p><em>Caveats:</em> <code>FR_atan2</code> takes only two
-arguments (<code>y</code>, <code>x</code>) and has no radix
-parameter &mdash; it returns degrees in [&minus;180, 180] as
-<code>s16</code>. The <code>radix</code> argument on
-<code>FR_atan</code> is the radix of the <em>input</em> ratio,
-not of the output.</p>
+<p><em>Caveats:</em> all inverse-trig functions take an
+<code>out_radix</code> parameter that sets the radix of the
+<em>output</em>. <code>FR_atan2(y, x, out_radix)</code> returns
+radians in [&minus;&pi;, &pi;] as <code>s32</code> at the chosen
+radix. <code>FR_atan(input, radix, out_radix)</code> has
+separate radixes for input and output.</p>
 
 <pre><code class="language-c">#include &lt;stdio.h&gt;
 #include "FR_math.h"
@@ -230,18 +227,19 @@ int main(void)
 {
     const u16 r = 14;
 
-    /* atan(1) = 45 degrees */
-    s16 a = FR_atan(I2FR(1, r), r);
-    printf("atan(1) = %d degrees (expect 45)\n", a);
+    /* atan(1) = pi/4 radians &asymp; 0.7854 */
+    s32 a = FR_atan(I2FR(1, r), r, r);
+    printf("atan(1) = %d (radix %d, expect ~%d)\n",
+           (int)a, r, (int)(12868));  /* pi/4 at r14 */
 
     /* Full-circle atan2 */
-    s16 q2 = FR_atan2(I2FR( 1, r), I2FR(-1, r));  /*  135 deg */
-    s16 q3 = FR_atan2(I2FR(-1, r), I2FR(-1, r));  /* -135 deg */
-    printf("atan2( 1,-1) = %d\n", q2);
-    printf("atan2(-1,-1) = %d\n", q3);
+    s32 q2 = FR_atan2(I2FR( 1, r), I2FR(-1, r), r);  /*  3*pi/4 */
+    s32 q3 = FR_atan2(I2FR(-1, r), I2FR(-1, r), r);  /* -3*pi/4 */
+    printf("atan2( 1,-1) = %d (expect ~%d)\n", (int)q2, (int)(38603));
+    printf("atan2(-1,-1) = %d (expect ~%d)\n", (int)q3, (int)(-38603));
 
     /* asin with out-of-domain input */
-    s16 bad = FR_asin(I2FR(2, r), r);
+    s32 bad = FR_asin(I2FR(2, r), r, r);
     if (bad == FR_DOMAIN_ERROR)
         printf("asin(2) rejected, good.\n");
     return 0;
@@ -562,6 +560,57 @@ significant bits &mdash; and seven decimal digits survive. The
 eighth digit (<code>5</code> vs <code>4</code>) shows the quantization floor:
 <code>2^&minus;24 &asymp; 6 &times; 10^&minus;8</code>, so the last digit is always
 uncertain.</p>
+
+<h2>Desktop example programs</h2>
+
+<p>In addition to the inline snippets above, the <code>examples/</code> directory
+contains four self-contained desktop programs. Each has its own
+<code>Makefile</code> and <code>README.md</code>; build artifacts stay within the
+example&rsquo;s directory.</p>
+
+<table>
+<thead><tr><th>Directory</th><th>What it does</th></tr></thead>
+<tbody>
+<tr>
+  <td><code>examples/fixed-point-basics/</code></td>
+  <td>Educational walkthrough of radix interpretation, <code>I2FR</code>/<code>FR2I</code>
+      round-trips, <code>FR_NUM</code> constant construction, aligned add/sub,
+      multiply precision, division, saturation, and <code>FR_printNumF</code>
+      formatted output.</td>
+</tr>
+<tr>
+  <td><code>examples/log-exp-curves/</code></td>
+  <td>Sweeps <code>FR_log2</code>, <code>FR_ln</code>, <code>FR_log10</code>,
+      <code>FR_pow2</code>, <code>FR_EXP</code>, <code>FR_POW10</code>, and
+      <code>FR_sqrt</code> against IEEE double reference values, printing
+      per-point and summary error tables.</td>
+</tr>
+<tr>
+  <td><code>examples/waveform-synth/</code></td>
+  <td>Generates square, triangle, sawtooth, PWM, sine, and noise waveforms plus
+      an ADSR envelope and amplitude-modulated combination. Default mode renders
+      ASCII art; <code>--csv</code> mode outputs machine-readable CSV.</td>
+</tr>
+<tr>
+  <td><code>examples/trig-accuracy/</code></td>
+  <td>Head-to-head comparison of FR_Math
+      (<code>FR_SinI</code>/<code>FR_CosI</code>/<code>FR_TanI</code>) vs
+      libfixmath (<code>fix16_sin</code>/<code>fix16_cos</code>/<code>fix16_tan</code>)
+      vs IEEE double over 0&ndash;360 degrees. Requires libfixmath source.</td>
+</tr>
+</tbody>
+</table>
+
+<p>Build all from the repo root:</p>
+
+<pre><code class="language-bash">make examples        # builds all desktop examples
+make run-examples    # builds and runs 1-3, plus 4 if libfixmath present</code></pre>
+
+<p>Or build any single example from its directory:</p>
+
+<pre><code class="language-bash">cd examples/waveform-synth
+make run             # ASCII art output
+make run-csv         # CSV output</code></pre>
 
 <h2>See also</h2>
 

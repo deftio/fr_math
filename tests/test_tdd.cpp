@@ -1931,7 +1931,7 @@ static void section_accuracy_table(void) {
             stats_add(&st, (double)bam, frd(fr_sin_bam(bam), FR_TRIG_OUT_PREC), q16(sin(rad)), 1.0);
             stats_add(&st, (double)bam, frd(fr_cos_bam(bam), FR_TRIG_OUT_PREC), q16(cos(rad)), 1.0);
         }
-        acc_row("sin/cos (BAM)", &st, "fr_sin_bam/fr_cos_bam direct; 129-entry table");
+        acc_row("sin/cos (BAM)", &st, "very fast binary angle trig");
     }
 
     /* --- sin / cos (degree wrappers: 65536-pt at s15.16) --- */
@@ -1954,7 +1954,7 @@ static void section_accuracy_table(void) {
             stats_add(&st, d, frd(FR_SinI(d), FR_TRIG_OUT_PREC), q16(sin(rad)), 1.0);
             stats_add(&st, d, frd(FR_CosI(d), FR_TRIG_OUT_PREC), q16(cos(rad)), 1.0);
         }
-        acc_row("sin/cos (deg)", &st, "FR_Sin/FR_Cos ±360° s15.16; FR_DEG2BAM");
+        acc_row("sin/cos (deg)", &st, "degree input trig fns");
     }
 
     /* --- sin / cos (radian wrappers: 65536-pt) --- */
@@ -1967,7 +1967,7 @@ static void section_accuracy_table(void) {
             stats_add(&st, actual_angle, frd(fr_sin(rad_fp, 16), FR_TRIG_OUT_PREC), q16(sin(actual_angle)), 1.0);
             stats_add(&st, actual_angle, frd(fr_cos(rad_fp, 16), FR_TRIG_OUT_PREC), q16(cos(actual_angle)), 1.0);
         }
-        acc_row("sin/cos (rad)", &st, "fr_sin/fr_cos via fr_rad_to_bam ±2π r16");
+        acc_row("sin/cos (rad)", &st, "radian (traditional) trig");
     }
 
     /* --- tan (BAM native: 65536-pt, full sweep) --- */
@@ -1981,7 +1981,7 @@ static void section_accuracy_table(void) {
             else                    ref = tan_ref(bam * 2.0 * M_PI / 65536.0);
             stats_add(&st, (double)bam, frd(fr_tan_bam(bam), FR_TRIG_OUT_PREC), q16(ref), TAN_CLAMP);
         }
-        acc_row("tan (BAM)", &st, "fr_tan_bam 65536-pt full; ±maxint at poles");
+        acc_row("tan (BAM)", &st, "binary angle tangent; ±maxint at poles");
     }
 
     /* --- tan (degree wrappers: 65536-pt at s15.16, full sweep) --- */
@@ -2001,7 +2001,7 @@ static void section_accuracy_table(void) {
             double rad = d * M_PI / 180.0;
             stats_add(&st, d, frd(FR_TanI(d), FR_TRIG_OUT_PREC), q16(tan_ref(rad)), TAN_CLAMP);
         }
-        acc_row("tan (deg)", &st, "FR_Tan ±360° s15.16 full; sat at poles");
+        acc_row("tan (deg)", &st, "degree input tangent; saturated at poles");
     }
 
     /* --- tan (radian wrappers: 65536-pt, full sweep) --- */
@@ -2013,7 +2013,7 @@ static void section_accuracy_table(void) {
             double actual_angle = frd(rad_fp, 16);
             stats_add(&st, actual_angle, frd(fr_tan(rad_fp, 16), FR_TRIG_OUT_PREC), q16(tan_ref(actual_angle)), TAN_CLAMP);
         }
-        acc_row("tan (rad)", &st, "fr_tan ±2π r16 full; sat at poles");
+        acc_row("tan (rad)", &st, "radian (traditional) tangent");
     }
 
     /* --- asin / acos --- */
@@ -2028,7 +2028,7 @@ static void section_accuracy_table(void) {
             rad = FR_acos((s32)i, 15, R);
             stats_add(&st, xd, frd(rad, R), q16(acos(xd)), M_PI);
         }
-        acc_row("asin / acos", &st, "65536-pt; sqrt approx near boundary");
+        acc_row("asin / acos", &st, "reverse trig, radian output");
     }
 
     /* --- atan2 --- */
@@ -2073,7 +2073,7 @@ static void section_accuracy_table(void) {
             s32 r = FR_atan2(fy, fx, R);
             stats_add(&st, specials_deg[si], frd(r, R), q16(atan2((double)fy, (double)fx)), M_PI);
         }
-        acc_row("atan2", &st, "65536x5 radii; asin/acos+hypot_fast8");
+        acc_row("atan2", &st, "reverse tangent, always safe");
     }
 
     /* --- atan --- */
@@ -2087,7 +2087,7 @@ static void section_accuracy_table(void) {
             double ref = atan(actual_x);
             stats_add(&st, actual_x, frd(r, R), q16(ref), M_PI / 2.0);
         }
-        acc_row("atan", &st, "20001-pt full sweep [-10,10]; via FR_atan2");
+        acc_row("atan", &st, "reverse tangent, accepts up to maxint");
     }
 
     /* --- sqrt --- */
@@ -2131,7 +2131,7 @@ static void section_accuracy_table(void) {
             s32 r = FR_log2(fr, (u16)R, (u16)R);
             stats_add(&st, actual_x, frd(r, R), q16(log2(actual_x)), log2(32000.0));
         }
-        acc_row("log2", &st, "65-entry mantissa table");
+        acc_row("log2", &st, "shift/add only for speed");
     }
 
     /* --- pow2 --- */
@@ -2145,7 +2145,7 @@ static void section_accuracy_table(void) {
             double ref = pow(2.0, actual_x);
             stats_add(&st, actual_x, frd(r, R), q16(ref), pow(2.0, 8.0));
         }
-        acc_row("pow2", &st, "65-entry fraction table");
+        acc_row("pow2", &st, "shift/add only for speed");
     }
 
     /* --- ln, log10 --- */
@@ -2163,7 +2163,7 @@ static void section_accuracy_table(void) {
             ref = log10(actual_x);
             stats_add(&st, actual_x, frd(r, R), q16(ref), log10(32000.0));
         }
-        acc_row("ln, log10", &st, "Via FR_MULK28 from log2");
+        acc_row("ln, log10", &st, "shift/add only for speed");
     }
 
     /* --- exp (FR_EXP) --- */
@@ -2178,7 +2178,7 @@ static void section_accuracy_table(void) {
             if (ref > 32000.0 || ref < 1e-6) continue; /* skip overflow/underflow */
             stats_add(&st, actual_x, frd(r, R), q16(ref), 32000.0);
         }
-        acc_row("exp", &st, "FR_MULK28 + FR_pow2");
+        acc_row("exp", &st, "shift/add only for speed");
     }
 
     /* --- exp_fast (FR_EXP_FAST) --- */
@@ -2208,7 +2208,7 @@ static void section_accuracy_table(void) {
             if (ref > 32000.0 || ref < 1e-6) continue;
             stats_add(&st, actual_x, frd(r, R), q16(ref), 32000.0);
         }
-        acc_row("pow10", &st, "FR_MULK28 + FR_pow2");
+        acc_row("pow10", &st, "shift/add only for speed");
     }
 
     /* --- pow10_fast (FR_POW10_FAST) --- */
@@ -2241,7 +2241,7 @@ static void section_accuracy_table(void) {
             double ref = hypot(actual_x, actual_y);
             stats_add(&st, ref, frd(r, R), q16(ref), hypot(1000.0, 1000.0));
         }
-        acc_row("hypot (exact)", &st, "64-bit intermediate");
+        acc_row("hypot (exact)", &st, "Uses 64-bit intermediate");
     }
 
     /* --- hypot_fast8 (8-seg) --- */

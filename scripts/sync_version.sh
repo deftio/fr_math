@@ -18,8 +18,7 @@
 #   src/FR_math.h                — FR_MATH_VERSION string (derived from _HEX)
 #   VERSION                      — plain-text "X.Y.Z" (derived from _HEX)
 #   README.md                    — shields.io version badge
-#   README.md                    — "Current version:" line
-#   pages/assets/site.js         — FR_VERSION constant (docs page header)
+#   pages/version.json           — {"version":"X.Y.Z","hex":"0xMMmmpp"} for site.js
 #   src/FR_math_2D.h             — @version doxygen tag
 #   src/FR_math_2D.cpp           — @version doxygen tag
 #   library.properties           — Arduino Library Manager version
@@ -196,20 +195,29 @@ update_file "README.md version badge" "${PROJECT_ROOT}/README.md" \
     "s|(img\\.shields\\.io/badge/version-)[0-9]+\\.[0-9]+\\.[0-9]+(-[a-z]+\\.svg)|\${1}${VERSION}\${2}|g"
 
 # --------------------------------------------------------------------------
-# 4. README.md — "Current version: X.Y.Z" line in the Version section
+# 4. pages/version.json — machine-readable version for site.js
+#    site.js fetches this at runtime so no hardcoded version in JS.
 # --------------------------------------------------------------------------
-update_file "README.md Current version: line" "${PROJECT_ROOT}/README.md" \
-    "s|(Current version: )[0-9]+\\.[0-9]+\\.[0-9]+|\${1}${VERSION}|g"
+VER_JSON="${PROJECT_ROOT}/pages/version.json"
+VER_JSON_WANT="{\"version\":\"${VERSION}\",\"hex\":\"${WANT_HEX}\"}"
+VER_JSON_CUR=""
+if [[ -f "${VER_JSON}" ]]; then
+    VER_JSON_CUR=$(cat "${VER_JSON}" | tr -d '[:space:]')
+fi
+VER_JSON_WANT_TRIMMED=$(echo "${VER_JSON_WANT}" | tr -d '[:space:]')
+if [[ "${VER_JSON_CUR}" == "${VER_JSON_WANT_TRIMMED}" ]]; then
+    echo -e "  ${GREEN}ok  ${NC} pages/version.json"
+elif [[ "${MODE}" == "check" ]]; then
+    echo -e "  ${RED}DRIFT${NC} pages/version.json"
+    DRIFT=1
+else
+    echo "${VER_JSON_WANT}" > "${VER_JSON}"
+    echo -e "  ${YELLOW}updated${NC} pages/version.json"
+    CHANGED=1
+fi
 
 # --------------------------------------------------------------------------
-# 5. pages/assets/site.js — FR_VERSION constant
-#    Pattern: var FR_VERSION = 'v2.0.0';
-# --------------------------------------------------------------------------
-update_file "pages/assets/site.js FR_VERSION" "${PROJECT_ROOT}/pages/assets/site.js" \
-    "s|(var FR_VERSION = 'v)[0-9]+\\.[0-9]+\\.[0-9]+(';)|\${1}${VERSION}\${2}|g"
-
-# --------------------------------------------------------------------------
-# 6. src/FR_math_2D.h — @version doxygen tag
+# 5. src/FR_math_2D.h — @version doxygen tag
 # --------------------------------------------------------------------------
 update_file "src/FR_math_2D.h @version" "${PROJECT_ROOT}/src/FR_math_2D.h" \
     "s|(\\@version )[0-9]+\\.[0-9]+\\.[0-9]+|\${1}${VERSION}|g"

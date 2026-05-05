@@ -66,16 +66,18 @@ that varies with the chosen radix.
 
 - **RP2040 (Cortex-M0+)** and **STM32 (Cortex-M4)** added as named targets
   in the Docker cross-build
-- **68HC11** toolchain added to the Docker image
-- Size table now shows two columns: **Core** (`-DFR_CORE_ONLY`) and **Full**
-- `docker/build_sizes.sh` outputs `build/sizes.csv` for automated patching
-- New `scripts/update_sizes.sh` auto-patches size tables into README, docs,
-  and HTML pages
+- **68HC11** and **MIPS32** toolchains added to the Docker image
+- Size table now shows three columns: **Lean**, **Core**, and **Full**
+- Consolidated `scripts/crossbuild_sizes.sh` — single script runs Docker,
+  builds all targets, writes CSV + markdown, and patches doc files
+  (replaces `crossbuild-docker.sh`, `size_report.sh`, `update_sizes.sh`)
+- Size table sorted by architecture width (8-bit → 64-bit)
 
 ### README restructure
 
 Sections reordered: accuracy table moved above the size table to lead with
-the library's primary selling point. Size table now shows Core vs Full columns.
+the library's primary selling point. Badges cleaned up from Quikdown HTML to
+standard markdown syntax. Build flavor descriptions made more concise.
 
 ---
 

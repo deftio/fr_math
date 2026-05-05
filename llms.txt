@@ -164,20 +164,24 @@ s32 ex    = FR_EXP(I2FR(1, R), R);        // e^1
 ## Building
 
 ```bash
-make lib       # build static library objects
-make test      # run all test suites
-make examples  # build example program
-make clean     # remove build artifacts
+make lib           # build static library objects
+make test          # run all test suites
+make examples      # build example programs
+make size-report   # cross-compile size report (Docker)
+make size-update   # size report + patch doc files
+make clean         # remove build artifacts
 ```
 
 ## Lean build options
 
 Define before including FR_math.h to exclude optional subsystems:
 
+- `FR_CORE_ONLY` — shorthand for FR_NO_PRINT + FR_NO_WAVES (~1.9 KB saved)
 - `FR_NO_PRINT` — removes FR_printNumF/D/H and FR_numstr (~1.3 KB saved)
 - `FR_NO_WAVES` — removes fr_wave_*, fr_adsr_*, FR_HZ2BAM_INC (~0.6 KB saved)
 
 ## Platform support
 
 Tested on: AVR (Arduino), ARM Cortex-M0/M4, ESP32 (Xtensa), RISC-V,
-x86/x64, MSP430, 68k, 8051. Code size is 4-8KB at -Os on 32-bit targets.
+x86/x64, MSP430, m68k, PowerPC, MIPS32, 68HC11.
+Code size is 3-9 KB at -Os on 32-bit targets (Lean to Full).

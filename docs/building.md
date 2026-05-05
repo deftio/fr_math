@@ -155,7 +155,9 @@ you do *not* need `libm`.
 | Motorola 68k | `m68k-linux-gnu-gcc` | Docker. |
 | Motorola 68HC11 | `m68hc11-gcc` | Docker. |
 | PowerPC | `powerpc-linux-gnu-gcc` | Docker. |
+| MIPS32 | `mipsel-linux-gnu-gcc` | Docker. |
 | Xtensa LX106 (ESP8266) | `xtensa-lx106-elf-gcc` | Docker. |
+| Xtensa LX7 (ESP32-S3) | `xtensa-esp-elf-gcc` | Docker (Espressif toolchain). |
 | 8051 | `sdcc` | Manual. |
 
 ### Code size (.text section, compiled with `-Os`)
@@ -171,6 +173,7 @@ usage will be smaller.
 <!-- SIZE_TABLE_START -->
 | Target | Lean | Core | Full |
 |--------|-----:|-----:|-----:|
+| Xtensa LX7 (ESP32-S3) | 2.9 KB | 4.2 KB | 5.3 KB |
 | Cortex-M4 (STM32) | 3.3 KB | 4.4 KB | 5.5 KB |
 | Cortex-M0 (RP2040) | 3.4 KB | 4.5 KB | 5.7 KB |
 | ARM Thumb | 3.4 KB | 4.7 KB | 5.9 KB |
@@ -179,6 +182,7 @@ usage will be smaller.
 | Xtensa LX106 (ESP8266) | 4.2 KB | 5.8 KB | 7.3 KB |
 | ARM32 | 4.3 KB | 5.8 KB | 7.7 KB |
 | 68k | 4.4 KB | 6.2 KB | 7.8 KB |
+| MIPS32 | 4.7 KB | 6.6 KB | 8.7 KB |
 | x86-64 (GCC) | 4.6 KB | 6.1 KB | 8.0 KB |
 | AArch64 (ARM64) | 4.8 KB | 6.6 KB | 8.7 KB |
 | x86-32 | 5.3 KB | 7.2 KB | 9.2 KB |

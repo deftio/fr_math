@@ -10,7 +10,7 @@
 # Requires: docker, xelp-crossbuild:latest image
 #
 # Output files:
-#   build/sizes.csv  — raw CSV (target,lean,core,full)
+#   build/sizes.csv  — raw CSV (target,width,lean,core,full)
 #   build/sizes.md   — markdown table
 #
 # With --update, patches these files between <!-- SIZE_TABLE_START/END --> sentinels:
@@ -89,56 +89,47 @@ build_text_size() {
 
 build_target() {
     local label="$1"
-    local compiler="$2"
-    local flags="$3"
+    local width="$2"
+    local compiler="$3"
+    local flags="$4"
 
     local lean_sz=$(build_text_size "$compiler" "$flags" "$LEAN_DEFS")
     local core_sz=$(build_text_size "$compiler" "$flags" "$CORE_DEFS")
     local full_sz=$(build_text_size "$compiler" "$flags" "$FULL_DEFS")
-    echo "${label},${lean_sz},${core_sz},${full_sz}" >> "$CSV"
+    echo "${label},${width},${lean_sz},${core_sz},${full_sz}" >> "$CSV"
 }
 
 # Write CSV header
-echo "target,lean,core,full" > "$CSV"
+echo "target,width,lean,core,full" > "$CSV"
 
-# --- x86 ---
-build_target "GCC x86-64"                "gcc"                        ""
-build_target "Clang x86-64"              "clang"                      ""
-build_target "GCC x86-32"                "gcc"                        "-m32"
-build_target "TCC x86"                   "tcc"                        ""
-
-# --- ARM ---
-build_target "GCC AArch64 (ARM64)"       "aarch64-linux-gnu-gcc"      ""
-build_target "GCC ARM32"                 "arm-none-eabi-gcc"          ""
-build_target "GCC ARM Thumb"             "arm-none-eabi-gcc"          "-mthumb"
-build_target "Cortex-M0 (RP2040)"        "arm-none-eabi-gcc"          "-mcpu=cortex-m0 -mthumb"
-build_target "Cortex-M4 (STM32)"         "arm-none-eabi-gcc"          "-mcpu=cortex-m4 -mthumb"
-
-# --- Bare-metal: no stdint.h in sysroot ---
+# --- 8-bit ---
 NOSTD="-DFR_NO_STDINT"
+build_target "AVR ATmega328P"            8  "avr-gcc"            "$NOSTD -mmcu=avr5"
+build_target "AVR ATtiny85"              8  "avr-gcc"            "$NOSTD -mmcu=attiny85"
+build_target "68HC11"                    8  "m68hc11-gcc"        "$NOSTD"
 
-# --- MSP430 ---
-build_target "GCC MSP430"               "msp430-gcc"                 "$NOSTD"
+# --- 16-bit ---
+build_target "MSP430"                   16  "msp430-gcc"         "$NOSTD"
 
-# --- AVR ---
-build_target "AVR ATmega328P"            "avr-gcc"                    "$NOSTD -mmcu=avr5"
-build_target "AVR ATtiny85"              "avr-gcc"                    "$NOSTD -mmcu=attiny85"
+# --- 32-bit ---
+build_target "Cortex-M0 (RP2040)"       32  "arm-none-eabi-gcc"  "-mcpu=cortex-m0 -mthumb"
+build_target "Cortex-M4 (STM32)"        32  "arm-none-eabi-gcc"  "-mcpu=cortex-m4 -mthumb"
+build_target "ARM32"                    32  "arm-none-eabi-gcc"  ""
+build_target "ARM Thumb"                32  "arm-none-eabi-gcc"  "-mthumb"
+build_target "RISC-V rv32"              32  "riscv64-unknown-elf-gcc" "$NOSTD -march=rv32imac -mabi=ilp32"
+build_target "Xtensa LX106 (ESP8266)"   32  "xtensa-lx106-elf-gcc" "$NOSTD"
+build_target "Xtensa LX7 (ESP32-S3)"   32  "xtensa-esp-elf-gcc" ""
+build_target "m68k"                     32  "m68k-linux-gnu-gcc" ""
+build_target "PowerPC"                  32  "powerpc-linux-gnu-gcc" ""
+build_target "MIPS32"                   32  "mipsel-linux-gnu-gcc" ""
+build_target "x86-32"                   32  "gcc"                "-m32"
+build_target "TCC x86"                  32  "tcc"                ""
 
-# --- 68HC11 ---
-build_target "GCC 68HC11"               "m68hc11-gcc"                "$NOSTD"
-
-# --- 68k ---
-build_target "GCC m68k"                 "m68k-linux-gnu-gcc"         ""
-
-# --- PowerPC ---
-build_target "GCC PowerPC"              "powerpc-linux-gnu-gcc"      ""
-
-# --- RISC-V ---
-build_target "RISC-V rv64"              "riscv64-linux-gnu-gcc"      ""
-build_target "RISC-V rv32"              "riscv64-unknown-elf-gcc"    "$NOSTD -march=rv32imac -mabi=ilp32"
-
-# --- Xtensa ---
-build_target "Xtensa LX106 (ESP8266)"   "xtensa-lx106-elf-gcc"      "$NOSTD"
+# --- 64-bit ---
+build_target "RISC-V rv64"              64  "riscv64-linux-gnu-gcc" ""
+build_target "x86-64 (GCC)"             64  "gcc"                ""
+build_target "x86-64 (Clang)"           64  "clang"              ""
+build_target "AArch64 (ARM64)"          64  "aarch64-linux-gnu-gcc" ""
 
 echo "Docker build complete — $(grep -c , "$CSV") rows written to build/sizes.csv"
 '
@@ -154,8 +145,8 @@ if [ ! -f "${CSV}" ]; then
     exit 1
 fi
 
-# Sort by full size ascending (skip header)
-SORTED=$(tail -n +2 "${CSV}" | sort -t',' -k4,4n)
+# Sort by width ascending, then full size ascending (skip header)
+SORTED=$(tail -n +2 "${CSV}" | sort -t',' -k2,2n -k5,5n)
 
 if [ -z "${SORTED}" ]; then
     echo "ERROR: No data rows in ${CSV}" >&2
@@ -178,30 +169,35 @@ fmt_kb() {
 echo ""
 echo "============================================================"
 echo "FR_math.c code size (.text bytes), compiled with -Os"
+echo "Sorted by architecture width (8-bit → 64-bit)"
 echo "============================================================"
 echo ""
-printf "  %-28s  %8s  %8s  %8s\n" "Target" "Lean" "Core" "Full"
-printf "  %-28s  %8s  %8s  %8s\n" "----------------------------" "--------" "--------" "--------"
-while IFS=',' read -r target lean core full; do
-    printf "  %-28s  %8s  %8s  %8s\n" "$target" "$lean" "$core" "$full"
+printf "  %-28s  %5s  %8s  %8s  %8s\n" "Target" "Width" "Lean" "Core" "Full"
+printf "  %-28s  %5s  %8s  %8s  %8s\n" "----------------------------" "-----" "--------" "--------" "--------"
+while IFS=',' read -r target width lean core full; do
+    printf "  %-28s  %4s-b  %8s  %8s  %8s\n" "$target" "$width" "$lean" "$core" "$full"
 done <<< "${SORTED}"
 echo ""
-echo "Lean = -DFR_LEAN -DFR_NO_PRINT (radian trig, inv trig, log/exp, sqrt)"
-echo "Core = -DFR_CORE_ONLY          (+ degree trig, BAM tan, log10, hypot)"
-echo "Full = all features             (+ print, waves, ADSR)"
+echo "Lean = -DFR_LEAN -DFR_NO_PRINT  (radian trig, inv trig, log/exp, sqrt)"
+echo "Core = -DFR_CORE_ONLY           (Lean + degree/BAM trig, log10, hypot)"
+echo "Full = default                   (Core + print, waves, ADSR)"
 echo ""
 
 # --- build/sizes.md ---
 {
     echo "# FR_math.c Code Sizes (.text bytes, -Os)"
     echo ""
+    echo "Sorted by architecture width (8-bit → 64-bit)."
+    echo ""
     echo "| Target | Lean | Core | Full |"
     echo "|--------|-----:|-----:|-----:|"
-    while IFS=',' read -r target lean core full; do
+    while IFS=',' read -r target width lean core full; do
         printf "| %s | %s | %s | %s |\n" "$target" "$(fmt_kb "$lean")" "$(fmt_kb "$core")" "$(fmt_kb "$full")"
     done <<< "${SORTED}"
     echo ""
-    echo "Lean = \`-DFR_LEAN -DFR_NO_PRINT\` | Core = \`-DFR_CORE_ONLY\` | Full = all features"
+    echo "**Lean** (\`-DFR_LEAN -DFR_NO_PRINT\`): radian trig, inv trig, log/exp, sqrt."
+    echo "**Core** (\`-DFR_CORE_ONLY\`): Lean + degree/BAM trig, log10, hypot."
+    echo "**Full** (default): Core + formatted print, wave generators, ADSR envelope."
 } > build/sizes.md
 
 echo "Wrote build/sizes.csv and build/sizes.md"
@@ -214,9 +210,9 @@ fi
 # 4. Patch doc files
 # -----------------------------------------------------------------------
 
-# Build markdown replacement block
+# Build markdown replacement block (width column is for sorting only, omit from output)
 MD_ROWS=""
-while IFS=',' read -r target lean core full; do
+while IFS=',' read -r target width lean core full; do
     row="| ${target} | $(fmt_kb "${lean}") | $(fmt_kb "${core}") | $(fmt_kb "${full}") |"
     if [ -n "${MD_ROWS}" ]; then
         MD_ROWS+=$'\n'
@@ -254,9 +250,9 @@ patch_html() {
         return
     fi
 
-    # Build HTML rows
+    # Build HTML rows (skip width column)
     local html_rows=""
-    while IFS=',' read -r target lean core full; do
+    while IFS=',' read -r target width lean core full; do
         local tr="<tr><td>${target}</td><td>$(fmt_kb "${lean}")</td><td>$(fmt_kb "${core}")</td><td>$(fmt_kb "${full}")</td></tr>"
         if [ -n "$html_rows" ]; then
             html_rows+=$'\n'

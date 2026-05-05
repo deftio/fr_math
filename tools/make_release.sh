@@ -112,7 +112,10 @@ do_sync_version() {
         echo ""
         echo "  Running sync_version.sh to fix drift..."
         bash "${PROJECT_ROOT}/scripts/sync_version.sh"
-        git add -A
+        # Stage only the files sync_version.sh touches (not the whole tree).
+        git add src/FR_math.h VERSION README.md pages/version.json \
+                src/FR_math_2D.h src/FR_math_2D.cpp \
+                library.properties library.json idf_component.yml llms.txt
         pass "Version synced to $VER_STRING (changes staged)"
     else
         pass "All version strings match $VER_STRING"
@@ -149,7 +152,7 @@ do_validate() {
         grep -E "Failed: [1-9]" "${test_log}"
         fail "Test failures detected"
     fi
-    TOTAL_PASSED=$(grep -Eo "Passed: [0-9]+" "${test_log}" | awk -F: '{sum+=$2} END {print sum}')
+    TOTAL_PASSED=$(grep -Eo "Passed: [0-9]+" "${test_log}" | awk -F: '{sum+=$2} END {print sum+0}')
     pass "${TOTAL_PASSED} tests passed."
 
     echo ""
@@ -228,7 +231,7 @@ do_cross_compile() {
 
 # Files the pipeline itself may modify (badge update, version sync).
 # Anything outside this list is unexpected and should block the release.
-PIPELINE_FILES="README.md VERSION src/FR_math.h library.properties library.json idf_component.yml llms.txt pages/assets/site.js src/FR_math_2D.h src/FR_math_2D.cpp docs/README.md pages/index.html"
+PIPELINE_FILES="README.md VERSION src/FR_math.h library.properties library.json idf_component.yml llms.txt pages/version.json src/FR_math_2D.h src/FR_math_2D.cpp"
 
 do_commit_pipeline_changes() {
     step_header "Commit pipeline-generated changes"
@@ -634,8 +637,8 @@ do_switch_master() {
 do_verify_master() {
     step_header "Verify build on master"
 
-    run_cmd make clean >/dev/null 2>&1
-    run_cmd make test >/dev/null 2>&1
+    make clean >/dev/null 2>&1
+    make test >/dev/null 2>&1
     pass "All tests pass on master."
 }
 

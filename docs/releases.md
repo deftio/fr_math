@@ -21,10 +21,10 @@ README restructure, accuracy table cleanup, expanded cross-compile support.
 
 - **`FR_CORE_ONLY` convenience define** — single `#define` strips both print helpers and wave generators
 - **Accuracy table cleanup** — removed LSB column (percent error is the user-facing metric)
-- **New cross-compile targets** — RP2040 (Cortex-M0+), STM32 (Cortex-M4), 68HC11 added to Docker build
-- **Two-column size table** — Core (`-DFR_CORE_ONLY`) vs Full for every target
-- **`scripts/update_sizes.sh`** — auto-patches size tables from `build/sizes.csv`
-- README reordered: accuracy table first, then function list, then size table
+- **New cross-compile targets** — RP2040 (Cortex-M0+), STM32 (Cortex-M4), 68HC11, MIPS32 added to Docker build
+- **Three-column size table** — Lean / Core / Full for every target, sorted 8-bit → 64-bit
+- **Consolidated `scripts/crossbuild_sizes.sh`** — single script runs Docker, builds, writes CSV + markdown, patches docs (replaces three separate scripts)
+- README reordered and cleaned up: accuracy table first, badges as standard markdown, concise build flavor descriptions
 
 ---
 
@@ -309,6 +309,5 @@ FR_Math has been in continuous service since **2000**,
 when it was written to run 2D graphics transforms on 16 MHz 68k
 Palm Pilots for Trumpetsoft's *Inkstorm*. It has since
 been ported to ARM, x86, MIPS, RISC-V, and a menagerie of 8- and
-16-bit embedded targets. v2.0.7 is the current release with a
-full test suite, a bit-exact numerical specification, and CI on
-every push.
+16-bit embedded targets. The current release has a full test
+suite, a bit-exact numerical specification, and CI on every push.

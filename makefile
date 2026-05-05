@@ -36,7 +36,8 @@ help:
 	@echo "Build targets:"
 	@echo "  all              Build library and examples"
 	@echo "  lib              Build library objects only"
-	@echo "  examples         Build example program"
+	@echo "  examples         Build all example programs"
+	@echo "  run-examples     Build and run all desktop examples"
 	@echo ""
 	@echo "Test targets:"
 	@echo "  test             Run all tests"
@@ -92,10 +93,37 @@ $(BUILD_DIR)/FR_math_2D.o: $(SRC_DIR)/FR_math_2D.cpp $(HEADERS)
 
 # Build examples
 .PHONY: examples
-examples: dirs $(BUILD_DIR)/fr_example
+examples: dirs $(BUILD_DIR)/fr_example ex-basics ex-logexp ex-waveform ex-trig-accuracy
 
 $(BUILD_DIR)/fr_example: $(EXAMPLE_DIR)/posix-example/FR_Math_Example1.cpp $(BUILD_DIR)/FR_math.o $(BUILD_DIR)/FR_math_2D.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+# Self-contained desktop examples (each has its own Makefile)
+.PHONY: ex-basics ex-logexp ex-waveform ex-trig-accuracy run-examples
+
+ex-basics:
+	@$(MAKE) -C $(EXAMPLE_DIR)/fixed-point-basics
+
+ex-logexp:
+	@$(MAKE) -C $(EXAMPLE_DIR)/log-exp-curves
+
+ex-waveform:
+	@$(MAKE) -C $(EXAMPLE_DIR)/waveform-synth
+
+ex-trig-accuracy:
+	@if [ -f compare_lfm/libfixmath/libfixmath/fix16.h ]; then \
+		$(MAKE) -C $(EXAMPLE_DIR)/trig-accuracy; \
+	else \
+		echo "Skipping trig-accuracy (libfixmath not found)"; \
+	fi
+
+run-examples: examples
+	@echo ""; echo "=== fixed-point-basics ===" ; $(MAKE) -s -C $(EXAMPLE_DIR)/fixed-point-basics run
+	@echo ""; echo "=== log-exp-curves ===" ;     $(MAKE) -s -C $(EXAMPLE_DIR)/log-exp-curves run
+	@echo ""; echo "=== waveform-synth ===" ;     $(MAKE) -s -C $(EXAMPLE_DIR)/waveform-synth run
+	@if [ -f compare_lfm/libfixmath/libfixmath/fix16.h ]; then \
+		echo ""; echo "=== trig-accuracy ===" ; $(MAKE) -s -C $(EXAMPLE_DIR)/trig-accuracy run; \
+	fi
 
 # Build and run tests
 .PHONY: test
@@ -267,8 +295,16 @@ clean:
 	rm -rf $(BUILD_DIR) $(COV_DIR)
 	rm -f *.o *.gcda *.gcno *.gcov *.exe *.info
 
+.PHONY: clean-examples
+clean-examples:
+	@$(MAKE) -s -C $(EXAMPLE_DIR)/posix-example clean 2>/dev/null || true
+	@$(MAKE) -s -C $(EXAMPLE_DIR)/fixed-point-basics clean 2>/dev/null || true
+	@$(MAKE) -s -C $(EXAMPLE_DIR)/log-exp-curves clean 2>/dev/null || true
+	@$(MAKE) -s -C $(EXAMPLE_DIR)/waveform-synth clean 2>/dev/null || true
+	@$(MAKE) -s -C $(EXAMPLE_DIR)/trig-accuracy clean 2>/dev/null || true
+
 .PHONY: cleanall
-cleanall: clean
+cleanall: clean clean-examples
 	rm -f *~ $(SRC_DIR)/*~ $(TEST_DIR)/*~
 
 # Basic coverage info without lcov

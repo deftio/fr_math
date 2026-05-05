@@ -22,7 +22,7 @@ tests/                Test suite (7 programs, run via `make test`)
 examples/             Arduino .ino sketches + POSIX example
 docs/                 Markdown documentation
 pages/                HTML documentation (mirrors docs/)
-scripts/              Build, release, version sync helpers
+scripts/              Build, release, version sync, size report helpers
 tools/                Coefficient generators (Python, C++)
 dev/                  Development notes and planning (not shipped)
 ```
@@ -32,7 +32,9 @@ dev/                  Development notes and planning (not shipped)
 ```bash
 make lib              # compile library objects
 make test             # run all 7 test suites (27+ tests)
-make examples         # build POSIX example
+make examples         # build example programs
+make size-report      # cross-compile size report (Docker)
+make size-update      # size report + patch doc files
 make clean            # remove build artifacts
 ```
 
@@ -85,9 +87,11 @@ Versioned files (all synced automatically):
 
 1. Bump `FR_MATH_VERSION_HEX` in `src/FR_math.h`
 2. Run `./scripts/sync_version.sh`
-3. Run `./tools/make_release.sh` (full validation gate)
-4. Verify `llms.txt` and `agents.md` are current with any API changes
-5. Commit, tag, push
+3. Run `./scripts/crossbuild_sizes.sh --update` (rebuild size tables)
+4. Run `./scripts/accuracy_report.sh --update` (rebuild accuracy tables)
+5. Run `./tools/make_release.sh` (full validation gate)
+6. Verify `llms.txt` and `agents.md` are current with any API changes
+7. Commit, tag, push
 
 ## Lean build options
 
@@ -95,13 +99,14 @@ Define before including `FR_math.h` to exclude optional subsystems:
 
 | Define | Removes | Savings |
 |---|---|---|
+| `FR_CORE_ONLY` | Print + waves (shorthand for both below) | ~1.9 KB |
 | `FR_NO_PRINT` | `FR_printNumF/D/H`, `FR_numstr` | ~1.3 KB |
 | `FR_NO_WAVES` | `fr_wave_*`, `fr_adsr_*`, `FR_HZ2BAM_INC` | ~0.6 KB |
 
 ## Platform targets
 
 The library compiles on: AVR (Arduino), ARM Cortex-M0/M4, ESP32,
-RISC-V, x86/x64, MSP430, 68k, 8051. Code is 4–8 KB at `-Os` on
+RISC-V, x86/x64, MSP430, m68k, PowerPC, MIPS32, 68HC11. Code is 3–9 KB at `-Os` on
 32-bit targets.
 
 ## Library publishing
