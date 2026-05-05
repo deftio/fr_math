@@ -31,8 +31,8 @@ manager integration and no install step. Either:</p>
 <ul>
   <li>Copy <code>src/FR_math.c</code>, <code>src/FR_math.h</code>,
       <code>src/FR_defs.h</code> (and optionally
-      <code>src/FR_math_2D.cpp</code>, <code>src/FR_math_2D.h</code>,
-      and <code>src/FR_trig_table.h</code>) into the target project, <strong>or</strong></li>
+      <code>src/FR_math_2D.cpp</code>, <code>src/FR_math_2D.h</code>)
+      into the target project, <strong>or</strong></li>
   <li>Add FR_Math as a git submodule and point the build system at
       <code>src/</code>.</li>
 </ul>
@@ -46,7 +46,7 @@ cd fr_math
 
 <p><code>build.sh</code> wipes <code>build/</code>, rebuilds the
 library, examples, and tests, and runs the full test suite. On success
-the output shows 42 tests passing across six test binaries.</p>
+the output shows all tests passing (99% line coverage).</p>
 
 <h2>A first program</h2>
 
@@ -286,8 +286,10 @@ envelope, and log/exp walkthroughs.</p>
 <pre><code class="language-bash">make test           # build + run every test suite
 make coverage       # coverage report (requires gcov)</code></pre>
 
-<p>As of v2.0.1, FR_Math ships with 42 passing tests and 99% line
-coverage across the library sources.</p>
+<p>Run <code>make test</code> for a full pass. With <code>make coverage</code>,
+line coverage of the library sources is about <strong>99%</strong>.
+See <a href="building.html">Building &amp; Testing</a> for targets,
+cross-compilation, and CI.</p>
 
 <h2>Next steps</h2>
 
@@ -297,7 +299,7 @@ coverage across the library sources.</p>
       conventions work.</li>
   <li><strong><a href="api-reference.html">API Reference</a></strong>
       &mdash; per-symbol inputs, outputs, precision, and saturation
-      behaviour.</li>
+      behavior.</li>
   <li><strong><a href="examples.html">Examples</a></strong> &mdash;
       runnable snippets for common tasks.</li>
   <li><strong><a href="building.html">Building &amp; Testing</a></strong>

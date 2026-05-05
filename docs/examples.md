@@ -1,7 +1,7 @@
 # Examples
 
 Short, runnable snippets for the most common FR_Math tasks. Each
-example compiles cleanly against the v2.0.0 library with:
+example compiles cleanly against the library with:
 
 ```bash
 cc -Isrc example.c src/FR_math.c -o example
@@ -57,15 +57,15 @@ int main(void)
 ## 2. Trig — integer degrees vs radian vs BAM
 
 FR_Math supports three angle conventions and this example hits
-all three: integer degrees through the legacy
-`FR_Sin` / `FR_Cos` API, the radian-native
+all three: fixed-point degrees through the
+`fr_sin_deg` / `fr_cos_deg` API, the radian-native
 `fr_sin` / `fr_cos` (radian at a chosen
 input radix), and BAM-native `fr_sin_bam` /
 `fr_cos_bam`. All three paths feed the same 129-entry
 quadrant cosine table under the hood and should produce nearly
 identical results.
 
-*Caveats:* the `radix` parameter on `FR_Sin(deg, radix)` is
+*Caveats:* the `radix` parameter on `fr_sin_deg(deg, radix)` is
 the radix of the *degree input*, not the output. All sin/cos
 functions return **s15.16** — that is, `s32` at radix 16,
 where 1.0 = 65536 (`FR_TRIG_ONE`). The values compared below
@@ -200,19 +200,16 @@ int main(void)
 ## 5. Arctangent and atan2
 
 The inverse-trig functions in FR_Math return angles in
-**degrees**, not radians — the output fits in
-an `s16` and you can feed it straight back into
-`FR_SinI` / `FR_CosI` without any
-conversion. This example exercises both `FR_atan`
-(single-argument ratio) and `FR_atan2` (full-circle,
-two-argument).
+**radians** at a caller-chosen output radix. This
+example exercises both `FR_atan` (single-argument
+ratio) and `FR_atan2` (full-circle, two-argument).
 
-*Caveats:* `FR_atan2` takes only two
-arguments (`y`, `x`) and has no radix
-parameter — it returns degrees in [−180, 180] as
-`s16`. The `radix` argument on
-`FR_atan` is the radix of the *input* ratio,
-not of the output.
+*Caveats:* all inverse-trig functions take an
+`out_radix` parameter that sets the radix of the
+*output*. `FR_atan2(y, x, out_radix)` returns
+radians in [−π, π] as `s32` at the chosen
+radix. `FR_atan(input, radix, out_radix)` has
+separate radixes for input and output.
 
 ```c
 #include <stdio.h>
@@ -222,18 +219,19 @@ int main(void)
 {
     const u16 r = 14;
 
-    /* atan(1) = 45 degrees */
-    s16 a = FR_atan(I2FR(1, r), r);
-    printf("atan(1) = %d degrees (expect 45)\n", a);
+    /* atan(1) = pi/4 radians ≈ 0.7854 */
+    s32 a = FR_atan(I2FR(1, r), r, r);
+    printf("atan(1) = %d (radix %d, expect ~%d)\n",
+           (int)a, r, (int)(12868));  /* pi/4 at r14 */
 
     /* Full-circle atan2 */
-    s16 q2 = FR_atan2(I2FR( 1, r), I2FR(-1, r));  /*  135 deg */
-    s16 q3 = FR_atan2(I2FR(-1, r), I2FR(-1, r));  /* -135 deg */
-    printf("atan2( 1,-1) = %d\n", q2);
-    printf("atan2(-1,-1) = %d\n", q3);
+    s32 q2 = FR_atan2(I2FR( 1, r), I2FR(-1, r), r);  /*  3*pi/4 */
+    s32 q3 = FR_atan2(I2FR(-1, r), I2FR(-1, r), r);  /* -3*pi/4 */
+    printf("atan2( 1,-1) = %d (expect ~%d)\n", (int)q2, (int)(38603));
+    printf("atan2(-1,-1) = %d (expect ~%d)\n", (int)q3, (int)(-38603));
 
     /* asin with out-of-domain input */
-    s16 bad = FR_asin(I2FR(2, r), r);
+    s32 bad = FR_asin(I2FR(2, r), r, r);
     if (bad == FR_DOMAIN_ERROR)
         printf("asin(2) rejected, good.\n");
     return 0;
@@ -425,7 +423,7 @@ The `XFormPtI16` fast path takes `s16`
 coordinates in and writes `s16` out. It's a tiny
 bit lossier than the `s32` form, but it sidesteps all
 the fixed-point conversion on the hot path — useful inside
-the inner loop of a scanline rasteriser where you already know
+the inner loop of a scanline rasterizer where you already know
 your coordinates fit in 16 bits.
 
 *Caveats:* the output is narrowed to `s16`,
@@ -511,7 +509,7 @@ int main(void)
         FR_printNumF(buf_putc, val, 16, 0, 8);
         printf("    16     16  0x%08x  %s\n", (unsigned)val, buf);
         /* Expected: "3.14158630" — good through 5 digits, then
-         * quantisation noise appears.  This is the sweet spot for
+         * quantization noise appears.  This is the sweet spot for
          * most embedded work: 16 bits of fraction fits in an s32
          * with 15 bits of integer range (±32767). */
     }
@@ -562,8 +560,37 @@ at radix 8 the value is `0x324` — only 10 significant bits —
 so the decimal rendering can only faithfully reproduce about two
 fractional digits. At radix 24 the value is `0x03243F6A` — 26
 significant bits — and seven decimal digits survive. The
-eighth digit (`5` vs `4`) shows the quantisation floor: `2^−24 ≈
+eighth digit (`5` vs `4`) shows the quantization floor: `2^−24 ≈
 6 × 10^−8`, so the last digit is always uncertain.
+
+## Desktop example programs
+
+In addition to the inline snippets above, the `examples/` directory
+contains four self-contained desktop programs. Each has its own
+`Makefile` and `README.md`; build artifacts stay within the example's
+directory.
+
+| Directory | What it does |
+|---|---|
+| [`examples/fixed-point-basics/`](../examples/fixed-point-basics/) | Educational walkthrough of radix interpretation, `I2FR`/`FR2I` round-trips, `FR_NUM` constant construction, aligned add/sub, multiply precision, division, saturation, and `FR_printNumF` formatted output. |
+| [`examples/log-exp-curves/`](../examples/log-exp-curves/) | Sweeps `FR_log2`, `FR_ln`, `FR_log10`, `FR_pow2`, `FR_EXP`, `FR_POW10`, and `FR_sqrt` against IEEE double reference values, printing per-point and summary error tables. |
+| [`examples/waveform-synth/`](../examples/waveform-synth/) | Generates square, triangle, sawtooth, PWM, sine, and noise waveforms plus an ADSR envelope and amplitude-modulated combination. Default mode renders ASCII art; `--csv` mode outputs machine-readable CSV. |
+| [`examples/trig-accuracy/`](../examples/trig-accuracy/) | Head-to-head comparison of FR_Math (`FR_SinI`/`FR_CosI`/`FR_TanI`) vs libfixmath (`fix16_sin`/`fix16_cos`/`fix16_tan`) vs IEEE double over 0–360 degrees. Requires libfixmath source. |
+
+Build all from the repo root:
+
+```bash
+make examples        # builds all desktop examples
+make run-examples    # builds and runs 1-3, plus 4 if libfixmath present
+```
+
+Or build any single example from its directory:
+
+```bash
+cd examples/waveform-synth
+make run             # ASCII art output
+make run-csv         # CSV output
+```
 
 ## See also
 

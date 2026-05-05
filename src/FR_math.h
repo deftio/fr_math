@@ -32,11 +32,15 @@
 #ifndef __FR_Math_h__
 #define __FR_Math_h__
 
-#define FR_MATH_VERSION     "2.0.7"
-#define FR_MATH_VERSION_HEX  0x020007  /* major << 16 | minor << 8 | patch */
+#define FR_MATH_VERSION     "2.0.8"
+#define FR_MATH_VERSION_HEX  0x020008  /* major << 16 | minor << 8 | patch */
 
 #ifdef FR_CORE_ONLY
 #define FR_NO_PRINT
+#define FR_NO_WAVES
+#endif
+
+#ifdef FR_LEAN
 #define FR_NO_WAVES
 #endif
 
@@ -49,21 +53,14 @@ extern "C"
 #include "FR_defs.h"
 #endif
 
-/* Quick Note on MACRO param wrapping:
- * All macro inputs are wrapped in paranthesis in this code.
- * eg: #define MACRO_X_SQUARED(x)  ((x)*(x)) //<<-- note internal paranthesis
- * this is done because macros use true source substitution in C/C++ so a if
- * a macro internally uses many operators of mixed precedence e.g. >> and * together
- * undesired behavior can result if the parameter "passed" in the the macro is a
- * a complex contruct e.g. instead of being a value or single variable is a
- * something like 3+4*5  --> all of this would gets substituted in to the MACRO
- * expression and parans eliminate chances for odd behavior.
- * For example:
- * MACRO_X_SQUARED_BAD(x) (x*x)
- * will expand this way:
- * 3+4*5*3+4*5 ==> 3+60+20 == 83 // due to precedence operations whereas
- * MACRO_X_SQUARED(x) ((x)*(x))
- * (3+4*5)*(3+4*5) ==> (3+20)*(3+20) == (23)*(23) == 529
+/* Quick note on macro parameter wrapping:
+ * Arguments are parenthesized in expansions, e.g.
+ *   #define MACRO_X_SQUARED(x)  ((x)*(x))   // inner parens around each x
+ * Macros substitute text as-is. If a parameter is an expression like 3+4*5
+ * and the body mixes operators without extra parentheses, precedence errors
+ * follow. Parenthesize parameters (and fragile subexpressions) in the macro body.
+ * Example: MACRO_X_SQUARED_BAD(x)  (x*x)  ->  3+4*5*3+4*5  == 83 (wrong).
+ *          MACRO_X_SQUARED(x)  ((x)*(x))  ->  (3+4*5)*(3+4*5)  == 529 (right).
  */
 
 /*absolute value for integer and fixed radix types*/
@@ -258,7 +255,7 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 /*================================================
  * Constants used in Trig tables, definitions
  *
- * FR_TRIG_PREC     — internal table precision (s0.15, kept for table indexing)
+ * FR_TRIG_PREC     — internal table precision (u0.15, sine table)
  * FR_TRIG_OUT_PREC — output precision of sin/cos/tan (s15.16 since v2.0.1)
  * FR_TRIG_ONE      — exact 1.0 in output format (1 << 16 = 65536)
  *
@@ -270,8 +267,8 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 #define FR_TRIG_OUT_PREC (16)
 #define FR_TRIG_MASK     ((1 << (FR_TRIG_PREC)) - 1)
 #define FR_TRIG_ONE      (1L << FR_TRIG_OUT_PREC)         /* 65536 = 1.0 */
-#define FR_TRIG_MAXVAL   ((s32)0x7fffffff)                 /* tan saturation */
-#define FR_TRIG_MINVAL (-FR_TRIG_MASK)
+#define FR_TRIG_MAXVAL   ((s32)0x7fffffff)                 /* tan saturation max */
+#define FR_TRIG_MINVAL   (-FR_TRIG_MAXVAL)                  /* tan saturation min */
 
 /* Bit Shift Scaling macros.  Useful on some platforms with poor MUL performance.
  * Also can be useful if you need to scale numbers with
@@ -304,32 +301,85 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 /* scale by log2(10)   3.32192809489 used for converting pow2() to pow10 */
 #define FR_SLOG2_10(x) (((x) << 1) + (x) + ((x) >> 2) + ((x) >> 4) + ((x) >> 7) + ((x) >> 10) + ((x) >> 11) + ((x) >> 13))
 
-/* TRIG Conversion macros
- * Convert degrees <--> radians <--> quadrants <--> degrees
- * no multiply (may reduce chances of overflow in certain circumstances)
- * works on all int types and radixes (pure ints will have trunc err)
- * radians   = 2*pi per revolution
- * degrees   = 360  per revolution
- * quadrants = 4 per revolution
- * freq      = 1 per revolution
+/* Shift-only angular conversion macros
+ *
+ * All are pure constant multipliers expressed as shifts — no multiply, no
+ * divide, no 64-bit intermediates, no accumulators. Work at any radix: if
+ * your input is degrees at radix 8, the output is the target unit at radix 8.
+ * The caller shifts as needed.
+ *
+ * Angular units:
+ *   degrees   = 360  per revolution
+ *   radians   = 2*pi per revolution
+ *   BAM       = 65536 per revolution (Binary Angular Measure, u16)
+ *   quadrants = 4 per revolution (= BAM >> 14)
+ *
+ * Side-effect note: x is referenced multiple times in each macro — do not
+ * pass expressions with side effects.
  */
-/* FR_DEG2RAD(x): multiply by pi/180 ≈ 0.017453 using shifts only.
- * Worst-case relative error: ~1.6e-4 (acceptable for embedded use; if you
- * need better precision, multiply by FR_kDEG2RAD and shift down by FR_kPREC).
- * Side-effect note: x is referenced 3 times, so do not pass an expression
- * with side effects.
- */
-#define FR_DEG2RAD(x) (((x) >> 6) + ((x) >> 9) - ((x) >> 13))
 
-/* FR_RAD2DEG(x): multiply by 180/pi ≈ 57.295780 using shifts only.
- * Worst-case relative error: ~2.1e-6.
- * Side-effect note: x is referenced 7 times.
- */
+/* FR_DEG2RAD(x): multiply by pi/180 ≈ 0.017453 (5 terms, ~17 bits) */
+#define FR_DEG2RAD(x) (((x) >> 6) + ((x) >> 9) - ((x) >> 13) - ((x) >> 19) - ((x) >> 20))
+
+/* FR_RAD2DEG(x): multiply by 180/pi ≈ 57.29578 (7 terms, ~19 bits) */
 #define FR_RAD2DEG(x) (((x) << 6) - ((x) << 3) + (x) + ((x) >> 2) + (((x) >> 4) - ((x) >> 6)) - ((x) >> 10))
 
+/* FR_DEG2BAM(x): multiply by 65536/360 ≈ 182.0449 (7 terms, ~18 bits).
+ * Intermediate terms overflow s32 when |x| > ~256 deg at s15.16 (x<<7 term),
+ * but the overflow is harmless when the result is truncated to u16 BAM
+ * (two's complement wrapping preserves modular correctness).
+ * For full-precision s32 BAM (sub-BAM interpolation), use fr_deg_to_bam(). */
+#define FR_DEG2BAM(x) (((x)<<7)+((x)<<6)-((x)<<3)-((x)<<1)+((x)>>5)+((x)>>6)-((x)>>9))
+
+/* FR_BAM2DEG(x): multiply by 360/65536 = 0.00549316 (4 terms, exact) */
+#define FR_BAM2DEG(x) (((x)>>8)+((x)>>9)-((x)>>12)-((x)>>13))
+
+/* FR_RAD2BAM(x): multiply by 65536/(2*pi) ≈ 10430.378 (7 terms, ~21 bits).
+ * CAUTION: overflows s32 when |x| > ~4 rad at s15.16 (x<<13 term).
+ * For safe conversion at any radix, use fr_rad_to_bam() instead. 
+ * #define FR_RAD2BAM(x) (((x)<<13)+((x)<<11)+((x)<<7)+((x)<<6)-((x)<<1)+((x)>>1)-((x)>>3)) */
+#define FR_RAD2BAM(x) (((x)<<13)+((x)<<11)+((x)<<7)+((x)<<6)-((x)<<1)+((x)>>1)-((x)>>3)+((x)>>8)-((x)>>11)-((x)>>14))
+/* ── Overflow-safe rad/deg to BAM conversion functions ─────────────
+ *
+ * These replace the FR_RAD2BAM / FR_DEG2BAM macros for callers that
+ * need the full ±2*pi or ±360° range at any radix.
+ *
+ * Strategy: normalize input to radix 16, conditionally reduce into
+ * a safe zone, apply the full-precision shift-only multiply, then
+ * extract the u16 BAM.  No precision loss from halving/quartering.
+ *
+ * fr_rad_to_bam: reduce to [-pi, pi], reordered terms.  ±2*pi safe.
+ * fr_deg_to_bam: reduce to [-90, 90) + quadrant offset.  ±360° safe.
+ */
+
+/* Pi constants at any radix: FR_PI(r) = round(pi * 2^r), etc.
+ * Compiler evaluates at compile time when r is a constant.
+ * Max safe radix: FR_PI r<=29, FR_TWO_PI r<=28, FR_HALF_PI r<=30. */
+#define FR_PI(r)             ((s32)(3.14159265358979323846  * (1LL << (r)) + 0.5))
+#define FR_TWO_PI(r)         ((s32)(6.28318530717958647692  * (1LL << (r)) + 0.5))
+#define FR_HALF_PI(r)        ((s32)(1.57079632679489661923  * (1LL << (r)) + 0.5))
+#define FR_THREE_HALF_PI(r)  ((s32)(4.71238898038468985769  * (1LL << (r)) + 0.5))
+
+/* Convenience aliases at radix 16 */
+#define FR_PI_R16       FR_PI(16)
+#define FR_TWO_PI_R16   FR_TWO_PI(16)
+
+/* Degree constants at radix 16 (exact — no truncation) */
+#define FR_D90_R16      ((s32)90  << 16)
+#define FR_D180_R16     ((s32)180 << 16)
+#define FR_D360_R16     ((s32)360 << 16)
+
+  u16 fr_rad_to_bam(s32 rad, u16 radix);
+#ifndef FR_LEAN
+  u16 fr_deg_to_bam(s32 deg, u16 radix);
+#endif
+
+/* FR_BAM2RAD(x): multiply by 2*pi/65536 ≈ 0.0000959 (5 terms, ~18 bits) */
+#define FR_BAM2RAD(x) (((x)>>13)-((x)>>15)+((x)>>18)+((x)>>21)+((x)>>25))
+
+/* Legacy quadrant macros (quadrants = BAM >> 14) */
 #define FR_RAD2Q(x) (((x) >> 1) + ((x) >> 3) + ((x) >> 7) + ((x) >> 8) - ((x) >> 14))
 #define FR_Q2RAD(x) ((x) + ((x) >> 1) + ((x) >> 4) + ((x) >> 7) + ((x) >> 11))
-
 #define FR_DEG2Q(x) (((x) >> 6) - ((x) >> 8) - ((x) >> 11) - ((x) >> 13))
 #define FR_Q2DEG(x) (((x) << 6) + ((x) << 4) + ((x) << 3) + ((x) << 1))
 
@@ -347,43 +397,11 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
  *   - The top 2 bits select the quadrant (no `% 360` modulo needed).
  *   - The next 7 bits index the 128-entry quadrant table directly.
  *   - The bottom 7 bits give linear-interpolation precision.
- *
- * All BAM macros are *macros* (not functions) so they evaluate inline and
- * cost nothing if you don't call them. Side-effect note: each macro
- * references its argument multiple times — do not pass an expression with
- * side effects.
  */
 #define FR_BAM_BITS         (16)
 #define FR_BAM_FULL         (1L << FR_BAM_BITS)         /* 65536 */
 #define FR_BAM_QUADRANT     (FR_BAM_FULL >> 2)          /* 16384 */
 #define FR_BAM_HALF         (FR_BAM_FULL >> 1)          /* 32768 */
-
-/* Convert degrees -> BAM. Exact formula: deg * 65536 / 360.
- * Computed in s32; for s16-range deg the intermediate (deg << 16) fits.
- * The cast to u16 wraps modulo full circle, which is mathematically correct.
- * Side-effect note: deg is referenced twice for sign-aware rounding.
- *
- * Worst-case error: <= 0.5 LSB BAM (~0.0028 deg) per degree. No accumulation
- * across full circles.
- */
-#define FR_DEG2BAM(deg)     ((u16)((((s32)(deg) << 16) + ((deg) >= 0 ? 180 : -180)) / 360))
-
-/* Convert BAM -> degrees. bam * (360 / 65536) ≈ bam * (45/8192).
- * Truncated; result is integer degrees.
- */
-#define FR_BAM2DEG(bam)     ((s16)(((s32)(u16)(bam) * 45) >> 13))
-
-/* Convert radians (at given radix) -> BAM. rad * (65536 / (2*pi)) ≈ rad * 10430.378
- * For radix-16 input: ((rad * 10430) >> 16). Approximated; for high accuracy
- * combine with FR_kRAD2Q multiplier.
- */
-#define FR_RAD2BAM(rad, radix)  ((u16)(((s32)(rad) * 10430L) >> (radix)))
-
-/* Convert BAM -> radians at the requested output radix.
- * Derivation: rad = bam * 2π / 65536. At output radix r: bam * 2π * 2^r / 2^16
- *           = bam * (2π * 2^10) / 2^(26 - r) = bam * 6434 >> (26 - r).
- */
-#define FR_BAM2RAD(bam, radix)  ((s32)(((s32)(u16)(bam) * 6434L) >> (26 - (radix))))
 
 /*===============================================
  * Radian-native and BAM-native trig (recommended)
@@ -397,39 +415,59 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
  *   fr_cos(rad, radix)      — cos of radians at radix,   s15.16 result
  *   fr_sin(rad, radix)      — sin of radians at radix,   s15.16 result
  *   fr_tan(rad, radix)      — tan of radians at radix,   s15.16 result
- *   fr_cos_deg(deg)         — cos of integer degrees,    s15.16 result
- *   fr_sin_deg(deg)         — sin of integer degrees,    s15.16 result
+ *   fr_cos_deg(deg, radix)  — cos of fixed-radix degrees, s15.16 result
+ *   fr_sin_deg(deg, radix)  — sin of fixed-radix degrees, s15.16 result
+ *   fr_tan_deg(deg, radix)  — tan of fixed-radix degrees, s15.16 result
  *
  * All go through the same 129-entry quadrant table with linear interpolation.
  * Worst-case error: ~2 LSB in s15.16 (~3e-5 absolute), except at the four
  * cardinal angles where the result is exact.
+ *
+ * The radian and degree wrappers (fr_sin, fr_cos, fr_tan, etc.) range-reduce
+ * their input, convert to u16 BAM, and call the BAM-native functions. Small-
+ * angle bypasses at the zero crossings (sin≈0, cos≈0, tan≈0) use the linear
+ * approximation sin(δ)≈δ to avoid BAM quantization error where it matters most.
  */
   s32 fr_cos_bam(u16 bam);
   s32 fr_sin_bam(u16 bam);
+#ifndef FR_LEAN
+  s32 fr_tan_bam(u16 bam);
+#endif
   s32 fr_cos(s32 rad, u16 radix);
   s32 fr_sin(s32 rad, u16 radix);
   s32 fr_tan(s32 rad, u16 radix);
 
-#define fr_cos_deg(deg)  fr_cos_bam(FR_DEG2BAM(deg))
-#define fr_sin_deg(deg)  fr_sin_bam(FR_DEG2BAM(deg))
+/* Integer degrees -> BAM using division (exact at all multiples of 45 deg). */
+#define FR_DEG2BAM_I(deg) ((u16)((((s32)(deg) << 16) + ((deg) >= 0 ? 180 : -180)) / 360))
 
+/* Legacy single-arg integer-degree macros — use FR_CosI / FR_SinI instead */
+/* #define fr_cos_deg(deg)  fr_cos_bam(FR_DEG2BAM_I(deg)) — removed, name reused for 2-arg function */
+/* #define fr_sin_deg(deg)  fr_sin_bam(FR_DEG2BAM_I(deg)) — removed, name reused for 2-arg function */
+
+#ifndef FR_LEAN
 /*===============================================
- * Integer-degree trig API (thin wrappers over the BAM-native path)
+ * Degree-input trig API
  *
- *   FR_CosI(deg)            — cos of integer degrees,       s15.16 result
- *   FR_SinI(deg)            — sin of integer degrees,       s15.16 result
- *   FR_TanI(deg)            — tan of integer degrees,       s15.16 result
- *   FR_Cos(deg, radix)      — cos of fixed-radix degrees,   s15.16 result
- *   FR_Sin(deg, radix)      — sin of fixed-radix degrees,   s15.16 result
- *   FR_Tan(deg, radix)      — tan of fixed-radix degrees,   s15.16 result
+ *   FR_CosI(deg)              — cos of integer degrees,       s15.16 result
+ *   FR_SinI(deg)              — sin of integer degrees,       s15.16 result
+ *   FR_TanI(deg)              — tan of integer degrees,       s15.16 result
+ *   fr_cos_deg(deg, radix)    — cos of fixed-radix degrees,   s15.16 result
+ *   fr_sin_deg(deg, radix)    — sin of fixed-radix degrees,   s15.16 result
+ *   fr_tan_deg(deg, radix)    — tan of fixed-radix degrees,   s15.16 result
  */
-#define FR_CosI(deg)  fr_cos_bam(FR_DEG2BAM(deg))
-#define FR_SinI(deg)  fr_sin_bam(FR_DEG2BAM(deg))
+#define FR_CosI(deg)  fr_cos_bam(FR_DEG2BAM_I(deg))
+#define FR_SinI(deg)  fr_sin_bam(FR_DEG2BAM_I(deg))
 
-  s32 FR_Cos(s16 deg, u16 radix);
-  s32 FR_Sin(s16 deg, u16 radix);
-  s32 FR_TanI(s16 deg);
-  s32 FR_Tan(s16 deg, u16 radix);
+  s32 fr_cos_deg(s32 deg, u16 radix);
+  s32 fr_sin_deg(s32 deg, u16 radix);
+  s32 FR_TanI(s32 deg);
+  s32 fr_tan_deg(s32 deg, u16 radix);
+
+  /* Legacy macros — use fr_sin_deg/fr_cos_deg/fr_tan_deg in new code */
+  #define FR_Sin  fr_sin_deg
+  #define FR_Cos  fr_cos_deg
+  #define FR_Tan  fr_tan_deg
+#endif /* FR_LEAN */
 
   /* Inverse trig — output in radians at caller-specified radix (s32).
    * FR_atan2 returns radians at radix 16 (s15.16).
@@ -446,7 +484,9 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 
   s32 FR_log2(s32 input, u16 radix, u16 output_radix);
   s32 FR_ln(s32 input, u16 radix, u16 output_radix);
+#ifndef FR_LEAN
   s32 FR_log10(s32 input, u16 radix, u16 output_radix);
+#endif
 
   /* Power */
   s32 FR_pow2(s32 input, u16 radix);
@@ -494,7 +534,9 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
  * can check `result == FR_DOMAIN_ERROR` to detect domain errors.
  */
   s32 FR_sqrt(s32 input, u16 radix);
+#ifndef FR_LEAN
   s32 FR_hypot(s32 x, s32 y, u16 radix);
+#endif
 
   /* Fast approximate magnitude — shift-only, no multiply, no 64-bit.
    * Based on piecewise-linear approximation of sqrt(x*x + y*y).

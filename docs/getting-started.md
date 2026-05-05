@@ -13,8 +13,8 @@ manager integration and no install step. Either:
 
 - Copy `src/FR_math.c`, `src/FR_math.h`,
   `src/FR_defs.h` (and optionally
-  `src/FR_math_2D.cpp`, `src/FR_math_2D.h`,
-  and `src/FR_trig_table.h`) into the target project, **or**
+  `src/FR_math_2D.cpp`, `src/FR_math_2D.h`)
+  into the target project, **or**
 - Add FR_Math as a git submodule and point the build system at
   `src/`.
 
@@ -29,7 +29,7 @@ cd fr_math
 
 `build.sh` wipes `build/`, rebuilds the
 library, examples, and tests, and runs the full test suite. On success
-the output shows 42 tests passing across six test binaries.
+the output shows all tests passing (99% line coverage).
 
 ## A first program
 
@@ -274,8 +274,9 @@ make test           # build + run every test suite
 make coverage       # coverage report (requires gcov)
 ```
 
-As of v2.0.1, FR_Math ships with 42 passing tests and 99% line
-coverage across the library sources.
+Run `make test` for a full pass. With `make coverage`, line coverage of
+the library sources is about **99%**. See [Building & Testing](building.md)
+for targets, cross-compilation, and CI.
 
 ## Next steps
 
@@ -284,7 +285,7 @@ coverage across the library sources.
   conventions work.
 - **[API Reference](api-reference.md)**
   — per-symbol inputs, outputs, precision, and saturation
-  behaviour.
+  behavior.
 - **[Examples](examples.md)** —
   runnable snippets for common tasks.
 - **[Building & Testing](building.md)**

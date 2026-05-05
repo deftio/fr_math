@@ -16,7 +16,7 @@ into a single format.
   Tested on gcc, clang, MSVC, IAR, Keil, sdcc, AVR-gcc, MSP430-gcc,
   RISC-V toolchains, and Arduino.
 - Zero dependencies beyond `<stdint.h>`.
-- Parameterised radix: every function takes the binary point as an
+- Parameterized radix: every function takes the binary point as an
   argument, so you choose how many fractional bits you need per call.
 - Deterministic, bounded error — every public symbol has a documented
   worst case in the [API reference](api-reference.md).
@@ -33,7 +33,7 @@ or any tooling. If you want the browser version, look in
 | --- | --- |
 | [getting-started.md](getting-started.md) | Clone, build, run your first FR_Math program. |
 | [fixed-point-primer.md](fixed-point-primer.md) | Why fixed-point exists, sM.N notation, operations, how to pick a radix. |
-| [api-reference.md](api-reference.md) | Every public symbol: signature, radix, precision, error behaviour. |
+| [api-reference.md](api-reference.md) | Every public symbol: signature, radix, precision, error behavior. |
 | [examples.md](examples.md) | Runnable snippets: trig, log, waves, ADSR, 2D transforms. |
 | [building.md](building.md) | Makefile, scripts, test suite, coverage, cross-compilation. |
 | [releases.md](releases.md) | Release history with per-version highlights and breaking changes. |
@@ -42,27 +42,33 @@ or any tooling. If you want the browser version, look in
 
 Errors below are measured at Q16.16 (s15.16). All functions accept any
 radix — Q16.16 is just the reference point for the table. See the
-[TDD report](../build/test_tdd_report.md) for sweeps at radixes 8, 12,
-16, and 24. Percent errors skip expected values near zero (|expected| < 0.01).
+TDD report (run `make test-tdd` to generate `build/test_tdd_report.md`)
+for sweeps at radixes 8, 12, 16, and 24.
 
 <!-- ACCURACY_TABLE_START -->
-| Function | Max err (%) | Avg err (%) | Note |
+| Function | Max err (%)*| Avg err (%) | Note |
 |---|---:|---:|---|
-| sin / cos | 0.7169 | 0.0100 | 65536-pt sweep + specials |
-| tan | 0.7118 | 0.0162 | 65536-pt sweep (skip poles) |
-| asin / acos | 0.7025 | 0.0105 | 65536-pt; sqrt approx near boundary |
-| atan2 | 0.4953 | 0.0268 | 65536x5 radii; asin/acos+hypot_fast8 |
-| atan | 0.2985 | 0.0159 | 20001-pt sweep [-10,10]; via FR_atan2 |
-| sqrt | 0.0003 | 0.0000 | Round-to-nearest |
-| log2 | 0.2479 | 0.0045 | 65-entry mantissa table |
-| pow2 | 0.1373 | 0.0057 | 65-entry fraction table |
-| ln, log10 | 0.0015 | 0.0004 | Via FR_MULK28 from log2 |
-| exp | 0.0719 | 0.0051 | FR_MULK28 + FR_pow2 |
-| exp_fast | 0.0719 | 0.0064 | Shift-only scaling |
-| pow10 | 0.1163 | 0.0075 | FR_MULK28 + FR_pow2 |
-| pow10_fast | 0.1163 | 0.0100 | Shift-only scaling |
-| hypot (exact) | 0.0001 | 0.0000 | 64-bit intermediate |
-| hypot_fast8 (8-seg) | 0.0977 | 0.0508 | Shift-only, no multiply |
+| sin/cos (BAM) | 0.1526 | 0.0030 | very fast binary angle trig |
+| sin/cos (deg) | 0.1526 | 0.0029 | degree input trig fns |
+| sin/cos (rad) | 0.1828 | 0.0033 | radian (traditional) trig |
+| tan (BAM) | 0.5823 | 0.0008 | binary angle tangent; ±maxint at poles |
+| tan (deg) | 0.5311 | 0.0008 | degree input tangent; saturated at poles |
+| tan (rad) | 0.0386 | 0.0001 | radian (traditional) tangent |
+| asin / acos | 0.7771 | 0.0280 | reverse trig, radian output |
+| atan2 | 0.2564 | 0.0237 | reverse tangent, always safe |
+| atan | 0.2425 | 0.0155 | reverse tangent, accepts up to maxint |
+| sqrt | 0.0000 | 0.0000 | Round-to-nearest |
+| log2 | 0.0116 | 0.0016 | shift/add only for speed |
+| pow2 | 0.0018 | 0.0004 | shift/add only for speed |
+| ln, log10 | 0.0004 | 0.0000 | shift/add only for speed |
+| exp | 0.0003 | 0.0000 | shift/add only for speed |
+| exp_fast | 0.0009 | 0.0001 | Shift-only scaling |
+| pow10 | 0.0005 | 0.0000 | shift/add only for speed |
+| pow10_fast | 0.0022 | 0.0002 | Shift-only scaling |
+| hypot (exact) | 0.0000 | 0.0000 | Uses 64-bit intermediate |
+| hypot_fast8 (8-seg) | 0.0915 | 0.0320 | Shift-only, no multiply |
+
+*Relative error; reference clamped to 1% of full-scale output.
 <!-- ACCURACY_TABLE_END -->
 
 ## What's in the box
@@ -71,8 +77,8 @@ radix — Q16.16 is just the reference point for the table. See the
 | --- | --- |
 | Arithmetic | `FR_ADD`, `FR_SUB`, `FR_DIV`, `FR_DIV32`, `FR_MOD`, `FR_FixMuls`, `FR_FixMulSat`, `FR_CHRDX` |
 | Utility | `FR_MIN`, `FR_MAX`, `FR_CLAMP`, `FR_ABS`, `FR_SGN` |
-| Trig (integer deg) | `FR_Sin`, `FR_Cos`, `FR_Tan`, `FR_SinI`, `FR_CosI`, `FR_TanI` |
-| Trig (radian/BAM) | `fr_sin`, `fr_cos`, `fr_tan`, `fr_sin_bam`, `fr_cos_bam`, `fr_sin_deg`, `fr_cos_deg` |
+| Trig (degree) | `fr_sin_deg`, `fr_cos_deg`, `fr_tan_deg`, `FR_SinI`, `FR_CosI`, `FR_TanI` |
+| Trig (radian/BAM) | `fr_sin`, `fr_cos`, `fr_tan`, `fr_sin_bam`, `fr_cos_bam`, `fr_tan_bam` |
 | Inverse trig | `FR_atan`, `FR_atan2`, `FR_asin`, `FR_acos` |
 | Log / exp | `FR_log2`, `FR_ln`, `FR_log10`, `FR_pow2`, `FR_EXP`, `FR_POW10`, `FR_EXP_FAST`, `FR_POW10_FAST`, `FR_MULK28` |
 | Roots | `FR_sqrt`, `FR_hypot`, `FR_hypot_fast8` |
@@ -118,7 +124,7 @@ pays off:
 
 - **8- and 16-bit MCUs** (AVR, MSP430, 8051, sdcc) where the FPU does
   not exist and even software float is too slow or too large.
-- **Hot inner loops on any CPU** where a parameterised-radix integer
+- **Hot inner loops on any CPU** where a parameterized-radix integer
   multiply is faster and more deterministic than a `float`. Think DSP
   taps, PID loops, coordinate transforms inside a scanline renderer.
 - **Bit-exact reproducibility** across compilers, architectures, and
@@ -163,18 +169,23 @@ s32 two  = I2FR(2, R);              /* 2.0 → raw 131072              */
  *
  * MixedCase FR_ names are functions — they contain loops, tables, or
  * multi-step algorithms where inlining would waste ROM:
- *   FR_Cos, FR_sqrt, FR_atan2, FR_log2, FR_pow2, FR_printNumF ...
+ *   FR_sqrt, FR_atan2, FR_log2, FR_pow2, FR_printNumF ...
  *
- * lowercase fr_ names are v2 functions (radian trig, wave generators,
- * ADSR envelopes):
- *   fr_sin, fr_cos, fr_tan, fr_wave_tri, fr_adsr_step ...
+ * lowercase fr_ names are v2 functions (degree/radian/BAM trig, wave
+ * generators, ADSR envelopes):
+ *   fr_sin_deg, fr_cos_deg, fr_tan_deg, fr_sin, fr_cos, fr_tan,
+ *   fr_wave_tri, fr_adsr_step ...
+ *
+ * Legacy aliases: FR_Cos, FR_Sin, FR_Tan still work — they are
+ * macros that map to fr_cos_deg, fr_sin_deg, fr_tan_deg.  New code
+ * should use the fr_ names directly.
  *
  * Some macros wrap functions: FR_EXP(x,r) scales x then calls
  * FR_pow2 — one-liner convenience, heavy lifting in the function.
  */
 
 /* ---- Math functions ---- */
-s32 c45   = FR_Cos(45, 0);                /* cos(45°) = 0.7071       */
+s32 c45   = fr_cos_deg(45, 0);            /* cos(45°) = 0.7071       */
 s32 s30   = fr_sin(FR_numstr("0.5236", R), R); /* sin(0.5236 rad)    */
 s32 root2 = FR_sqrt(two, R);              /* sqrt(2)  = 1.4142       */
 s32 angle = FR_atan2(I2FR(1,R), I2FR(1,R), R); /* atan2(1,1) rad     */
@@ -210,23 +221,23 @@ understand *how* the radix notation works first.
 | Multiply-free option | No | No | Yes (e.g. `FR_EXP_FAST`, `FR_hypot_fast8`) |
 | Wave generators | No | No | 6 shapes + ADSR |
 | Dependencies | None | ARM only | None |
-| Code size (Cortex-M0, -Os) | 2.4 KB | ~40 KB+ | 4.2 KB |
+| Code size (Cortex-M0, -Os) | 2.4 KB | ~40 KB+ | 3.4 KB lean / 5.7 KB full |
 
 Sizes measured with `arm-none-eabi-gcc -mcpu=cortex-m0 -mthumb -Os`.
 libfixmath covers trig/sqrt/exp in Q16.16 only; FR_Math includes
 log/ln/log10, wave generators, ADSR, print helpers, and variable radix.
 CMSIS-DSP estimate is for the math function subset only.
-See [`docker/build_sizes.sh`](../docker/build_sizes.sh) for the build
-script.
+See [`scripts/crossbuild_sizes.sh`](../scripts/crossbuild_sizes.sh) for
+the build script.
 
 ## History
 
 FR_Math has been in service since **2000**, originally built for
 graphics transforms on 16 MHz 68k Palm Pilots (it shipped inside
 Trumpetsoft's *Inkstorm*), then ported forward to ARM, x86, MIPS,
-RISC-V, and various 8/16-bit embedded targets. v2.0.7 is the current
-release with a full test suite, bit-exact numerical
-specification, and CI on every push.
+RISC-V, and various 8/16-bit embedded targets. The current release
+has a full test suite, bit-exact numerical specification, and CI on
+every push.
 
 ## License
 

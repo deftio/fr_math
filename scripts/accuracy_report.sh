@@ -86,12 +86,13 @@ patch_markdown() {
         return
     fi
 
-    # Build replacement block: sentinel + header + separator + data + sentinel
+    # Build replacement block: sentinel + header + separator + data + footnote + sentinel
     local replacement
     replacement="<!-- ACCURACY_TABLE_START -->"$'\n'
-    replacement+="| Function | Max err (%) | Avg err (%) | Note |"$'\n'
+    replacement+="| Function | Max err (%)*| Avg err (%) | Note |"$'\n'
     replacement+="|---|---:|---:|---|"$'\n'
     replacement+="$DATA_ROWS"$'\n'
+    replacement+=$'\n'"*Relative error; reference clamped to 1% of full-scale output."$'\n'
     replacement+="<!-- ACCURACY_TABLE_END -->"
 
     # Use perl to replace between sentinels
@@ -137,11 +138,12 @@ patch_html() {
     local replacement
     replacement="<!-- ACCURACY_TABLE_START -->"$'\n'
     replacement+="<table>"$'\n'
-    replacement+="<thead><tr><th>Function</th><th>Max err (%)</th><th>Avg err (%)</th><th>Note</th></tr></thead>"$'\n'
+    replacement+="<thead><tr><th>Function</th><th>Max err (%)*</th><th>Avg err (%)</th><th>Note</th></tr></thead>"$'\n'
     replacement+="<tbody>"$'\n'
     replacement+="$html_rows"$'\n'
     replacement+="</tbody>"$'\n'
     replacement+="</table>"$'\n'
+    replacement+="<p><em>*Relative error; reference clamped to 1% of full-scale output.</em></p>"$'\n'
     replacement+="<!-- ACCURACY_TABLE_END -->"
 
     perl -0777 -i -pe "

@@ -5,7 +5,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Releases — FR_Math</title>
-  <meta name="description" content="FR_Math release history: v2.0.7 README restructure and FR_CORE_ONLY, v2.0.0 precision rewrite and new waveforms, v1.0.3 test coverage, v1.02 initial public release.">
+  <meta name="description" content="FR_Math release history: v2.0.8 tangent rewrite and trig rounding, v2.0.7 FR_CORE_ONLY, v2.0.0 precision rewrite and new waveforms, v1.0.3 test coverage, v1.02 initial public release.">
   <link rel="stylesheet" href="assets/main.css">
 </head>
 <body>
@@ -21,6 +21,19 @@
 <a href="https://github.com/deftio/fr_math/blob/master/release_notes.md">release_notes.md</a>
 in the repo.</p>
 
+<h2>v2.0.8 &mdash; 2026</h2>
+
+<p>Tangent accuracy rewrite and trig rounding fix.</p>
+
+<ul>
+  <li><strong>BAM-native tangent</strong>: new <code>fr_tan_bam(u16 bam)</code> with 65-entry octant table (130 bytes). No 64-bit math. <code>FR_TanI</code>, <code>FR_Tan</code>, <code>fr_tan</code> are now thin wrappers.</li>
+  <li><strong>Round-to-nearest fix</strong>: radian/degree trig wrappers now round instead of truncating when converting to BAM. Peak error drops from ~1.03% to 0.16% on the radian path, matching BAM-native accuracy.</li>
+  <li><strong>Conversion macro trimming</strong>: <code>FR_DEG2BAM</code> and <code>FR_RAD2BAM</code> reduced to ~18&ndash;21 bits (from ~28 bits). Verified: no measurable accuracy impact.</li>
+  <li><strong><code>FR_TRIG_MINVAL</code> fixed</strong>: now <code>-FR_TRIG_MAXVAL</code> (was <code>-FR_TRIG_MASK</code>)</li>
+</ul>
+
+<hr>
+
 <h2>v2.0.7 &mdash; 2026</h2>
 
 <p>README restructure, accuracy table cleanup, expanded cross-compile support.</p>
@@ -28,10 +41,10 @@ in the repo.</p>
 <ul>
   <li><strong><code>FR_CORE_ONLY</code> convenience define</strong> &mdash; single <code>#define</code> strips both print helpers and wave generators</li>
   <li><strong>Accuracy table cleanup</strong> &mdash; removed LSB column (percent error is the user-facing metric)</li>
-  <li><strong>New cross-compile targets</strong> &mdash; RP2040 (Cortex-M0+), STM32 (Cortex-M4), 68HC11 added to Docker build</li>
-  <li><strong>Two-column size table</strong> &mdash; Core (<code>-DFR_CORE_ONLY</code>) vs Full for every target</li>
-  <li><strong><code>scripts/update_sizes.sh</code></strong> &mdash; auto-patches size tables from <code>build/sizes.csv</code></li>
-  <li>README reordered: accuracy table first, then function list, then size table</li>
+  <li><strong>New cross-compile targets</strong> &mdash; RP2040 (Cortex-M0+), STM32 (Cortex-M4), 68HC11, MIPS32 added to Docker build</li>
+  <li><strong>Three-column size table</strong> &mdash; Lean / Core / Full for every target, sorted 8-bit &rarr; 64-bit</li>
+  <li><strong><code>scripts/crossbuild_sizes.sh</code></strong> &mdash; consolidated script: Docker build, CSV + markdown output, doc patching</li>
+  <li>README reordered and cleaned up: accuracy table first, badges as standard markdown, concise build flavor descriptions</li>
 </ul>
 
 <hr>
@@ -159,7 +172,7 @@ with v2.0.0 except where noted.</p>
   <li><code>FR_DIV(x, xr, y, yr)</code> &mdash; fixed-point division with
       64-bit pre-scaling. Now <strong>rounds to nearest</strong>
       (&le; 0.5 LSB error) instead of truncating.
-      <code>FR_DIV_TRUNC</code> preserves the old truncating behaviour
+      <code>FR_DIV_TRUNC</code> preserves the old truncating behavior
       for backward compatibility. <code>FR_DIV32</code> is the 32-bit-only
       truncating path.</li>
   <li><code>FR_MOD(x, xr, y, yr)</code> &mdash; fixed-point modulus.</li>
@@ -190,7 +203,7 @@ with v2.0.0 except where noted.</p>
 <tr><td>FR_atan signature</td><td><code>(input, radix)</code> &rarr; s16 degrees</td><td><code>(input, radix, out_radix)</code> &rarr; s32 radians</td></tr>
 <tr><td>FR_atan2 signature</td><td><code>(y, x)</code> &rarr; s16 degrees</td><td><code>(y, x, out_radix)</code> &rarr; s32 radians</td></tr>
 <tr><td>FR_BAM2RAD</td><td>off by 1024&times; (bug)</td><td>correct</td></tr>
-<tr><td>FR_DIV rounding</td><td>truncates toward zero</td><td>rounds to nearest (use <code>FR_DIV_TRUNC</code> for old behaviour)</td></tr>
+<tr><td>FR_DIV rounding</td><td>truncates toward zero</td><td>rounds to nearest (use <code>FR_DIV_TRUNC</code> for old behavior)</td></tr>
 </tbody>
 </table>
 
@@ -231,7 +244,7 @@ mandatory.</p>
       dropped.</li>
   <li><code>FR_atan</code>, <code>FR_Tan</code>, <code>FR_TanI</code>:
       wiring and overflow fixes.</li>
-  <li><code>FR_printNumD/F/H</code>: fixed undefined behaviour on
+  <li><code>FR_printNumD/F/H</code>: fixed undefined behavior on
       <code>INT_MIN</code> and a broken fraction extraction in the
       v1 code.</li>
   <li><code>FR_DEG2RAD</code> / <code>FR_RAD2DEG</code>: macro bodies
@@ -251,7 +264,7 @@ mandatory.</p>
       <code>FR_BAM2DEG</code>, <code>FR_RAD2BAM</code>,
       <code>FR_BAM2RAD</code>. BAM (16 bits per full circle) is the
       natural integer representation for phase accumulators and
-      gives zero quantisation at the wraparound.</li>
+      gives zero quantization at the wraparound.</li>
   <li><strong>Square root and hypot</strong>: <code>FR_sqrt</code>
       uses a digit-by-digit integer isqrt on <code>int64_t</code>;
       <code>FR_hypot</code> computes <code>sqrt(x&sup2; + y&sup2;)</code>
@@ -312,10 +325,9 @@ mandatory.</p>
 
 <h3>Test suite</h3>
 
-<p>v2 ships with <strong>42 tests</strong> across six test binaries
-and a characterisation suite (<code>test_tdd.cpp</code>) that pins
-numerical behaviour to bit-exact reference values. Overall line
-coverage is <strong>99%</strong> on the library sources.</p>
+<p>v2 ships with a full test suite covering <strong>99%</strong> of library
+source lines, plus a characterization suite (<code>test_tdd.cpp</code>)
+that pins numerical behavior to bit-exact reference values.</p>
 
 <h2>v1.0.3 &mdash; 2025</h2>
 
@@ -351,7 +363,7 @@ released publicly.</p>
 when it was written to run 2D graphics transforms on 16&nbsp;MHz 68k
 Palm Pilots for Trumpetsoft&rsquo;s <em>Inkstorm</em>. It has since
 been ported to ARM, x86, MIPS, RISC-V, and a menagerie of 8- and
-16-bit embedded targets. v2.0.7 is the current release with a
+16-bit embedded targets. The current release has a
 full test suite, a bit-exact numerical specification, and CI on
 every push.</p>
 

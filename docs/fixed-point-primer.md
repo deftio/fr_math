@@ -266,14 +266,14 @@ you want to think of an FR_Math value as a "number with a
 radix", think of the radix as a *type annotation that lives
 in your source code*, not a runtime field.
 
-## Quantisation and loss of precision
+## Quantization and loss of precision
 
 Fixing the radix also fixes the smallest representable fractional
 step. At radix *N*, that step is `2^−N` — nothing finer survives
 the round-trip into the integer. Any real value smaller than the
 step rounds to zero; any real value landing between two adjacent
 steps rounds to one of them. The difference between the ideal
-value and its stored form is called **quantisation error**, and it
+value and its stored form is called **quantization error**, and it
 is the main price paid for doing fractional math in integer
 registers.
 
@@ -295,7 +295,7 @@ radix 16 and the picture changes:
 error                       =  0.00000153  (< 0.002 %)
 ```
 
-This behaviour isn't a bug — it is the same compromise IEEE-754
+This behavior isn't a bug — it is the same compromise IEEE-754
 floating point makes with its mantissa. The difference is that a
 float hides the trade-off behind a variable exponent, while
 fixed-point puts it on a ledger that the programmer chooses up
@@ -307,7 +307,7 @@ half the smallest step the application cares about. Any coarser
 and small signals vanish; any finer and integer headroom is being
 spent for no benefit.
 
-A second consequence worth recording: quantisation error
+A second consequence worth recording: quantization error
 *accumulates*. Summing a million low-radix values sums the errors
 too. Signal-processing pipelines with long feedback paths are the
 main reason to carry accumulators at a wider radix than the
@@ -375,7 +375,7 @@ FR_Math ships this operation as
 callback `f`, which makes it usable on targets without stdio — a
 UART write, an LCD glyph pusher, a ring-buffer append. The `pad`
 parameter sets a minimum field width and `prec` sets the number of
-fractional digits. Rounding behaviour matches the hand-rolled
+fractional digits. Rounding behavior matches the hand-rolled
 version: excess fractional digits are truncated, and negative
 values are handled without the two's-complement trap described
 above.
@@ -384,7 +384,7 @@ above.
 
 Once you've chosen a radix, the everyday operations behave
 almost like integer math — with one or two twists per
-operation that you just have to internalise. Let's walk
+operation that you just have to internalize. Let's walk
 through them.
 
 ### Addition and subtraction
@@ -527,7 +527,7 @@ Three things to watch for:
   it explicitly before the divide.
 - **Rounding toward zero.** C's integer division truncates toward
   zero for both signs, so `−7 / 2 == −3` (not `−4`). Fixed-point
-  division inherits that behaviour. Round-to-nearest can be
+  division inherits that behavior. Round-to-nearest can be
   layered on top by adding `b / 2` (for a positive numerator) or
   `−b / 2` (for a negative numerator) to the pre-scaled numerator
   before the divide.
@@ -557,7 +557,7 @@ for you:
 - Going to a *smaller* radix — the low bits are
   dropped. Precision is lost; headroom grows. This is a good
   place to add `± (1 << (from_r - to_r - 1))`
-  before the shift if you want round-to-nearest behaviour.
+  before the shift if you want round-to-nearest behavior.
 
 The value is conserved as closely as the destination radix can
 represent it. Nothing more, nothing less.
@@ -620,7 +620,7 @@ and store the result back into a 32-bit register without thinking
 about it, you will eventually pass a pair of inputs whose product
 doesn't fit, and plain C will hand you wrap-around garbage
 with no warning. A signed 32-bit multiply that overflows is not a
-runtime error in C — it's undefined behaviour that
+runtime error in C — it's undefined behavior that
 happens to look like data most of the time.
 
 FR_Math defends against this in three layers, and it's
@@ -711,12 +711,12 @@ you actually need 15 integer bits on that particular signal.
 ## A worked example: one-pole IIR low-pass filter
 
 The sections up to this point have introduced the pieces
-individually: scaling, notation, quantisation, arithmetic,
+individually: scaling, notation, quantization, arithmetic,
 overflow, and radix choice. A small end-to-end example is the
 fastest way to see how those pieces fit together on a real
 pipeline. The filter walked through below is a single-pole
 infinite-impulse-response (IIR) low-pass — about the simplest
-entry in the DSP catalogue, but realistic enough to exercise
+entry in the DSP catalog, but realistic enough to exercise
 nearly every decision the primer has covered so far.
 
 In floating point, the filter is one line of arithmetic:
@@ -753,7 +753,7 @@ be picked:
   `x`, so it shares the same ±32767 output range. But because it
   accumulates small updates on every sample, it will drift and
   lose precision unless carried at a higher radix than the raw
-  input. This is the quantisation-error accumulation noted
+  input. This is the quantization-error accumulation noted
   earlier in the primer, showing up in practice.
 
 ### Step 2: pick the radixes
@@ -841,7 +841,7 @@ feeds both versions a few thousand samples — a mix of sine tones,
 step inputs, and silence is enough to exercise the relevant paths
 — and reports the worst-case delta. For a radix-15 one-pole IIR
 the expected worst-case difference is on the order of a few LSB,
-comparable to the inherent quantisation of the 16-bit output
+comparable to the inherent quantization of the 16-bit output
 format and not audible in normal listening. Anything substantially
 larger indicates a radix choice that is too tight, a rounding
 mode that is drifting, or a missing int64 promotion on the
@@ -862,8 +862,8 @@ generation of each symbol:
 | Prefix | What it is | Example |
 | --- | --- | --- |
 | `FR_XXX()` | `UPPERCASE` macro — inline, zero call overhead. | `FR_ADD`, `FR_ABS`, `FR2I` |
-| `FR_Xxx()` | Mixed-case C function — the classic v1 API. Integer-degree trig and related. | `FR_Sin`, `FR_log2`, `FR_sqrt` |
-| `fr_xxx()` | Lowercase C function — v2 additions (radian / BAM trig, wave generators, ADSR). | `fr_sin`, `fr_wave_tri`, `fr_adsr_step` |
+| `FR_Xxx()` | Mixed-case C function — the classic v1 API. Log, sqrt, inverse trig, and related. | `FR_log2`, `FR_sqrt`, `FR_atan2` |
+| `fr_xxx()` | Lowercase C function — v2 API (degree/radian/BAM trig, wave generators, ADSR). `fr_sin_deg`, `fr_cos_deg`, `fr_tan_deg` are the current degree-based trig names. `FR_Sin`/`FR_Cos`/`FR_Tan` remain as legacy aliases. | `fr_sin_deg`, `fr_sin`, `fr_wave_tri`, `fr_adsr_step` |
 | `s8, s16, s32` | Signed integer typedefs (aliases for `int8_t`, `int16_t`, `int32_t`). | — |
 | `u8, u16, u32` | Unsigned integer typedefs. | — |
 
@@ -917,13 +917,13 @@ Angles deserve their own section because FR_Math gives you
 angle into?** Because the `u16` wraparound *is* the angular
 modulus — that's the whole feature. Adding two `u16` BAM values
 automatically gives you the right answer modulo a full revolution,
-with zero quantisation error at the boundary and no `% 65536` in
+with zero quantization error at the boundary and no `% 65536` in
 sight. If BAM were `s32`, every read of the table would have to
 explicitly mask off the top bits (and handle negative values)
 before the quadrant extraction (`bam >> 14`) made any sense. You
 would have traded one free operation for two slow ones on every
-sample, just to get back the same behaviour. So instead, the public
-trig entry points (`FR_CosI`, `FR_Cos`, `fr_cos`, and friends)
+sample, just to get back the same behavior. So instead, the public
+trig entry points (`FR_CosI`, `fr_cos_deg`, `fr_cos`, and friends)
 *all* take signed angles — in degrees, fixed-radix degrees, or
 radians — and only the internal `fr_cos_bam` / `fr_sin_bam`
 primitives see the `u16`. In practice you will never construct a

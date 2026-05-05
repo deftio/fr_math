@@ -188,7 +188,7 @@ int test_div() {
 int test_trig_complete() {
     s16 result;
     s32 result32;
-    
+
     /* Test CosI with all quadrants and edge cases */
     result = FR_CosI(0);
     result = FR_CosI(45);
@@ -199,48 +199,110 @@ int test_trig_complete() {
     result = FR_CosI(270);
     result = FR_CosI(315);
     result = FR_CosI(360);
-    
+
     /* Test angles > 180 to hit the branch */
     result = FR_CosI(200);  /* > 180, will subtract 360 */
     result = FR_CosI(350);  /* > 180, will subtract 360 */
-    
+
     /* Test angles < -180 to hit that branch */
     result = FR_CosI(-200); /* < -180, will add 360 */
     result = FR_CosI(-350); /* < -180, will add 360 */
-    
+
     /* Test SinI */
     result = FR_SinI(0);
     result = FR_SinI(90);
     result = FR_SinI(180);
     result = FR_SinI(270);
-    
+
     /* Test FR_Cos with radix (interpolated) */
     result = FR_Cos(45, 8);
     result = FR_Cos(90, 8);
     result = FR_Cos(180, 8);
-    
+
     /* Test FR_Sin with radix */
     result = FR_Sin(45, 8);
     result = FR_Sin(90, 8);
-    
+
     /* Test TanI with all special cases */
     result32 = FR_TanI(0);
+    if (result32 != 0) return TEST_FAIL;               /* tan(0°) = 0 */
     result32 = FR_TanI(45);
-    result32 = FR_TanI(90);   /* Special case: returns max */
+    if (result32 != 65536) return TEST_FAIL;            /* tan(45°) = 1.0 = 65536 */
+    result32 = FR_TanI(90);
+    if (result32 != FR_TRIG_MAXVAL) return TEST_FAIL;   /* pole: +max */
     result32 = FR_TanI(135);
+    if (result32 != -65536) return TEST_FAIL;           /* tan(135°) = -1.0 */
     result32 = FR_TanI(180);
-    result32 = FR_TanI(270);  /* Special case: returns -max */
-    result32 = FR_TanI(-45);  /* Negative angle */
-    result32 = FR_TanI(-90);  /* Negative 90 */
+    if (result32 != 0) return TEST_FAIL;                /* tan(180°) = 0 */
+    result32 = FR_TanI(270);
+    if (result32 != FR_TRIG_MAXVAL) return TEST_FAIL;   /* pole: +max (positive deg) */
+    result32 = FR_TanI(-45);
+    if (result32 != -65536) return TEST_FAIL;           /* tan(-45°) = -1.0 */
+    result32 = FR_TanI(-90);
+    if (result32 != -FR_TRIG_MAXVAL) return TEST_FAIL;  /* pole: -max */
     result32 = FR_TanI(200);  /* > 180 */
     result32 = FR_TanI(-200); /* < -180 */
-    
+
     /* Test FR_Tan with radix */
     result32 = FR_Tan(45, 8);
     result32 = FR_Tan(30, 8);
-    
+
     (void)result;
     (void)result32;
+    return TEST_PASS;
+}
+
+/* Test fr_tan_bam BAM-native tangent */
+int test_tan_bam() {
+    s32 result;
+
+    /* Exact zeros: 0° and 180° */
+    result = fr_tan_bam(0);                     /* 0° */
+    if (result != 0) return TEST_FAIL;
+    result = fr_tan_bam(0x8000);                /* 180° */
+    if (result != 0) return TEST_FAIL;
+
+    /* Exact poles: 90° and 270° */
+    result = fr_tan_bam(0x4000);                /* 90° = +pole */
+    if (result != FR_TRIG_MAXVAL) return TEST_FAIL;
+    result = fr_tan_bam(0xC000);                /* 270° = -pole */
+    if (result != -FR_TRIG_MAXVAL) return TEST_FAIL;
+
+    /* 45° = 0x2000: tan(45°) = 1.0 = 65536 in s15.16 */
+    result = fr_tan_bam(0x2000);
+    if (result != 65536) return TEST_FAIL;
+
+    /* 135° = 0x6000: tan(135°) = -1.0 */
+    result = fr_tan_bam(0x6000);
+    if (result != -65536) return TEST_FAIL;
+
+    /* 225° = 0xA000: tan(225°) = 1.0 (same as 45°) */
+    result = fr_tan_bam(0xA000);
+    if (result != 65536) return TEST_FAIL;
+
+    /* 315° = 0xE000: tan(315°) = -1.0 */
+    result = fr_tan_bam(0xE000);
+    if (result != -65536) return TEST_FAIL;
+
+    /* 30° ≈ BAM 5461: tan(30°) = 1/sqrt(3) ≈ 0.57735 → 37837 in s15.16
+     * Allow ±50 LSB for table interpolation error */
+    result = fr_tan_bam(5461);
+    if (result < 37700 || result > 37950) return TEST_FAIL;
+
+    /* 60° ≈ BAM 10923: tan(60°) = sqrt(3) ≈ 1.73205 → 113512 in s15.16
+     * This exercises the second-octant (reciprocal) path. Allow ±200 LSB. */
+    result = fr_tan_bam(10923);
+    if (result < 113200 || result > 113800) return TEST_FAIL;
+
+    /* Near-pole: 89° ≈ BAM 16202: tan(89°) ≈ 57.29 → huge.
+     * Just verify it's large and positive. */
+    result = fr_tan_bam(16202);
+    if (result < 3000000) return TEST_FAIL;   /* > 45.8 in s15.16 */
+
+    /* Near-pole: 91° ≈ BAM 16566: tan(91°) ≈ -57.29 → large negative */
+    result = fr_tan_bam(16566);
+    if (result > -3000000) return TEST_FAIL;
+
     return TEST_PASS;
 }
 
@@ -748,8 +810,8 @@ int test_edge_branches() {
      * cos==0 and we hit the saturation return. */
     r32 = FR_Tan(90, 0);                     /* bam=16384 (sin>0) */
     if (r32 != FR_TRIG_MAXVAL) return TEST_FAIL;
-    r32 = FR_Tan(270, 0);                    /* bam=49152 (sin<0) */
-    if (r32 != -FR_TRIG_MAXVAL) return TEST_FAIL;
+    r32 = FR_Tan(270, 0);                    /* pole: positive deg → +MAXVAL */
+    if (r32 != FR_TRIG_MAXVAL) return TEST_FAIL;
 
     /* FR_atan2 now returns radians at out_radix.
      * At radix 16: pi/2 ≈ 102944, pi ≈ 205887.
@@ -1031,6 +1093,7 @@ int main() {
     
     printf("\nTrigonometry (Complete):\n");
     RUN_TEST(test_trig_complete);
+    RUN_TEST(test_tan_bam);
     RUN_TEST(test_inverse_trig);
     
     printf("\nLogarithms & Powers (Complete):\n");

@@ -107,42 +107,41 @@ reference.</p>
 
 <h2>The test suite</h2>
 
-<p>Tests live under <code>tests/</code> and are split into six
+<p>Tests live under <code>tests/</code> and are split into seven
 binaries to keep compile times low:</p>
 
 <table>
 <thead><tr><th>Binary</th><th>What it checks</th></tr></thead>
 <tbody>
-<tr><td><code>test_basic</code></td><td>Radix conversions, <code>FR_ADD</code>, <code>FR_FixMuls</code>, rounding.</td></tr>
-<tr><td><code>test_trig</code></td><td>Integer-degree trig (<code>FR_Sin</code> et al.).</td></tr>
-<tr><td><code>test_trig_radians</code></td><td>Radian / BAM trig and the v2 <code>fr_sin</code> API.</td></tr>
-<tr><td><code>test_log_exp</code></td><td>Log base 2 / ln / log10 and their inverses.</td></tr>
+<tr><td><code>fr_test</code></td><td>Radix conversions, <code>FR_ADD</code>, <code>FR_FixMuls</code>, rounding (legacy harness).</td></tr>
+<tr><td><code>test_comprehensive</code></td><td>Trig (degree, radian, BAM), log/exp, sqrt, hypot.</td></tr>
 <tr><td><code>test_2d</code></td><td>2D transforms, determinants, inverses.</td></tr>
-<tr><td><code>test_full_coverage</code></td><td>Dark-corner cases: overflow sentinels, edge radixes, round-trips.</td></tr>
-<tr><td><code>test_tdd</code></td><td>Characterisation tests pinned to bit-exact reference values.</td></tr>
+<tr><td><code>test_overflow</code></td><td>Overflow sentinels, saturation, edge radixes.</td></tr>
+<tr><td><code>test_full</code></td><td>Full-coverage dark-corner cases and round-trips.</td></tr>
+<tr><td><code>test_2d_complete</code></td><td>Extended 2D: matrix composition, inverse, point transforms.</td></tr>
+<tr><td><code>test_tdd</code></td><td>Characterization tests pinned to bit-exact reference values.</td></tr>
 </tbody>
 </table>
 
-<p>As of v2.0.0 the suite contains <strong>42 tests</strong> across
-those binaries and covers <strong>99%</strong> of the library source.
+<p>The suite covers <strong>99%</strong> of the library source.
 Every public symbol is exercised at least once.</p>
 
 <h3>Running a single binary</h3>
 
-<pre><code class="language-bash">make build/test_basic
-./build/test_basic
+<pre><code class="language-bash">make test-comprehensive
+./build/test_comprehensive
 
 # or all of them at once
 make test</code></pre>
 
 <h3>Running the TDD pins after a change</h3>
 
-<p><code>test_tdd.cpp</code> is a characterisation suite. It records
+<p><code>test_tdd.cpp</code> is a characterization suite. It records
 exact bit patterns for a sample of inputs and fails loudly if those
-patterns drift. Any change that modifies the numerical behaviour of
+patterns drift. Any change that modifies the numerical behavior of
 the library will break this suite &mdash; that&rsquo;s the point.</p>
 
-<p>If you <em>intended</em> to change the numerical behaviour (e.g.
+<p>If you <em>intended</em> to change the numerical behavior (e.g.
 you improved a polynomial approximation), update the pinned values in
 <code>tests/test_tdd.cpp</code> and note the change in
 <code>release_notes.md</code> along with any updates to the
@@ -175,51 +174,67 @@ need a floating-point unit, and you do <em>not</em> need
 <tr><td>Motorola 68k</td><td><code>m68k-linux-gnu-gcc</code></td><td>Docker.</td></tr>
 <tr><td>Motorola 68HC11</td><td><code>m68hc11-gcc</code></td><td>Docker.</td></tr>
 <tr><td>PowerPC</td><td><code>powerpc-linux-gnu-gcc</code></td><td>Docker.</td></tr>
+<tr><td>MIPS32</td><td><code>mipsel-linux-gnu-gcc</code></td><td>Docker.</td></tr>
 <tr><td>Xtensa LX106 (ESP8266)</td><td><code>xtensa-lx106-elf-gcc</code></td><td>Docker.</td></tr>
+<tr><td>Xtensa LX7 (ESP32-S3)</td><td><code>xtensa-esp-elf-gcc</code></td><td>Docker (Espressif toolchain).</td></tr>
 <tr><td>8051</td><td><code>sdcc</code></td><td>Manual.</td></tr>
 </tbody>
 </table>
 
 <h3>Code size (<code>.text</code> section, compiled with <code>-Os</code>)</h3>
 
-<p>Sizes are for <code>FR_math.c</code> compiled with <code>-Os -ffreestanding</code>.
-Core = compiled with <code>-DFR_CORE_ONLY</code> (math only, no print, no waves).
+<p>Sizes are for <code>FR_math.c</code> compiled with <code>-Os</code>.
+Lean = <code>-DFR_LEAN -DFR_NO_PRINT</code> (radian trig, inv trig, log/exp, sqrt).
+Core = <code>-DFR_CORE_ONLY</code> (+ degree trig, BAM tan, log10, hypot).
+Full = all features (+ print, waves, ADSR).
 With <code>-ffunction-sections</code> and linker <code>--gc-sections</code>,
 only the functions your application references are linked, so real flash
 usage will be smaller.</p>
 
 <!-- SIZE_TABLE_START -->
 <table>
-<thead><tr><th>Target</th><th>Core</th><th>Full</th></tr></thead>
+<thead><tr><th>Target</th><th>Lean</th><th>Core</th><th>Full</th></tr></thead>
 <tbody>
-<tr><td>RP2040 (Cortex-M0+)</td><td>2.6 KB</td><td>4.2 KB</td></tr>
-<tr><td>STM32 (Cortex-M4)</td><td>2.6 KB</td><td>4.2 KB</td></tr>
-<tr><td>RISC-V 32 (rv32imac)</td><td>3.0 KB</td><td>4.7 KB</td></tr>
-<tr><td>ESP32 (Xtensa)</td><td>3.5 KB</td><td>5.2 KB</td></tr>
-<tr><td>68k</td><td>3.5 KB</td><td>5.3 KB</td></tr>
-<tr><td>x86-64 (GCC)</td><td>3.5 KB</td><td>5.7 KB</td></tr>
-<tr><td>x86-32</td><td>4.5 KB</td><td>6.8 KB</td></tr>
-<tr><td>MSP430 (16-bit)</td><td>5.9 KB</td><td>8.9 KB</td></tr>
-<tr><td>68HC11</td><td>10.8 KB</td><td>16.0 KB</td></tr>
-<tr><td>AVR (ATmega328P)</td><td>7.0 KB</td><td>10.6 KB</td></tr>
+<tr><td>Xtensa LX7 (ESP32-S3)</td><td>2.9 KB</td><td>4.2 KB</td><td>5.3 KB</td></tr>
+<tr><td>Cortex-M4 (STM32)</td><td>3.3 KB</td><td>4.4 KB</td><td>5.5 KB</td></tr>
+<tr><td>Cortex-M0 (RP2040)</td><td>3.4 KB</td><td>4.5 KB</td><td>5.7 KB</td></tr>
+<tr><td>ARM Thumb</td><td>3.4 KB</td><td>4.7 KB</td><td>5.9 KB</td></tr>
+<tr><td>RISC-V rv64</td><td>4.0 KB</td><td>5.5 KB</td><td>6.8 KB</td></tr>
+<tr><td>RISC-V rv32</td><td>4.1 KB</td><td>5.5 KB</td><td>6.8 KB</td></tr>
+<tr><td>Xtensa LX106 (ESP8266)</td><td>4.2 KB</td><td>5.8 KB</td><td>7.3 KB</td></tr>
+<tr><td>ARM32</td><td>4.3 KB</td><td>5.8 KB</td><td>7.7 KB</td></tr>
+<tr><td>68k</td><td>4.4 KB</td><td>6.2 KB</td><td>7.8 KB</td></tr>
+<tr><td>MIPS32</td><td>4.7 KB</td><td>6.6 KB</td><td>8.7 KB</td></tr>
+<tr><td>x86-64 (GCC)</td><td>4.6 KB</td><td>6.1 KB</td><td>8.0 KB</td></tr>
+<tr><td>AArch64 (ARM64)</td><td>4.8 KB</td><td>6.6 KB</td><td>8.7 KB</td></tr>
+<tr><td>x86-32</td><td>5.3 KB</td><td>7.2 KB</td><td>9.2 KB</td></tr>
+<tr><td>PowerPC</td><td>5.8 KB</td><td>8.0 KB</td><td>10.4 KB</td></tr>
+<tr><td>MSP430 (16-bit)</td><td>7.8 KB</td><td>10.7 KB</td><td>12.8 KB</td></tr>
+<tr><td>AVR (ATmega328P)</td><td>9.2 KB</td><td>12.8 KB</td><td>15.4 KB</td></tr>
+<tr><td>68HC11</td><td>13.3 KB</td><td>18.4 KB</td><td>22.6 KB</td></tr>
 </tbody>
 </table>
 <!-- SIZE_TABLE_END -->
 
 <h3>Lean build options</h3>
 
-<p>Three compile-time <code>#define</code> guards let you strip optional subsystems
+<p>Compile-time <code>#define</code> guards let you strip optional subsystems
 for ROM-constrained targets. Define them before including
 <code>FR_math.h</code> (or pass <code>-D</code> on the compiler command line):</p>
 
 <table>
 <thead><tr><th>Define</th><th>What it removes</th><th>Typical savings</th></tr></thead>
 <tbody>
-<tr><td><code>FR_CORE_ONLY</code></td><td>Everything below (print + waves)</td><td>~1.9 KB</td></tr>
+<tr><td><code>FR_LEAN</code></td><td>Degree trig, BAM tan, angle converters, <code>FR_log10</code>, <code>FR_hypot</code>, waves + ADSR</td><td>~3.7 KB</td></tr>
+<tr><td><code>FR_CORE_ONLY</code></td><td>Print + waves (shorthand for both below)</td><td>~1.9 KB</td></tr>
 <tr><td><code>FR_NO_PRINT</code></td><td><code>FR_printNumF</code>, <code>FR_printNumD</code>, <code>FR_printNumH</code>, <code>FR_numstr</code></td><td>~1.3 KB</td></tr>
 <tr><td><code>FR_NO_WAVES</code></td><td><code>fr_wave_*</code> (6 shapes), <code>fr_adsr_*</code> (ADSR envelope), <code>FR_HZ2BAM_INC</code></td><td>~0.6 KB</td></tr>
 </tbody>
 </table>
+
+<p><code>FR_LEAN</code> keeps only radian trig (sin, cos, tan), inverse trig, sqrt,
+log2, ln, exp, pow2, and arithmetic &mdash; comparable to libfixmath&rsquo;s API at
+4.7&nbsp;KB text. <code>FR_LEAN</code> implies <code>FR_NO_WAVES</code>.</p>
 
 <p><code>FR_CORE_ONLY</code> is a convenience shorthand that defines both
 <code>FR_NO_PRINT</code> and <code>FR_NO_WAVES</code> in one step.</p>
@@ -236,7 +251,7 @@ or static archive without section-level dead-code elimination.</p>
 <p>To regenerate this table, run the Docker cross-build
 (requires the <a href="https://github.com/deftio/xelp">xelp</a> Docker image):</p>
 
-<pre><code class="language-bash">scripts/crossbuild-docker.sh</code></pre>
+<pre><code class="language-bash">scripts/crossbuild_sizes.sh</code></pre>
 
 <h3>Example: RISC-V</h3>
 

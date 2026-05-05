@@ -58,7 +58,7 @@
  * ============================================================ */
 
 static inline double frd(s32 x, int radix) {
-    return (double)x / (double)(1L << radix);
+    return (double)x / ldexp(1.0, radix);
 }
 
 typedef struct {
@@ -73,13 +73,19 @@ typedef struct {
     double worst_pct_input;    /* input that produced max pct error */
     double worst_pct_actual;
     double worst_pct_expected;
+    /* Clamped-denominator relative error: denom = max(|expected|, 1% of full_scale) */
+    double max_pct_err_clamped;
+    double sum_pct_err_clamped;
+    double worst_clamped_input;
+    double worst_clamped_actual;
+    double worst_clamped_expected;
 } stats_t;
 
 static void stats_reset(stats_t *s) {
     memset(s, 0, sizeof(*s));
 }
 
-static void stats_add(stats_t *s, double in, double actual, double expected) {
+static void stats_add(stats_t *s, double in, double actual, double expected, double full_scale) {
     double e = actual - expected;
     if (e < 0) e = -e;
     if (s->n == 0 || e > s->max_abs_err) {
@@ -89,8 +95,7 @@ static void stats_add(stats_t *s, double in, double actual, double expected) {
         s->worst_expected = expected;
     }
     s->sum_abs_err += e;
-    /* Skip percent error when expected ≈ 0 to avoid division artifacts */
-    double pct = (fabs(expected) > 0.01) ? (e / fabs(expected)) * 100.0 : 0.0;
+    double pct = (expected != 0.0) ? (e / fabs(expected)) * 100.0 : (e != 0.0 ? 100.0 : 0.0);
     if (pct > s->max_pct_err) {
         s->max_pct_err = pct;
         s->worst_pct_input = in;
@@ -98,6 +103,17 @@ static void stats_add(stats_t *s, double in, double actual, double expected) {
         s->worst_pct_expected = expected;
     }
     s->sum_pct_err += pct;
+    /* Clamped-denominator relative error: floor = 1% of full_scale */
+    double floor_val = 0.01 * full_scale;
+    double denom = fabs(expected) > floor_val ? fabs(expected) : floor_val;
+    double pct_clamped = (denom > 0.0) ? (e / denom) * 100.0 : 0.0;
+    if (pct_clamped > s->max_pct_err_clamped) {
+        s->max_pct_err_clamped = pct_clamped;
+        s->worst_clamped_input = in;
+        s->worst_clamped_actual = actual;
+        s->worst_clamped_expected = expected;
+    }
+    s->sum_pct_err_clamped += pct_clamped;
     s->n++;
 }
 
@@ -105,8 +121,28 @@ static double stats_mean(const stats_t *s) {
     return s->n ? s->sum_abs_err / s->n : 0.0;
 }
 
-static double stats_mean_pct(const stats_t *s) {
-    return s->n ? s->sum_pct_err / s->n : 0.0;
+static double stats_mean_pct_clamped(const stats_t *s) {
+    return s->n ? s->sum_pct_err_clamped / s->n : 0.0;
+}
+
+/* Quantize a double to s15.16 resolution (same grid as library output). */
+static inline double q16(double x) {
+    return floor(x * 65536.0 + 0.5) / 65536.0;
+}
+
+/* Round-to-nearest float→fixed conversion (not truncation). */
+static inline s32 tofix(double v, int p) {
+    return (s32)floor(ldexp(v, p) + 0.5);
+}
+
+/* Reference value for tan: libm tan() clamped to ±maxint as s15.16 double. */
+static const double TAN_CLAMP = (double)0x7fffffff / 65536.0;
+
+static double tan_ref(double rad) {
+    double t = tan(rad);
+    if (t >  TAN_CLAMP) return TAN_CLAMP;
+    if (t < -TAN_CLAMP) return -TAN_CLAMP;
+    return t;
 }
 
 /* Set by FR_SHOWPEAK env var — adds a "Peak at" column to the accuracy table */
@@ -115,9 +151,9 @@ static int g_showpeak = 0;
 /* Print one accuracy table row, optionally with peak-error input */
 static void acc_row(const char *name, const stats_t *s, const char *note) {
     printf("| %s | %.4f | %.4f | %s",
-           name, s->max_pct_err, stats_mean_pct(s), note);
+           name, s->max_pct_err_clamped, stats_mean_pct_clamped(s), note);
     if (g_showpeak)
-        printf(" | %.4g", s->worst_pct_input);
+        printf(" | %.4g", s->worst_clamped_input);
     printf(" |\n");
 }
 
@@ -633,8 +669,8 @@ static void section_arithmetic(void) {
     };
     for (int i = 0; i < (int)(sizeof(div_cases)/sizeof(div_cases[0])); i++) {
         int r = div_cases[i].r;
-        s32 xfp = (s32)(div_cases[i].xd * (1L << r));
-        s32 yfp = (s32)(div_cases[i].yd * (1L << r));
+        s32 xfp = tofix(div_cases[i].xd, r);
+        s32 yfp = tofix(div_cases[i].yd, r);
         double expected = div_cases[i].xd / div_cases[i].yd;
         s32 d64 = FR_DIV(xfp, r, yfp, r);
         s32 d32 = FR_DIV32(xfp, r, yfp, r);
@@ -667,8 +703,8 @@ static void section_trig_int(void) {
         double exp_sin = sin(deg * M_PI / 180.0);
         double act_cos = frd(FR_CosI((s16)deg), FR_TRIG_OUT_PREC);
         double act_sin = frd(FR_SinI((s16)deg), FR_TRIG_OUT_PREC);
-        stats_add(&cos_stats, deg, act_cos, exp_cos);
-        stats_add(&sin_stats, deg, act_sin, exp_sin);
+        stats_add(&cos_stats, deg, act_cos, exp_cos, 1.0);
+        stats_add(&sin_stats, deg, act_sin, exp_sin, 1.0);
     }
 
     table_header_stats();
@@ -684,7 +720,7 @@ static void section_trig_int(void) {
         if (deg % 90 == 0 && deg != 0) { tan_skipped++; continue; }
         double exp_tan = tan(deg * M_PI / 180.0);
         double act_tan = frd(FR_TanI((s16)deg), FR_TRIG_OUT_PREC);
-        stats_add(&tan_stats, deg, act_tan, exp_tan);
+        stats_add(&tan_stats, deg, act_tan, exp_tan, TAN_CLAMP);
     }
     table_header_stats();
     table_row_stats("FR_TanI [-89..89]", &tan_stats);
@@ -722,8 +758,8 @@ static void section_trig_frac(void) {
         double exp_s = sin(deg_d * M_PI / 180.0);
         double act_c = frd(FR_Cos(deg_fr, 8), FR_TRIG_OUT_PREC);
         double act_s = frd(FR_Sin(deg_fr, 8), FR_TRIG_OUT_PREC);
-        stats_add(&cos_f, deg_d, act_c, exp_c);
-        stats_add(&sin_f, deg_d, act_s, exp_s);
+        stats_add(&cos_f, deg_d, act_c, exp_c, 1.0);
+        stats_add(&sin_f, deg_d, act_s, exp_s, 1.0);
     }
     table_header_stats();
     table_row_stats("FR_Cos r8 0.25 step", &cos_f);
@@ -759,10 +795,11 @@ static void section_inverse_trig(void) {
     /* radix 15 inputs, output radians at radix 16, 200 samples */
     for (int i = -200; i <= 200; i++) {
         double xd = i / 200.0;
-        s32 fr = (s32)(xd * (1 << 15));
+        s32 fr = tofix(xd, 15);
+        double actual_xd = frd(fr, 15);
         s32 rad = FR_acos(fr, 15, 16);
-        double ref_rad = acos(xd);
-        stats_add(&acos_stats, xd, frd(rad, 16), ref_rad);
+        double ref_rad = acos(actual_xd);
+        stats_add(&acos_stats, actual_xd, frd(rad, 16), ref_rad, M_PI);
     }
     table_header_stats();
     table_row_stats("FR_acos vs acos() (rad)", &acos_stats);
@@ -773,10 +810,11 @@ static void section_inverse_trig(void) {
     stats_reset(&asin_stats);
     for (int i = -200; i <= 200; i++) {
         double xd = i / 200.0;
-        s32 fr = (s32)(xd * (1 << 15));
+        s32 fr = tofix(xd, 15);
+        double actual_xd = frd(fr, 15);
         s32 rad = FR_asin(fr, 15, 16);
-        double ref_rad = asin(xd);
-        stats_add(&asin_stats, xd, frd(rad, 16), ref_rad);
+        double ref_rad = asin(actual_xd);
+        stats_add(&asin_stats, actual_xd, frd(rad, 16), ref_rad, M_PI);
     }
     table_header_stats();
     table_row_stats("FR_asin vs asin() (rad)", &asin_stats);
@@ -812,13 +850,13 @@ static void section_pow_log(void) {
     stats_t pow2_stats; stats_reset(&pow2_stats);
     for (int i = 0; i < (int)(sizeof(pow2_inputs)/sizeof(pow2_inputs[0])); i++) {
         double x = pow2_inputs[i];
-        s32 fr = (s32)(x * (1L << 16));
+        s32 fr = tofix(x, 16);
         s32 r = FR_pow2(fr, 16);
         double rd = frd(r, 16);
         double ref = pow(2.0, x);
         double err = rd - ref; if (err < 0) err = -err;
         double rel = ref != 0.0 ? err / fabs(ref) : err;
-        stats_add(&pow2_stats, x, rd, ref);
+        stats_add(&pow2_stats, x, rd, ref, pow(2.0, 8.0));
         printf("| %.4g | %ld | %.6g | %.6g | %.4g | %.4g |\n",
                x, (long)r, rd, ref, err, rel);
     }
@@ -831,11 +869,12 @@ static void section_pow_log(void) {
     stats_t pow2_fine; stats_reset(&pow2_fine);
     for (int i = -800; i <= 800; i++) {
         double x = i / 100.0;
-        s32 fr = (s32)(x * (1L << 16));
+        s32 fr = tofix(x, 16);
+        double actual_x = frd(fr, 16);
         s32 r = FR_pow2(fr, 16);
         double rd = frd(r, 16);
-        double ref = pow(2.0, x);
-        stats_add(&pow2_fine, x, rd, ref);
+        double ref = pow(2.0, actual_x);
+        stats_add(&pow2_fine, actual_x, rd, ref, pow(2.0, 8.0));
     }
     table_header_stats();
     table_row_stats("FR_pow2 [-8,8] step 0.01", &pow2_fine);
@@ -870,7 +909,7 @@ static void section_pow_log(void) {
         printf("| %ld | %u | %u | %ld | %.6g | %.6g |\n",
                (long)log2_cases[i].in, log2_cases[i].r, log2_cases[i].or_,
                (long)r, rd, log2_cases[i].ref);
-        stats_add(&log2_stats, (double)log2_cases[i].in, rd, log2_cases[i].ref);
+        stats_add(&log2_stats, (double)log2_cases[i].in, rd, log2_cases[i].ref, log2(32000.0));
     }
     printf("\n");
     table_header_stats();
@@ -883,11 +922,11 @@ static void section_pow_log(void) {
     double ln_inputs[] = {1, 2, M_E, 4, 8, 10, 100, 1000};
     stats_t ln_stats; stats_reset(&ln_stats);
     for (int i = 0; i < (int)(sizeof(ln_inputs)/sizeof(ln_inputs[0])); i++) {
-        s32 fr = (s32)(ln_inputs[i] * (1L << 16));
+        s32 fr = tofix(ln_inputs[i], 16);
         s32 r = FR_ln(fr, 16, 16);
         double rd = frd(r, 16);
         double ref = log(ln_inputs[i]);
-        stats_add(&ln_stats, ln_inputs[i], rd, ref);
+        stats_add(&ln_stats, ln_inputs[i], rd, ref, log(32000.0));
         printf("| %.4g | %ld | %.6g | %.6g |\n", ln_inputs[i], (long)r, rd, ref);
     }
     printf("\n");
@@ -900,11 +939,11 @@ static void section_pow_log(void) {
     double log10_inputs[] = {1, 2, 5, 10, 100, 1000, 10000};
     stats_t log10_stats; stats_reset(&log10_stats);
     for (int i = 0; i < (int)(sizeof(log10_inputs)/sizeof(log10_inputs[0])); i++) {
-        s32 fr = (s32)(log10_inputs[i] * (1L << 16));
+        s32 fr = tofix(log10_inputs[i], 16);
         s32 r = FR_log10(fr, 16, 16);
         double rd = frd(r, 16);
         double ref = log10(log10_inputs[i]);
-        stats_add(&log10_stats, log10_inputs[i], rd, ref);
+        stats_add(&log10_stats, log10_inputs[i], rd, ref, log10(32000.0));
         printf("| %.4g | %ld | %.6g | %.6g |\n", log10_inputs[i], (long)r, rd, ref);
     }
     printf("\n");
@@ -915,14 +954,14 @@ static void section_pow_log(void) {
     md_h3("8.6 FR_EXP and FR_POW10 macros (wrap FR_pow2)");
     printf("| Expression | Result | as double | Reference | Note |\n|---|---:|---:|---:|---|\n");
     {
-        s32 in = (s32)(1.0 * (1L << 16));
+        s32 in = tofix(1.0, 16);
         s32 r = FR_EXP(in, 16);
         double rd = frd(r, 16);
         printf("| FR_EXP(1.0,16) | %ld | %.6g | %.6g | exp(1) = e |\n",
                (long)r, rd, M_E);
     }
     {
-        s32 in = (s32)(2.0 * (1L << 16));
+        s32 in = tofix(2.0, 16);
         s32 r = FR_POW10(in, 16);
         double rd = frd(r, 16);
         printf("| FR_POW10(2.0,16) | %ld | %.6g | %.6g | 10^2 = 100 |\n",
@@ -1251,14 +1290,15 @@ static void section_v2_new(void) {
     stats_t sqrt_stats; stats_reset(&sqrt_stats);
     for (int i = 0; i < (int)(sizeof(sqrt_inputs)/sizeof(sqrt_inputs[0])); i++) {
         double x = sqrt_inputs[i];
-        s32 fr = (s32)(x * (1L << 16));
+        s32 fr = tofix(x, 16);
+        double actual_x = frd(fr, 16);
         s32 r = FR_sqrt(fr, 16);
         double rd = frd(r, 16);
-        double ref = sqrt(x);
+        double ref = sqrt(actual_x);
         double err = rd - ref; if (err < 0) err = -err;
-        stats_add(&sqrt_stats, x, rd, ref);
+        stats_add(&sqrt_stats, actual_x, rd, ref, sqrt(32000.0));
         printf("| %.6g | %ld | %.6g | %.6g | %.4g |\n",
-               x, (long)r, rd, ref, err);
+               actual_x, (long)r, rd, ref, err);
     }
     printf("\n");
     table_header_stats();
@@ -1269,11 +1309,12 @@ static void section_v2_new(void) {
     stats_t sqrt_fine; stats_reset(&sqrt_fine);
     for (int i = 1; i <= 1000; i++) {
         double x = i * 10.0;     /* 10..10000 */
-        s32 fr = (s32)(x * (1L << 16));
+        s32 fr = tofix(x, 16);
+        double actual_x = frd(fr, 16);
         s32 r = FR_sqrt(fr, 16);
         double rd = frd(r, 16);
-        double ref = sqrt(x);
-        stats_add(&sqrt_fine, x, rd, ref);
+        double ref = sqrt(actual_x);
+        stats_add(&sqrt_fine, actual_x, rd, ref, sqrt(32000.0));
     }
     table_header_stats();
     table_row_stats("FR_sqrt [10,10000]", &sqrt_fine);
@@ -1299,16 +1340,16 @@ static void section_v2_new(void) {
     };
     stats_t hyp_stats; stats_reset(&hyp_stats);
     for (int i = 0; i < (int)(sizeof(hyp_cases)/sizeof(hyp_cases[0])); i++) {
-        s32 fx = (s32)(hyp_cases[i].x * (1L << 16));
-        s32 fy = (s32)(hyp_cases[i].y * (1L << 16));
+        s32 fx = tofix(hyp_cases[i].x, 16);
+        s32 fy = tofix(hyp_cases[i].y, 16);
+        double actual_x = frd(fx, 16), actual_y = frd(fy, 16);
         s32 r  = FR_hypot(fx, fy, 16);
         double rd = frd(r, 16);
-        double ref = hypot(hyp_cases[i].x, hyp_cases[i].y);
+        double ref = hypot(actual_x, actual_y);
         double err = rd - ref; if (err < 0) err = -err;
-        stats_add(&hyp_stats, sqrt(hyp_cases[i].x*hyp_cases[i].x + hyp_cases[i].y*hyp_cases[i].y),
-                  rd, ref);
+        stats_add(&hyp_stats, ref, rd, ref, hypot(1000.0, 1000.0));
         printf("| %g | %g | %ld | %.6g | %.6g | %.4g |\n",
-               hyp_cases[i].x, hyp_cases[i].y, (long)r, rd, ref, err);
+               actual_x, actual_y, (long)r, rd, ref, err);
     }
     printf("\n");
     table_header_stats();
@@ -1320,17 +1361,17 @@ static void section_v2_new(void) {
     printf("|---:|---:|---:|---:|---:|---:|---:|\n");
     stats_t hf8_stats; stats_reset(&hf8_stats);
     for (int i = 0; i < (int)(sizeof(hyp_cases)/sizeof(hyp_cases[0])); i++) {
-        s32 fx = (s32)(hyp_cases[i].x * (1L << 16));
-        s32 fy = (s32)(hyp_cases[i].y * (1L << 16));
+        s32 fx = tofix(hyp_cases[i].x, 16);
+        s32 fy = tofix(hyp_cases[i].y, 16);
+        double actual_x = frd(fx, 16), actual_y = frd(fy, 16);
         s32 r  = FR_hypot_fast8(fx, fy);
         double rd = frd(r, 16);
-        double ref = hypot(hyp_cases[i].x, hyp_cases[i].y);
+        double ref = hypot(actual_x, actual_y);
         double err = rd - ref; if (err < 0) err = -err;
         double rel = (ref > 0) ? err / ref * 100.0 : 0.0;
-        stats_add(&hf8_stats, sqrt(hyp_cases[i].x*hyp_cases[i].x + hyp_cases[i].y*hyp_cases[i].y),
-                  rd, ref);
+        stats_add(&hf8_stats, ref, rd, ref, hypot(1000.0, 1000.0));
         printf("| %g | %g | %ld | %.6g | %.6g | %.4g | %.4g |\n",
-               hyp_cases[i].x, hyp_cases[i].y, (long)r, rd, ref, err, rel);
+               actual_x, actual_y, (long)r, rd, ref, err, rel);
     }
     printf("\n");
     table_header_stats();
@@ -1386,7 +1427,7 @@ static void section_v2_new(void) {
             else if (t < 0.50) ideal =  2.0 - 4.0 * t;       /* 1 → 0 */
             else if (t < 0.75) ideal = -4.0 * (t - 0.5);     /* 0 → -1 */
             else               ideal = -1.0 + 4.0 * (t - 0.75); /* -1 → 0 */
-            stats_add(&tri_stats, t * 360.0, (double)actual / 32767.0, ideal);
+            stats_add(&tri_stats, t * 360.0, (double)actual / 32767.0, ideal, 1.0);
         }
         table_header_stats();
         table_row_stats("fr_wave_tri vs ideal", &tri_stats);
@@ -1472,8 +1513,8 @@ static void section_multiradix(void) {
     int log2_radixes[] = {8, 12, 16, 24};
     for (int ri = 0; ri < 4; ri++) {
         int R = log2_radixes[ri];
-        double scale = (double)(1L << R);
-        double max_val = (double)((1L << (30 - R)));  /* stay well within s32 */
+        double scale = ldexp(1.0, R);
+        double max_val = ldexp(1.0, 30 - R);  /* stay well within s32 */
         stats_t st; stats_reset(&st);
 
         /* Sweep from 0.125 to max representable value */
@@ -1484,24 +1525,26 @@ static void section_multiradix(void) {
 
         for (int i = 0; i < ninp; i++) {
             if (inputs[i] > max_val) continue;   /* would overflow s32 */
-            s32 fr = (s32)(inputs[i] * scale);
+            s32 fr = tofix(inputs[i], R);
             if (fr <= 0) continue;
+            double actual_x = frd(fr, R);
             s32 r = FR_log2(fr, (u16)R, (u16)R);
             double rd = frd(r, R);
-            double ref = log2(inputs[i]);
-            stats_add(&st, inputs[i], rd, ref);
+            double ref = log2(actual_x);
+            stats_add(&st, actual_x, rd, ref, log2(32000.0));
         }
 
         /* Fine-grained sweep in [1, min(100, max_val)] */
         double sweep_max = max_val < 100.0 ? max_val : 100.0;
         for (int i = 1; i <= 500; i++) {
             double x = 1.0 + ((sweep_max - 1.0) * i / 500.0);
-            s32 fr = (s32)(x * scale);
+            s32 fr = tofix(x, R);
             if (fr <= 0) continue;
+            double actual_x = frd(fr, R);
             s32 r = FR_log2(fr, (u16)R, (u16)R);
             double rd = frd(r, R);
-            double ref = log2(x);
-            stats_add(&st, x, rd, ref);
+            double ref = log2(actual_x);
+            stats_add(&st, actual_x, rd, ref, log2(32000.0));
         }
 
         double lsb = 1.0 / scale;
@@ -1521,19 +1564,20 @@ static void section_multiradix(void) {
 
     for (int ri = 0; ri < 4; ri++) {
         int R = log2_radixes[ri];
-        double scale = (double)(1L << R);
-        double max_val = (double)((1L << (30 - R)));
+        double scale = ldexp(1.0, R);
+        double max_val = ldexp(1.0, 30 - R);
         double sweep_max = max_val < 100.0 ? max_val : 100.0;
         stats_t st; stats_reset(&st);
 
         for (int i = 1; i <= 500; i++) {
             double x = 0.5 + ((sweep_max - 0.5) * i / 500.0);
-            s32 fr = (s32)(x * scale);
+            s32 fr = tofix(x, R);
             if (fr <= 0) continue;
+            double actual_x = frd(fr, R);
             s32 r = FR_ln(fr, (u16)R, (u16)R);
             double rd = frd(r, R);
-            double ref = log(x);
-            stats_add(&st, x, rd, ref);
+            double ref = log(actual_x);
+            stats_add(&st, actual_x, rd, ref, log(32000.0));
         }
 
         double lsb = 1.0 / scale;
@@ -1553,19 +1597,20 @@ static void section_multiradix(void) {
 
     for (int ri = 0; ri < 4; ri++) {
         int R = log2_radixes[ri];
-        double scale = (double)(1L << R);
-        double max_val = (double)((1L << (30 - R)));
+        double scale = ldexp(1.0, R);
+        double max_val = ldexp(1.0, 30 - R);
         double sweep_max = max_val < 1000.0 ? max_val : 1000.0;
         stats_t st; stats_reset(&st);
 
         for (int i = 1; i <= 500; i++) {
             double x = 0.5 + ((sweep_max - 0.5) * i / 500.0);
-            s32 fr = (s32)(x * scale);
+            s32 fr = tofix(x, R);
             if (fr <= 0) continue;
+            double actual_x = frd(fr, R);
             s32 r = FR_log10(fr, (u16)R, (u16)R);
             double rd = frd(r, R);
-            double ref = log10(x);
-            stats_add(&st, x, rd, ref);
+            double ref = log10(actual_x);
+            stats_add(&st, actual_x, rd, ref, log10(32000.0));
         }
 
         double lsb = 1.0 / scale;
@@ -1586,8 +1631,8 @@ static void section_multiradix(void) {
     int div_radixes[] = {8, 12, 16, 20};
     for (int ri = 0; ri < 4; ri++) {
         int R = div_radixes[ri];
-        double scale = (double)(1L << R);
-        double max_val = (double)(1L << (30 - R));  /* stay within s32 */
+        double scale = ldexp(1.0, R);
+        double max_val = ldexp(1.0, 30 - R);  /* stay within s32 */
         stats_t st_rnd, st_trunc;
         stats_reset(&st_rnd);
         stats_reset(&st_trunc);
@@ -1606,18 +1651,18 @@ static void section_multiradix(void) {
                 double aq = ay > 0 ? ax / ay : 1e30;
                 /* Skip if inputs or quotient would overflow s32 at this radix */
                 if (ax >= max_val || ay >= max_val || aq >= max_val) continue;
-                s32 xfp = (s32)(x * scale);
-                s32 yfp = (s32)(y * scale);
+                s32 xfp = tofix(x, R);
+                s32 yfp = tofix(y, R);
                 if (yfp == 0) continue;
-                double ref = x / y;
+                double ref = frd(xfp, R) / frd(yfp, R);
 
                 s32 d_rnd   = FR_DIV(xfp, R, yfp, R);
                 s32 d_trunc = FR_DIV_TRUNC(xfp, R, yfp, R);
                 double rd_rnd   = frd(d_rnd, R);
                 double rd_trunc = frd(d_trunc, R);
 
-                stats_add(&st_rnd,   x / y, rd_rnd,   ref);
-                stats_add(&st_trunc, x / y, rd_trunc, ref);
+                stats_add(&st_rnd,   x / y, rd_rnd,   ref, 1.0);
+                stats_add(&st_trunc, x / y, rd_trunc, ref, 1.0);
             }
         }
 
@@ -1644,9 +1689,9 @@ static void section_multiradix(void) {
     };
     for (int i = 0; i < (int)(sizeof(sign_cases)/sizeof(sign_cases[0])); i++) {
         int R = sign_cases[i].r;
-        double scale = (double)(1L << R);
-        s32 xfp = (s32)(sign_cases[i].x * scale);
-        s32 yfp = (s32)(sign_cases[i].y * scale);
+        double scale = ldexp(1.0, R);
+        s32 xfp = tofix(sign_cases[i].x, R);
+        s32 yfp = tofix(sign_cases[i].y, R);
         s32 d = FR_DIV(xfp, R, yfp, R);
         double rd = frd(d, R);
         double ref = sign_cases[i].x / sign_cases[i].y;
@@ -1669,7 +1714,7 @@ static void section_multiradix(void) {
     int exp_radixes[] = {8, 12, 16, 20};
     for (int ri = 0; ri < 4; ri++) {
         int R = exp_radixes[ri];
-        double scale = (double)(1L << R);
+        double scale = ldexp(1.0, R);
         stats_t st_exp, st_pow10;
         stats_reset(&st_exp);
         stats_reset(&st_pow10);
@@ -1677,23 +1722,25 @@ static void section_multiradix(void) {
         /* Sweep exp(x) for x in [-4, 4] in steps of 0.05 */
         for (int i = -80; i <= 80; i++) {
             double x = i / 20.0;
-            s32 fr = (s32)(x * scale);
+            s32 fr = tofix(x, R);
+            double actual_x = frd(fr, R);
             s32 r = FR_EXP(fr, R);
             double rd = frd(r, R);
-            double ref = exp(x);
-            if (r != FR_OVERFLOW_POS && ref < (double)(1L << (31 - R)))
-                stats_add(&st_exp, x, rd, ref);
+            double ref = exp(actual_x);
+            if (r != FR_OVERFLOW_POS && ref < ldexp(1.0, 31 - R))
+                stats_add(&st_exp, actual_x, rd, ref, 32000.0);
         }
 
         /* Sweep pow10(x) for x in [-2, 2] in steps of 0.05 */
         for (int i = -40; i <= 40; i++) {
             double x = i / 20.0;
-            s32 fr = (s32)(x * scale);
+            s32 fr = tofix(x, R);
+            double actual_x = frd(fr, R);
             s32 r = FR_POW10(fr, R);
             double rd = frd(r, R);
-            double ref = pow(10.0, x);
-            if (r != FR_OVERFLOW_POS && ref < (double)(1L << (31 - R)))
-                stats_add(&st_pow10, x, rd, ref);
+            double ref = pow(10.0, actual_x);
+            if (r != FR_OVERFLOW_POS && ref < ldexp(1.0, 31 - R))
+                stats_add(&st_pow10, actual_x, rd, ref, 32000.0);
         }
 
         double lsb = 1.0 / scale;
@@ -1725,10 +1772,11 @@ static void section_summary(void) {
     printf("| FR_FixMulSat | OK | 4.2, 4.3 | int64 fast path with round-to-nearest and explicit saturation |\n");
     printf("| FR_FixAddSat | OK | 4.4, 4.5 | Saturation behaves identically on LP64 host and ILP32 MCU |\n");
     printf("| FR_CosI / FR_SinI | OK | 5 | s15.16 output; exact at poles; max abs error ~1.5e-5 (1 LSB s15.16) over [-720, +720]; macros routing to fr_*_bam |\n");
-    printf("| FR_TanI (integer degrees) | OK | 5.1, 5.2 | Routed through BAM trig |\n");
+    printf("| FR_TanI (integer degrees) | OK | 5.1, 5.2 | BAM table lookup; 65-entry octant table; no 64-bit division |\n");
     printf("| FR_Cos / FR_Sin (interpolated) | OK | 6.1 | Within LSB-level error for r8 inputs in s16 |\n");
-    printf("| FR_Tan (interpolated) | OK | 6.2 | Locals are s32 |\n");
+    printf("| FR_Tan (interpolated) | OK | 6.2 | Via fr_tan_bam; 65-entry octant table |\n");
     printf("| fr_cos / fr_sin / fr_cos_bam / fr_sin_bam / fr_cos_deg / fr_sin_deg | OK | 6 | s15.16 output; 129-entry quadrant table with round-to-nearest linear interp; exact at cardinal angles |\n");
+    printf("| fr_tan_bam | OK | 14 | 65-entry octant table; first-octant lerp, second-octant 32-bit reciprocal; no 64-bit |\n");
     printf("| FR_acos | OK | 7.1 | Max error ~0.83° over [-1, +1] swept at 200 points |\n");
     printf("| FR_asin | OK | 7.2 | Same precision as FR_acos |\n");
     printf("| FR_atan2 | OK | 7.3 | Via asin/acos + hypot_fast8; 129-entry cos table; `FR_atan2(y, x, out_radix)` returns radians |\n");
@@ -1779,68 +1827,193 @@ static void section_summary(void) {
  * README.md, docs/README.md, and pages/index.html.
  * ============================================================ */
 
+/* ── Neighborhood printer ──────────────────────────────────────────
+ * Print ±K samples around a center index for any trig sweep.
+ * func_type selects the function to evaluate:
+ *   0 = fr_sin_bam   1 = fr_cos_bam   2 = fr_tan_bam
+ *   3 = fr_sin        4 = fr_cos        5 = fr_tan
+ *   6 = FR_SinI       7 = FR_CosI       8 = FR_TanI
+ *   9 = fr_sin_deg   10 = fr_cos_deg   11 = fr_tan_deg
+ */
+static void neighborhood(const char *label, int func_type,
+                          int center_i, int half, int N,
+                          double range_lo, double range_hi)
+{
+    printf("\n**Neighborhood: %s (center i=%d ±%d)**\n\n", label, center_i, half);
+    printf("| i | deg | input_fp | expected | got | abs_err | pct_err |\n");
+    printf("|---|---|---|---|---|---|---|\n");
+
+    for (int k = -half; k <= half; k++) {
+        int i = (center_i + k % N + N) % N;
+        double deg, angle, exp_v, got_v;
+        s32 fp;
+
+        switch (func_type) {
+        case 0: case 1: case 2: { /* BAM: 0..65535 */
+            u16 bam = (u16)i;
+            deg = bam * 360.0 / 65536.0;
+            angle = deg * M_PI / 180.0;
+            if (func_type == 0)      { exp_v = q16(sin(angle));     got_v = frd(fr_sin_bam(bam), 16); }
+            else if (func_type == 1) { exp_v = q16(cos(angle));     got_v = frd(fr_cos_bam(bam), 16); }
+            else                     { exp_v = q16(tan_ref(angle)); got_v = frd(fr_tan_bam(bam), 16); }
+            fp = (s32)bam;
+            break;
+        }
+        case 3: case 4: case 5: { /* radian: ±2π, 131072 pts */
+            angle = range_lo + (range_hi - range_lo) * i / (double)N;
+            fp = tofix(angle, 16);
+            double actual_angle = frd(fp, 16);
+            deg = actual_angle * 180.0 / M_PI;
+            if (func_type == 3)      { exp_v = q16(sin(actual_angle));     got_v = frd(fr_sin(fp, 16), 16); }
+            else if (func_type == 4) { exp_v = q16(cos(actual_angle));     got_v = frd(fr_cos(fp, 16), 16); }
+            else                     { exp_v = q16(tan_ref(actual_angle)); got_v = frd(fr_tan(fp, 16), 16); }
+            break;
+        }
+        case 6: case 7: case 8: { /* integer degrees */
+            int d = (int)range_lo + i;
+            deg = (double)d;
+            angle = d * M_PI / 180.0;
+            fp = (s32)d;
+            if (func_type == 6)      { exp_v = q16(sin(angle));     got_v = frd(FR_SinI(d), 16); }
+            else if (func_type == 7) { exp_v = q16(cos(angle));     got_v = frd(FR_CosI(d), 16); }
+            else                     { exp_v = q16(tan_ref(angle)); got_v = frd(FR_TanI((s16)d), 16); }
+            break;
+        }
+        default: { /* fixed-radix degrees: ±360, 131072 pts */
+            deg = range_lo + (range_hi - range_lo) * i / (double)N;
+            fp = tofix(deg, 16);
+            double actual_deg = frd(fp, 16);
+            angle = actual_deg * M_PI / 180.0;
+            if (func_type == 9)       { exp_v = q16(sin(angle));     got_v = frd(FR_Sin(fp, 16), 16); }
+            else if (func_type == 10) { exp_v = q16(cos(angle));     got_v = frd(FR_Cos(fp, 16), 16); }
+            else                      { exp_v = q16(tan_ref(angle)); got_v = frd(FR_Tan(fp, 16), 16); }
+            break;
+        }
+        }
+
+        double ae = fabs(got_v - exp_v);
+        double pe = (exp_v != 0.0) ? ae / fabs(exp_v) * 100.0 : (ae != 0.0 ? 100.0 : 0.0);
+        printf("| %d | %.6f | %d | %.6f | %.6f | %.6f | %.4f%% |\n",
+               i, deg, (int)fp, exp_v, got_v, ae, pe);
+    }
+    printf("\n");
+}
+
 static void section_accuracy_table(void) {
     md_h2("14. Accuracy Summary Table");
 
     printf("<!-- ACCURACY_TABLE_START -->\n");
     if (g_showpeak) {
-        printf("| Function | Max err (%%) | Avg err (%%) | Note | Peak at |\n");
+        printf("| Function | Max err (%%)*| Avg err (%%) | Note | Peak at |\n");
         printf("|---|---:|---:|---|---:|\n");
     } else {
-        printf("| Function | Max err (%%) | Avg err (%%) | Note |\n");
+        printf("| Function | Max err (%%)*| Avg err (%%) | Note |\n");
         printf("|---|---:|---:|---|\n");
     }
 
     const int R = 16;
-    const double scale = (double)(1L << R);
+    const double scale = ldexp(1.0, R);
 
     /* Persistent stats so we can print diagnostics after the table */
     stats_t st_sincos, st_tan, st_asincos, st_atan2;
+    stats_t st_rad2bam, st_deg2bam, st_sincos_deg_s32, st_tan_deg_s32;
     stats_reset(&st_sincos); stats_reset(&st_tan);
     stats_reset(&st_asincos); stats_reset(&st_atan2);
+    stats_reset(&st_rad2bam); stats_reset(&st_deg2bam);
+    stats_reset(&st_sincos_deg_s32); stats_reset(&st_tan_deg_s32);
 
-    /* --- sin / cos --- */
+    /* --- sin / cos (BAM native: 65536-pt) --- */
+    {
+        stats_t st; stats_reset(&st);
+        for (int i = 0; i < 65536; i++) {
+            u16 bam = (u16)i;
+            double rad = bam * 2.0 * M_PI / 65536.0;
+            stats_add(&st, (double)bam, frd(fr_sin_bam(bam), FR_TRIG_OUT_PREC), q16(sin(rad)), 1.0);
+            stats_add(&st, (double)bam, frd(fr_cos_bam(bam), FR_TRIG_OUT_PREC), q16(cos(rad)), 1.0);
+        }
+        acc_row("sin/cos (BAM)", &st, "very fast binary angle trig");
+    }
+
+    /* --- sin / cos (degree wrappers: 65536-pt at s15.16) --- */
     {
         stats_t &st = st_sincos;
-        const u16 radix = 7; /* s8.7 degrees: 128 steps/deg, [-256°,+256°) */
-        /* 65536-point sweep: all s16 values at radix 7 cover > full circle */
-        for (int i = -32768; i <= 32767; i++) {
-            double deg = (double)i / (1 << radix);
-            double rad = deg * M_PI / 180.0;
-            stats_add(&st, deg, frd(FR_Sin((s16)i, radix), FR_TRIG_OUT_PREC), sin(rad));
-            stats_add(&st, deg, frd(FR_Cos((s16)i, radix), FR_TRIG_OUT_PREC), cos(rad));
+        const u16 radix = 16;
+        for (int i = 0; i < 65536; i++) {
+            double deg = -360.0 + (720.0 * i / 65536.0);
+            s32 deg_fp = tofix(deg, radix);
+            double actual_deg = frd(deg_fp, radix);
+            double rad = actual_deg * M_PI / 180.0;
+            stats_add(&st, actual_deg, frd(FR_Sin(deg_fp, radix), FR_TRIG_OUT_PREC), q16(sin(rad)), 1.0);
+            stats_add(&st, actual_deg, frd(FR_Cos(deg_fp, radix), FR_TRIG_OUT_PREC), q16(cos(rad)), 1.0);
         }
-        /* Special cases: exact integer degrees including negative */
         s16 specials[] = {0,30,45,60,90,120,135,150,180,210,225,240,270,300,315,330,360,
                           -30,-45,-60,-90,-120,-135,-150,-180,-210,-225,-240,-270,-300,-315,-330,-360};
         for (int si = 0; si < (int)(sizeof(specials)/sizeof(specials[0])); si++) {
             s16 d = specials[si];
             double rad = d * M_PI / 180.0;
-            stats_add(&st, d, frd(FR_SinI(d), FR_TRIG_OUT_PREC), sin(rad));
-            stats_add(&st, d, frd(FR_CosI(d), FR_TRIG_OUT_PREC), cos(rad));
+            stats_add(&st, d, frd(FR_SinI(d), FR_TRIG_OUT_PREC), q16(sin(rad)), 1.0);
+            stats_add(&st, d, frd(FR_CosI(d), FR_TRIG_OUT_PREC), q16(cos(rad)), 1.0);
         }
-        acc_row("sin / cos", &st, "65536-pt sweep + specials");
+        acc_row("sin/cos (deg)", &st, "degree input trig fns");
     }
 
-    /* --- tan --- */
+    /* --- sin / cos (radian wrappers: 65536-pt) --- */
+    {
+        stats_t st; stats_reset(&st);
+        for (int i = 0; i < 65536; i++) {
+            double angle = -2.0 * M_PI + (4.0 * M_PI * i / 65536.0);
+            s32 rad_fp = tofix(angle, 16);
+            double actual_angle = frd(rad_fp, 16);
+            stats_add(&st, actual_angle, frd(fr_sin(rad_fp, 16), FR_TRIG_OUT_PREC), q16(sin(actual_angle)), 1.0);
+            stats_add(&st, actual_angle, frd(fr_cos(rad_fp, 16), FR_TRIG_OUT_PREC), q16(cos(actual_angle)), 1.0);
+        }
+        acc_row("sin/cos (rad)", &st, "radian (traditional) trig");
+    }
+
+    /* --- tan (BAM native: 65536-pt, full sweep) --- */
+    {
+        stats_t st; stats_reset(&st);
+        for (int i = 0; i < 65536; i++) {
+            u16 bam = (u16)i;
+            double ref;
+            if (bam == 16384)       ref =  TAN_CLAMP;  /* 90°: +maxint */
+            else if (bam == 49152)  ref = -TAN_CLAMP;  /* 270°: -maxint */
+            else                    ref = tan_ref(bam * 2.0 * M_PI / 65536.0);
+            stats_add(&st, (double)bam, frd(fr_tan_bam(bam), FR_TRIG_OUT_PREC), q16(ref), TAN_CLAMP);
+        }
+        acc_row("tan (BAM)", &st, "binary angle tangent; ±maxint at poles");
+    }
+
+    /* --- tan (degree wrappers: 65536-pt at s15.16, full sweep) --- */
     {
         stats_t &st = st_tan;
-        const u16 radix = 7;
-        for (int i = -32768; i <= 32767; i++) {
-            double deg = (double)i / (1 << radix);
-            double rad = deg * M_PI / 180.0;
-            /* Skip near poles: |cos| < 0.01 → tan > 100 */
-            if (fabs(cos(rad)) < 0.01) continue;
-            stats_add(&st, deg, frd(FR_Tan((s16)i, radix), FR_TRIG_OUT_PREC), tan(rad));
+        const u16 radix = 16;
+        for (int i = 0; i < 65536; i++) {
+            double deg = -360.0 + (720.0 * i / 65536.0);
+            s32 deg_fp = tofix(deg, radix);
+            double actual_deg = frd(deg_fp, radix);
+            double rad = actual_deg * M_PI / 180.0;
+            stats_add(&st, actual_deg, frd(FR_Tan(deg_fp, radix), FR_TRIG_OUT_PREC), q16(tan_ref(rad)), TAN_CLAMP);
         }
-        /* Special cases: integer degrees (avoiding poles) */
         s16 specials[] = {0,30,45,60,-30,-45,-60,120,135,150,-120,-135,-150};
         for (int si = 0; si < (int)(sizeof(specials)/sizeof(specials[0])); si++) {
             s16 d = specials[si];
             double rad = d * M_PI / 180.0;
-            stats_add(&st, d, frd(FR_TanI(d), FR_TRIG_OUT_PREC), tan(rad));
+            stats_add(&st, d, frd(FR_TanI(d), FR_TRIG_OUT_PREC), q16(tan_ref(rad)), TAN_CLAMP);
         }
-        acc_row("tan", &st, "65536-pt sweep (skip poles)");
+        acc_row("tan (deg)", &st, "degree input tangent; saturated at poles");
+    }
+
+    /* --- tan (radian wrappers: 65536-pt, full sweep) --- */
+    {
+        stats_t st; stats_reset(&st);
+        for (int i = 0; i < 65536; i++) {
+            double angle = -2.0 * M_PI + (4.0 * M_PI * i / 65536.0);
+            s32 rad_fp = tofix(angle, 16);
+            double actual_angle = frd(rad_fp, 16);
+            stats_add(&st, actual_angle, frd(fr_tan(rad_fp, 16), FR_TRIG_OUT_PREC), q16(tan_ref(actual_angle)), TAN_CLAMP);
+        }
+        acc_row("tan (rad)", &st, "radian (traditional) tangent");
     }
 
     /* --- asin / acos --- */
@@ -1848,14 +2021,14 @@ static void section_accuracy_table(void) {
         stats_t &st = st_asincos;
         /* 65536-point sweep: all representable values at radix 15 over [-1, +1) */
         for (int i = -32768; i <= 32767; i++) {
-            double xd = (double)i / (1 << 15);
+            double xd = (double)i / 32768.0;
             if (xd < -1.0 || xd > 1.0) continue;
             s32 rad = FR_asin((s32)i, 15, R);
-            stats_add(&st, xd, frd(rad, R), asin(xd));
+            stats_add(&st, xd, frd(rad, R), q16(asin(xd)), M_PI);
             rad = FR_acos((s32)i, 15, R);
-            stats_add(&st, xd, frd(rad, R), acos(xd));
+            stats_add(&st, xd, frd(rad, R), q16(acos(xd)), M_PI);
         }
-        acc_row("asin / acos", &st, "65536-pt; sqrt approx near boundary");
+        acc_row("asin / acos", &st, "reverse trig, radian output");
     }
 
     /* --- atan2 --- */
@@ -1874,19 +2047,19 @@ static void section_accuracy_table(void) {
             for (int i = -32767; i <= 32768; i++) {
                 double angle = i * M_PI / 32768.0;
                 double x = rad * cos(angle), y = rad * sin(angle);
-                s32 fx = (s32)(x * scale);
-                s32 fy = (s32)(y * scale);
+                s32 fx = tofix(x, R);
+                s32 fy = tofix(y, R);
                 if (fx == 0 && fy == 0) continue;
                 s32 afx = (fx < 0) ? -fx : fx;
                 s32 afy = (fy < 0) ? -fy : fy;
                 s32 minor = (afx < afy) ? afx : afy;
                 if (minor < 256) continue; /* input quantization, not algo */
                 s32 r = FR_atan2(fy, fx, R);
-                double ref = atan2(y, x);
+                double ref = atan2((double)fy, (double)fx);
                 /* Skip near ±pi branch cut: sign depends on sub-LSB
                  * input quantization, not algorithm accuracy. */
                 if (fabs(fabs(ref) - M_PI) < 0.01) continue;
-                stats_add(&st, angle * 180.0 / M_PI, frd(r, R), ref);
+                stats_add(&st, angle * 180.0 / M_PI, frd(r, R), q16(ref), M_PI);
             }
         }
         /* Special cases: exact quadrant/octant/30-degree angles */
@@ -1895,29 +2068,26 @@ static void section_accuracy_table(void) {
         for (int si = 0; si < (int)(sizeof(specials_deg)/sizeof(specials_deg[0])); si++) {
             double angle = specials_deg[si] * M_PI / 180.0;
             double x = 100.0 * cos(angle), y = 100.0 * sin(angle);
-            s32 fx = (s32)(x * scale), fy = (s32)(y * scale);
+            s32 fx = tofix(x, R), fy = tofix(y, R);
             if (fx == 0 && fy == 0) continue;
             s32 r = FR_atan2(fy, fx, R);
-            stats_add(&st, specials_deg[si], frd(r, R), atan2(y, x));
+            stats_add(&st, specials_deg[si], frd(r, R), q16(atan2((double)fy, (double)fx)), M_PI);
         }
-        acc_row("atan2", &st, "65536x5 radii; asin/acos+hypot_fast8");
+        acc_row("atan2", &st, "reverse tangent, always safe");
     }
 
     /* --- atan --- */
     {
         stats_t st; stats_reset(&st);
-        /* Sweep atan(x) for x in [-10, 10] with fine steps near zero.
-         * FR_atan(input, radix, out_radix) calls FR_atan2(input, 1<<radix, out_radix).
-         * Skip |expected| < 0.01 to match the percent-error convention. */
         for (int i = -10000; i <= 10000; i++) {
             double x = i / 1000.0;
-            s32 fr = (s32)(x * scale);
+            s32 fr = tofix(x, R);
+            double actual_x = frd(fr, R);
             s32 r = FR_atan(fr, (u16)R, (u16)R);
-            double ref = atan(x);
-            if (fabs(ref) < 0.01) continue;
-            stats_add(&st, x, frd(r, R), ref);
+            double ref = atan(actual_x);
+            stats_add(&st, actual_x, frd(r, R), q16(ref), M_PI / 2.0);
         }
-        acc_row("atan", &st, "20001-pt sweep [-10,10]; via FR_atan2");
+        acc_row("atan", &st, "reverse tangent, accepts up to maxint");
     }
 
     /* --- sqrt --- */
@@ -1925,16 +2095,18 @@ static void section_accuracy_table(void) {
         stats_t st; stats_reset(&st);
         double inputs[] = {0.0001, 0.25, 0.5, 1, 2, 3, 4, 7, 9, 16, 25, 100, 1024, 10000, 32000};
         for (int i = 0; i < (int)(sizeof(inputs)/sizeof(inputs[0])); i++) {
-            s32 fr = (s32)(inputs[i] * scale);
+            s32 fr = tofix(inputs[i], R);
+            double actual_x = frd(fr, R);
             s32 r = FR_sqrt(fr, R);
-            stats_add(&st, inputs[i], frd(r, R), sqrt(inputs[i]));
+            stats_add(&st, actual_x, frd(r, R), q16(sqrt(actual_x)), sqrt(32000.0));
         }
         /* Fine sweep */
         for (int i = 1; i <= 1000; i++) {
             double x = i * 10.0;
-            s32 fr = (s32)(x * scale);
+            s32 fr = tofix(x, R);
+            double actual_x = frd(fr, R);
             s32 r = FR_sqrt(fr, R);
-            stats_add(&st, x, frd(r, R), sqrt(x));
+            stats_add(&st, actual_x, frd(r, R), q16(sqrt(actual_x)), sqrt(32000.0));
         }
         acc_row("sqrt", &st, "Round-to-nearest");
     }
@@ -1944,20 +2116,22 @@ static void section_accuracy_table(void) {
         stats_t st; stats_reset(&st);
         /* Integer inputs — stay within s32 range at radix 16 (max ~32767) */
         for (int v = 1; v <= 32000; v += (v < 100 ? 1 : v / 10)) {
-            s32 fr = (s32)((double)v * scale);
+            s32 fr = tofix((double)v, R);
             if (fr <= 0) continue;
+            double actual_v = frd(fr, R);
             s32 r = FR_log2(fr, (u16)R, (u16)R);
-            stats_add(&st, (double)v, frd(r, R), log2((double)v));
+            stats_add(&st, actual_v, frd(r, R), q16(log2(actual_v)), log2(32000.0));
         }
         /* Fractional sweep 0.125 .. 1.0 */
         for (int i = 1; i <= 100; i++) {
             double x = 0.125 + (0.875 * i / 100.0);
-            s32 fr = (s32)(x * scale);
+            s32 fr = tofix(x, R);
             if (fr <= 0) continue;
+            double actual_x = frd(fr, R);
             s32 r = FR_log2(fr, (u16)R, (u16)R);
-            stats_add(&st, x, frd(r, R), log2(x));
+            stats_add(&st, actual_x, frd(r, R), q16(log2(actual_x)), log2(32000.0));
         }
-        acc_row("log2", &st, "65-entry mantissa table");
+        acc_row("log2", &st, "shift/add only for speed");
     }
 
     /* --- pow2 --- */
@@ -1965,12 +2139,13 @@ static void section_accuracy_table(void) {
         stats_t st; stats_reset(&st);
         for (int i = -800; i <= 800; i++) {
             double x = i / 100.0;
-            s32 fr = (s32)(x * scale);
+            s32 fr = tofix(x, R);
+            double actual_x = frd(fr, R);
             s32 r = FR_pow2(fr, R);
-            double ref = pow(2.0, x);
-            stats_add(&st, x, frd(r, R), ref);
+            double ref = pow(2.0, actual_x);
+            stats_add(&st, actual_x, frd(r, R), q16(ref), pow(2.0, 8.0));
         }
-        acc_row("pow2", &st, "65-entry fraction table");
+        acc_row("pow2", &st, "shift/add only for speed");
     }
 
     /* --- ln, log10 --- */
@@ -1978,16 +2153,17 @@ static void section_accuracy_table(void) {
         stats_t st; stats_reset(&st);
         double inputs[] = {0.125, 0.25, 0.5, 1, 2, M_E, 3, 4, 5, 7, 8, 10, 20, 50, 100, 1000};
         for (int i = 0; i < (int)(sizeof(inputs)/sizeof(inputs[0])); i++) {
-            s32 fr = (s32)(inputs[i] * scale);
+            s32 fr = tofix(inputs[i], R);
             if (fr <= 0) continue;
+            double actual_x = frd(fr, R);
             s32 r = FR_ln(fr, R, R);
-            double ref = log(inputs[i]);
-            stats_add(&st, inputs[i], frd(r, R), ref);
+            double ref = log(actual_x);
+            stats_add(&st, actual_x, frd(r, R), q16(ref), log(32000.0));
             r = FR_log10(fr, R, R);
-            ref = log10(inputs[i]);
-            stats_add(&st, inputs[i], frd(r, R), ref);
+            ref = log10(actual_x);
+            stats_add(&st, actual_x, frd(r, R), q16(ref), log10(32000.0));
         }
-        acc_row("ln, log10", &st, "Via FR_MULK28 from log2");
+        acc_row("ln, log10", &st, "shift/add only for speed");
     }
 
     /* --- exp (FR_EXP) --- */
@@ -1995,13 +2171,14 @@ static void section_accuracy_table(void) {
         stats_t st; stats_reset(&st);
         for (int i = -400; i <= 400; i++) {
             double x = i / 100.0;
-            s32 fr = (s32)(x * scale);
+            s32 fr = tofix(x, R);
+            double actual_x = frd(fr, R);
             s32 r = FR_EXP(fr, R);
-            double ref = exp(x);
+            double ref = exp(actual_x);
             if (ref > 32000.0 || ref < 1e-6) continue; /* skip overflow/underflow */
-            stats_add(&st, x, frd(r, R), ref);
+            stats_add(&st, actual_x, frd(r, R), q16(ref), 32000.0);
         }
-        acc_row("exp", &st, "FR_MULK28 + FR_pow2");
+        acc_row("exp", &st, "shift/add only for speed");
     }
 
     /* --- exp_fast (FR_EXP_FAST) --- */
@@ -2009,11 +2186,12 @@ static void section_accuracy_table(void) {
         stats_t st; stats_reset(&st);
         for (int i = -400; i <= 400; i++) {
             double x = i / 100.0;
-            s32 fr = (s32)(x * scale);
+            s32 fr = tofix(x, R);
+            double actual_x = frd(fr, R);
             s32 r = FR_EXP_FAST(fr, R);
-            double ref = exp(x);
+            double ref = exp(actual_x);
             if (ref > 32000.0 || ref < 1e-6) continue;
-            stats_add(&st, x, frd(r, R), ref);
+            stats_add(&st, actual_x, frd(r, R), q16(ref), 32000.0);
         }
         acc_row("exp_fast", &st, "Shift-only scaling");
     }
@@ -2023,13 +2201,14 @@ static void section_accuracy_table(void) {
         stats_t st; stats_reset(&st);
         for (int i = -200; i <= 200; i++) {
             double x = i / 100.0;
-            s32 fr = (s32)(x * scale);
+            s32 fr = tofix(x, R);
+            double actual_x = frd(fr, R);
             s32 r = FR_POW10(fr, R);
-            double ref = pow(10.0, x);
+            double ref = pow(10.0, actual_x);
             if (ref > 32000.0 || ref < 1e-6) continue;
-            stats_add(&st, x, frd(r, R), ref);
+            stats_add(&st, actual_x, frd(r, R), q16(ref), 32000.0);
         }
-        acc_row("pow10", &st, "FR_MULK28 + FR_pow2");
+        acc_row("pow10", &st, "shift/add only for speed");
     }
 
     /* --- pow10_fast (FR_POW10_FAST) --- */
@@ -2037,11 +2216,12 @@ static void section_accuracy_table(void) {
         stats_t st; stats_reset(&st);
         for (int i = -200; i <= 200; i++) {
             double x = i / 100.0;
-            s32 fr = (s32)(x * scale);
+            s32 fr = tofix(x, R);
+            double actual_x = frd(fr, R);
             s32 r = FR_POW10_FAST(fr, R);
-            double ref = pow(10.0, x);
+            double ref = pow(10.0, actual_x);
             if (ref > 32000.0 || ref < 1e-6) continue;
-            stats_add(&st, x, frd(r, R), ref);
+            stats_add(&st, actual_x, frd(r, R), q16(ref), 32000.0);
         }
         acc_row("pow10_fast", &st, "Shift-only scaling");
     }
@@ -2054,13 +2234,14 @@ static void section_accuracy_table(void) {
             {1,1},{0.5,0.5},{100,100},{1000,1},{1,1000}
         };
         for (int i = 0; i < (int)(sizeof(cases)/sizeof(cases[0])); i++) {
-            s32 fx = (s32)(cases[i].x * scale);
-            s32 fy = (s32)(cases[i].y * scale);
+            s32 fx = tofix(cases[i].x, R);
+            s32 fy = tofix(cases[i].y, R);
+            double actual_x = frd(fx, R), actual_y = frd(fy, R);
             s32 r = FR_hypot(fx, fy, R);
-            double ref = hypot(cases[i].x, cases[i].y);
-            stats_add(&st, ref, frd(r, R), ref);
+            double ref = hypot(actual_x, actual_y);
+            stats_add(&st, ref, frd(r, R), q16(ref), hypot(1000.0, 1000.0));
         }
-        acc_row("hypot (exact)", &st, "64-bit intermediate");
+        acc_row("hypot (exact)", &st, "Uses 64-bit intermediate");
     }
 
     /* --- hypot_fast8 (8-seg) --- */
@@ -2071,16 +2252,186 @@ static void section_accuracy_table(void) {
             {100,100},{1000,1},{1,1000},{7,24},{20,21}
         };
         for (int i = 0; i < (int)(sizeof(cases)/sizeof(cases[0])); i++) {
-            s32 fx = (s32)(cases[i].x * scale);
-            s32 fy = (s32)(cases[i].y * scale);
+            s32 fx = tofix(cases[i].x, R);
+            s32 fy = tofix(cases[i].y, R);
+            double actual_x = frd(fx, R), actual_y = frd(fy, R);
             s32 r = FR_hypot_fast8(fx, fy);
-            double ref = hypot(cases[i].x, cases[i].y);
-            if (ref > 0) stats_add(&st, ref, frd(r, R), ref);
+            double ref = hypot(actual_x, actual_y);
+            if (ref > 0) stats_add(&st, ref, frd(r, R), q16(ref), hypot(1000.0, 1000.0));
         }
         acc_row("hypot_fast8 (8-seg)", &st, "Shift-only, no multiply");
     }
 
     printf("<!-- ACCURACY_TABLE_END -->\n");
+    printf("\n*Relative error; reference clamped to 1%% of full-scale output.\n\n");
+
+    /* ── Test-only rows (not library functions — conversion & pipeline checks) ── */
+    md_h3("14.0.1 Conversion & pipeline accuracy (test-only)");
+    printf("| Function | Max err (%%) | Avg err (%%) | Note |\n");
+    printf("|---|---:|---:|---|\n");
+
+    /* --- rad→BAM conversion (standalone: 65536-pt) --- */
+    {
+        stats_t &st = st_rad2bam;
+        for (int i = 0; i < 65536; i++) {
+            double angle = -2.0 * M_PI + (4.0 * M_PI * i / 65536.0);
+            s32 rad_fp = tofix(angle, R);
+            u16 got = fr_rad_to_bam(rad_fp, 16);
+            /* Exact BAM: wrap to u16 */
+            double exact_bam_d = angle * 65536.0 / (2.0 * M_PI);
+            s32 exact_bam_s = (s32)floor(exact_bam_d + 0.5);
+            u16 expected = (u16)(exact_bam_s & 0xFFFF);
+            /* Feed stats as degrees so the error is interpretable */
+            double got_deg = got * (360.0 / 65536.0);
+            double exp_deg = expected * (360.0 / 65536.0);
+            stats_add(&st, angle, got_deg, exp_deg, 360.0);
+        }
+        {
+            char note[128];
+            snprintf(note, sizeof(note),
+                     "fr_rad_to_bam() ±2π at r16; max %d BAM LSB",
+                     (int)(st.max_abs_err / (360.0 / 65536.0) + 0.5));
+            acc_row("rad→BAM conv", &st, note);
+        }
+    }
+
+    /* --- deg→BAM conversion (standalone: 65536-pt) --- */
+    {
+        stats_t &st = st_deg2bam;
+        for (int i = 0; i < 65536; i++) {
+            double deg = -360.0 + (720.0 * i / 65536.0);
+            s32 deg_fp = tofix(deg, R);
+            u16 got = fr_deg_to_bam(deg_fp, 16);
+            /* Exact BAM: wrap to u16 */
+            double exact_bam_d = deg * 65536.0 / 360.0;
+            s32 exact_bam_s = (s32)floor(exact_bam_d + 0.5);
+            u16 expected = (u16)(exact_bam_s & 0xFFFF);
+            double got_deg = got * (360.0 / 65536.0);
+            double exp_deg = expected * (360.0 / 65536.0);
+            stats_add(&st, deg, got_deg, exp_deg, 360.0);
+        }
+        {
+            char note[128];
+            snprintf(note, sizeof(note),
+                     "fr_deg_to_bam() ±360° at r16; max %d BAM LSB",
+                     (int)(st.max_abs_err / (360.0 / 65536.0) + 0.5));
+            acc_row("deg→BAM conv", &st, note);
+        }
+    }
+
+    /* --- sin / cos via integer degrees ±360° --- */
+    {
+        stats_t &st = st_sincos_deg_s32;
+        for (int deg = -360; deg <= 360; deg++) {
+            double rad = deg * M_PI / 180.0;
+            stats_add(&st, (double)deg, frd(FR_SinI(deg), FR_TRIG_OUT_PREC), q16(sin(rad)), 1.0);
+            stats_add(&st, (double)deg, frd(FR_CosI(deg), FR_TRIG_OUT_PREC), q16(cos(rad)), 1.0);
+        }
+        acc_row("sin/cos (int deg)", &st, "FR_SinI/FR_CosI ±360° integer degrees");
+    }
+
+    /* --- tan via integer degrees ±360° --- */
+    {
+        stats_t &st = st_tan_deg_s32;
+        for (int deg = -360; deg <= 360; deg++) {
+            double rad = deg * M_PI / 180.0;
+            stats_add(&st, (double)deg, frd(FR_TanI((s16)deg), FR_TRIG_OUT_PREC), q16(tan_ref(rad)), TAN_CLAMP);
+        }
+        acc_row("tan (int deg)", &st, "FR_TanI ±360° full; sat at poles");
+    }
+
+    /* --- Conversion macro accuracy (all 6 direction macros) --- */
+
+    /* FR_RAD2BAM macro: test within safe range (±pi at r16) */
+    {
+        stats_t st; stats_reset(&st);
+        for (int i = 0; i < 65536; i++) {
+            double angle = -M_PI + (2.0 * M_PI * i / 65536.0);
+            s32 rad_fp = tofix(angle, R);
+            s32 raw = FR_RAD2BAM(rad_fp);
+            u16 got = (u16)((raw + (1 << 15)) >> 16);
+            double exact_d = angle * 65536.0 / (2.0 * M_PI);
+            u16 expected = (u16)((s32)floor(exact_d + 0.5) & 0xFFFF);
+            double got_deg = got * (360.0 / 65536.0);
+            double exp_deg = expected * (360.0 / 65536.0);
+            stats_add(&st, angle, got_deg, exp_deg, 360.0);
+        }
+        acc_row("FR_RAD2BAM macro", &st, "Shift-approx ±π at r16; overflows beyond ±4 rad");
+    }
+
+    /* FR_DEG2BAM macro: test within safe range (±180° at r7) */
+    {
+        stats_t st; stats_reset(&st);
+        const u16 radix = 7;
+        for (int i = -23040; i <= 23040; i++) { /* ±180° at r7 = ±23040 */
+            double deg = (double)i / 128.0;
+            s32 raw = FR_DEG2BAM((s32)i);
+            u16 got = (u16)((raw + (1 << (radix - 1))) >> radix);
+            double exact_d = deg * 65536.0 / 360.0;
+            u16 expected = (u16)((s32)floor(exact_d + 0.5) & 0xFFFF);
+            double got_deg = got * (360.0 / 65536.0);
+            double exp_deg = expected * (360.0 / 65536.0);
+            stats_add(&st, deg, got_deg, exp_deg, 360.0);
+        }
+        acc_row("FR_DEG2BAM macro", &st, "Shift-approx ±180° at r7; overflows beyond ±256°");
+    }
+
+    /* FR_BAM2RAD macro: multiplies by 2π/65536 using shifts.
+     * BAM 0..32767 at r16 (upper half overflows s32 when <<16). */
+    {
+        stats_t st; stats_reset(&st);
+        for (int i = 0; i < 32768; i++) {
+            s32 bam_r16 = (s32)i << 16;
+            s32 rad_fp = FR_BAM2RAD(bam_r16);
+            double got_rad = frd(rad_fp, 16);
+            double exp_rad = (double)i * 2.0 * M_PI / 65536.0;
+            stats_add(&st, (double)i, got_rad, exp_rad, 2.0 * M_PI);
+        }
+        acc_row("FR_BAM2RAD macro", &st, "BAM→rad r16 full (0..32767; <<16 overflow above)");
+    }
+
+    /* FR_BAM2DEG macro: multiplies by 360/65536 using shifts.
+     * BAM 0..32767 at r16 (same s32 overflow limit). */
+    {
+        stats_t st; stats_reset(&st);
+        for (int i = 0; i < 32768; i++) {
+            s32 bam_r16 = (s32)i << 16;
+            s32 deg_fp = FR_BAM2DEG(bam_r16);
+            double got_deg = frd(deg_fp, 16);
+            double exp_deg = (double)i * 360.0 / 65536.0;
+            stats_add(&st, (double)i, got_deg, exp_deg, 360.0);
+        }
+        acc_row("FR_BAM2DEG macro", &st, "BAM→deg r16 full (0..32767; <<16 overflow above)");
+    }
+
+    /* FR_DEG2RAD macro: 65536-pt ±360° at r16 full */
+    {
+        stats_t st; stats_reset(&st);
+        for (int i = 0; i < 65536; i++) {
+            double deg = -360.0 + (720.0 * i / 65536.0);
+            s32 deg_fp = tofix(deg, R);
+            s32 rad_fp = FR_DEG2RAD(deg_fp);
+            double got_rad = frd(rad_fp, 16);
+            double exp_rad = deg * M_PI / 180.0;
+            stats_add(&st, deg, got_rad, exp_rad, 2.0 * M_PI);
+        }
+        acc_row("FR_DEG2RAD macro", &st, "65536-pt ±360° r16 full");
+    }
+
+    /* FR_RAD2DEG macro: 65536-pt ±2π at r16 full */
+    {
+        stats_t st; stats_reset(&st);
+        for (int i = 0; i < 65536; i++) {
+            double angle = -2.0 * M_PI + (4.0 * M_PI * i / 65536.0);
+            s32 rad_fp = tofix(angle, R);
+            s32 deg_fp = FR_RAD2DEG(rad_fp);
+            double got_deg = frd(deg_fp, 16);
+            double exp_deg = angle * 180.0 / M_PI;
+            stats_add(&st, angle, got_deg, exp_deg, 360.0);
+        }
+        acc_row("FR_RAD2DEG macro", &st, "65536-pt ±2π r16 full");
+    }
+
     printf("\n");
 
     /* Diagnostic: show where each trig function's worst % error occurs */
@@ -2092,10 +2443,14 @@ static void section_accuracy_table(void) {
     printf("|---|---|---:|---:|---:|---:|\n");
 
     struct { const char *name; stats_t *s; } diag[] = {
-        {"sin / cos", &st_sincos},
-        {"tan",       &st_tan},
-        {"asin/acos", &st_asincos},
-        {"atan2",     &st_atan2},
+        {"sin / cos",       &st_sincos},
+        {"tan",             &st_tan},
+        {"rad→BAM conv",    &st_rad2bam},
+        {"deg→BAM conv",    &st_deg2bam},
+        {"sin/cos (int deg)",&st_sincos_deg_s32},
+        {"tan (int deg)",   &st_tan_deg_s32},
+        {"asin/acos",       &st_asincos},
+        {"atan2",           &st_atan2},
     };
     for (int d = 0; d < (int)(sizeof(diag)/sizeof(diag[0])); d++) {
         stats_t *s = diag[d].s;
@@ -2105,6 +2460,325 @@ static void section_accuracy_table(void) {
                s->worst_pct_expected, s->worst_pct_actual, ae,
                s->max_pct_err);
     }
+    printf("\n");
+
+    /* ── 14.3 Per-function trig sweep table ────────────────────────────
+     * One row per public entry point. Each function is swept
+     * independently over its full domain so that peak abs / pct errors
+     * are attributable to a single function, not a combined aggregate.
+     *
+     * Peak pct err is raw |err|/|expected|*100 — no clamping.  Near
+     * zero crossings (sin≈0, cos≈0, asin(0)≈0) the denominator is
+     * tiny and pct blows up even when abs err is sub-LSB.  The Notes
+     * column flags these rows.  Use Peak abs err and Mean abs err to
+     * judge accuracy at zero crossings; use Peak pct err elsewhere.
+     */
+    md_h3("14.2 Neighborhoods (peak error ±10 samples)");
+
+    /* fr_sin radian at i=0 (-360°) — zero crossing neighborhood */
+    neighborhood("fr_sin radian @ -360 deg (i=0)", 3, 0, 10, 131072,
+                 -2.0 * M_PI, 2.0 * M_PI);
+
+    md_h3("14.3 Per-function trig sweep");
+
+    printf("| Function | Input | Range start | Range end | Points | Increment | "
+           "Peak abs err | @abs_err | Peak pct err | @pct_err | Expected | Got | Mean abs err | Notes |\n");
+    printf("|---|---|---:|---:|---:|---|---:|---:|---:|---:|---:|---:|---:|---|\n");
+
+    /* Helper: print one row of the per-function table */
+    #define SWEEP_ROW(name, sig, rlo, rhi, pts, step, st, note) \
+        printf("| %s | %s | %s | %s | %d | %s | %f | %.4f | %.4f%% | %.4f | %f | %f | %f | %s |\n", \
+            name, sig, rlo, rhi, pts, step, \
+            (st).max_abs_err, (st).worst_input, (st).max_pct_err, \
+            (st).worst_pct_input, (st).worst_pct_expected, (st).worst_pct_actual, \
+            stats_mean(&(st)), note)
+
+    /* fr_sin_bam */
+    {
+        stats_t st; stats_reset(&st);
+        for (int b = 0; b < 65536; b++) {
+            u16 bam = (u16)b;
+            double rad = bam * 2.0 * M_PI / 65536.0;
+            double deg = bam * 360.0 / 65536.0;
+            stats_add(&st, deg, frd(fr_sin_bam(bam), FR_TRIG_OUT_PREC), q16(sin(rad)), 1.0);
+        }
+        SWEEP_ROW("fr_sin_bam", "(u16 bam)", "0", "360", 65536, "0.0055 deg", st, "");
+    }
+    /* fr_cos_bam */
+    {
+        stats_t st; stats_reset(&st);
+        for (int b = 0; b < 65536; b++) {
+            u16 bam = (u16)b;
+            double rad = bam * 2.0 * M_PI / 65536.0;
+            double deg = bam * 360.0 / 65536.0;
+            stats_add(&st, deg, frd(fr_cos_bam(bam), FR_TRIG_OUT_PREC), q16(cos(rad)), 1.0);
+        }
+        SWEEP_ROW("fr_cos_bam", "(u16 bam)", "0", "360", 65536, "0.0055 deg", st, "");
+    }
+    /* fr_tan_bam */
+    {
+        stats_t st; stats_reset(&st);
+        for (int b = 0; b < 65536; b++) {
+            u16 bam = (u16)b;
+            double rad = bam * 2.0 * M_PI / 65536.0;
+            double deg = bam * 360.0 / 65536.0;
+            double ref;
+            if (bam == 16384)       ref = TAN_CLAMP;
+            else if (bam == 49152)  ref = -TAN_CLAMP;
+            else                    ref = q16(tan_ref(rad));
+            stats_add(&st, deg, frd(fr_tan_bam(bam), FR_TRIG_OUT_PREC), ref, TAN_CLAMP);
+        }
+        SWEEP_ROW("fr_tan_bam", "(u16 bam)", "0", "360", 65536, "0.0055 deg", st, "pole clamped");
+    }
+    /* fr_sin (radian) */
+    {
+        stats_t st; stats_reset(&st);
+        const int N2 = 131072;
+        for (int i = 0; i < N2; i++) {
+            double angle = -2.0 * M_PI + (4.0 * M_PI * i / (double)N2);
+            s32 rad_fp = tofix(angle, 16);
+            double actual_angle = frd(rad_fp, 16);
+            double deg = actual_angle * 180.0 / M_PI;
+            stats_add(&st, deg, frd(fr_sin(rad_fp, 16), FR_TRIG_OUT_PREC), q16(sin(actual_angle)), 1.0);
+        }
+        SWEEP_ROW("fr_sin", "(s32 rad, u16 radix)", "-360", "+360", 131072, "0.0055 deg", st, "near-π small-angle bypass");
+    }
+    /* fr_cos (radian) */
+    {
+        stats_t st; stats_reset(&st);
+        const int N2 = 131072;
+        for (int i = 0; i < N2; i++) {
+            double angle = -2.0 * M_PI + (4.0 * M_PI * i / (double)N2);
+            s32 rad_fp = tofix(angle, 16);
+            double actual_angle = frd(rad_fp, 16);
+            double deg = actual_angle * 180.0 / M_PI;
+            stats_add(&st, deg, frd(fr_cos(rad_fp, 16), FR_TRIG_OUT_PREC), q16(cos(actual_angle)), 1.0);
+        }
+        SWEEP_ROW("fr_cos", "(s32 rad, u16 radix)", "-360", "+360", 131072, "0.0055 deg", st, "");
+    }
+    /* fr_tan (radian) */
+    {
+        stats_t st; stats_reset(&st);
+        const int N2 = 131072;
+        for (int i = 0; i < N2; i++) {
+            double angle = -2.0 * M_PI + (4.0 * M_PI * i / (double)N2);
+            s32 rad_fp = tofix(angle, 16);
+            double actual_angle = frd(rad_fp, 16);
+            double deg = actual_angle * 180.0 / M_PI;
+            stats_add(&st, deg, frd(fr_tan(rad_fp, 16), FR_TRIG_OUT_PREC), q16(tan_ref(actual_angle)), TAN_CLAMP);
+        }
+        SWEEP_ROW("fr_tan", "(s32 rad, u16 radix)", "-360", "+360", 131072, "0.0055 deg", st, "sign extract + small-angle bypass at 0/pi/2pi; r24 cot(d)~1/d near poles; BAM table elsewhere");
+    }
+    /* FR_SinI */
+    {
+        stats_t st; stats_reset(&st);
+        for (int d = -360; d <= 360; d++) {
+            double rad = d * M_PI / 180.0;
+            stats_add(&st, (double)d, frd(FR_SinI(d), FR_TRIG_OUT_PREC), q16(sin(rad)), 1.0);
+        }
+        SWEEP_ROW("FR_SinI", "(s16 deg)", "-360", "+360", 721, "1 deg", st, "");
+    }
+    /* FR_CosI */
+    {
+        stats_t st; stats_reset(&st);
+        for (int d = -360; d <= 360; d++) {
+            double rad = d * M_PI / 180.0;
+            stats_add(&st, (double)d, frd(FR_CosI(d), FR_TRIG_OUT_PREC), q16(cos(rad)), 1.0);
+        }
+        SWEEP_ROW("FR_CosI", "(s16 deg)", "-360", "+360", 721, "1 deg", st, "");
+    }
+    /* FR_TanI */
+    {
+        stats_t st; stats_reset(&st);
+        for (int d = -360; d <= 360; d++) {
+            double rad = d * M_PI / 180.0;
+            double ref;
+            if (d % 180 == 90 || d % 180 == -90)
+                ref = (d > 0) ? TAN_CLAMP : -TAN_CLAMP;
+            else
+                ref = q16(tan_ref(rad));
+            stats_add(&st, (double)d, frd(FR_TanI((s16)d), FR_TRIG_OUT_PREC), ref, TAN_CLAMP);
+        }
+        SWEEP_ROW("FR_TanI", "(s16 deg)", "-360", "+360", 721, "1 deg", st, "pole clamped");
+    }
+    /* fr_sin_deg (fixed-radix degrees, radix 16) */
+    {
+        stats_t st; stats_reset(&st);
+        const int N2 = 131072;
+        for (int i = 0; i < N2; i++) {
+            double deg = -360.0 + 720.0 * i / (double)N2;
+            s32 deg_fp = tofix(deg, 16);
+            double actual_deg = frd(deg_fp, 16);
+            double rad = actual_deg * M_PI / 180.0;
+            stats_add(&st, actual_deg, frd(FR_Sin(deg_fp, 16), FR_TRIG_OUT_PREC), q16(sin(rad)), 1.0);
+        }
+        SWEEP_ROW("fr_sin_deg", "(s32 deg, u16 radix)", "-360", "+360", 131072, "0.0055 deg", st, "pct peak at sin=0 crossing");
+    }
+    /* fr_cos_deg (fixed-radix degrees, radix 16) */
+    {
+        stats_t st; stats_reset(&st);
+        const int N2 = 131072;
+        for (int i = 0; i < N2; i++) {
+            double deg = -360.0 + 720.0 * i / (double)N2;
+            s32 deg_fp = tofix(deg, 16);
+            double actual_deg = frd(deg_fp, 16);
+            double rad = actual_deg * M_PI / 180.0;
+            stats_add(&st, actual_deg, frd(FR_Cos(deg_fp, 16), FR_TRIG_OUT_PREC), q16(cos(rad)), 1.0);
+        }
+        SWEEP_ROW("fr_cos_deg", "(s32 deg, u16 radix)", "-360", "+360", 131072, "0.0055 deg", st, "near-90/270 small-angle bypass");
+    }
+    /* fr_tan_deg (fixed-radix degrees, radix 16) */
+    {
+        stats_t st; stats_reset(&st);
+        const int N2 = 131072;
+        for (int i = 0; i < N2; i++) {
+            double deg = -360.0 + 720.0 * i / (double)N2;
+            s32 deg_fp = tofix(deg, 16);
+            double actual_deg = frd(deg_fp, 16);
+            double rad = actual_deg * M_PI / 180.0;
+            stats_add(&st, actual_deg, frd(FR_Tan(deg_fp, 16), FR_TRIG_OUT_PREC), q16(tan_ref(rad)), TAN_CLAMP);
+        }
+        SWEEP_ROW("fr_tan_deg", "(s32 deg, u16 radix)", "-360", "+360", 131072, "0.0055 deg", st, "pct peak near tan pole");
+    }
+
+    /* --- Inverse Trig --- */
+
+    /* FR_acos */
+    {
+        stats_t st; stats_reset(&st);
+        const int N = 65537;
+        for (int i = 0; i < N; i++) {
+            double xd = -1.0 + 2.0 * i / (double)(N - 1);
+            s32 fr = tofix(xd, 15);
+            double actual_xd = frd(fr, 15);
+            s32 rad = FR_acos(fr, 15, 16);
+            stats_add(&st, actual_xd, frd(rad, 16), q16(acos(actual_xd)), M_PI);
+        }
+        SWEEP_ROW("FR_acos", "(s32,u16 15,u16 16)", "-1.0", "+1.0", N, "3.05e-5", st, "r15 in, r16 out");
+    }
+    /* FR_asin */
+    {
+        stats_t st; stats_reset(&st);
+        const int N = 65537;
+        for (int i = 0; i < N; i++) {
+            double xd = -1.0 + 2.0 * i / (double)(N - 1);
+            s32 fr = tofix(xd, 15);
+            double actual_xd = frd(fr, 15);
+            s32 rad = FR_asin(fr, 15, 16);
+            stats_add(&st, actual_xd, frd(rad, 16), q16(asin(actual_xd)), M_PI);
+        }
+        SWEEP_ROW("FR_asin", "(s32,u16 15,u16 16)", "-1.0", "+1.0", N, "3.05e-5", st, "r15 in, r16 out; pct peak at asin(0)=0");
+    }
+    /* FR_atan */
+    {
+        stats_t st; stats_reset(&st);
+        const int N = 131072;
+        for (int i = 0; i < N; i++) {
+            double xd = -10.0 + 20.0 * i / (double)N;
+            s32 fr = tofix(xd, 16);
+            double actual_xd = frd(fr, 16);
+            s32 rad = FR_atan(fr, 16, 16);
+            stats_add(&st, actual_xd, frd(rad, 16), q16(atan(actual_xd)), M_PI / 2.0);
+        }
+        SWEEP_ROW("FR_atan", "(s32,u16 16,u16 16)", "-10.0", "+10.0", N, "1.53e-4", st, "r16 in/out");
+    }
+    /* FR_atan2 — unit circle sweep */
+    {
+        stats_t st; stats_reset(&st);
+        const int N = 65536;
+        for (int i = 0; i < N; i++) {
+            double angle = -M_PI + 2.0 * M_PI * i / (double)N;
+            double deg = angle * 180.0 / M_PI;
+            s32 x = tofix(cos(angle), 15);
+            s32 y = tofix(sin(angle), 15);
+            s32 rad = FR_atan2(y, x, 16);
+            stats_add(&st, deg, frd(rad, 16), q16(atan2((double)y, (double)x)), M_PI);
+        }
+        SWEEP_ROW("FR_atan2", "(s32 y,s32 x,u16 16)", "-180", "+180", N, "0.0055 deg", st, "unit circle r15");
+    }
+
+    /* --- Log / Exp --- */
+
+    /* FR_log2 */
+    {
+        stats_t st; stats_reset(&st);
+        const int N = 65536;
+        for (int i = 1; i <= N; i++) {
+            double xd = 0.01 + (256.0 - 0.01) * i / (double)N;
+            s32 fr = tofix(xd, 16);
+            double actual_xd = frd(fr, 16);
+            s32 r = FR_log2(fr, 16, 16);
+            stats_add(&st, actual_xd, frd(r, 16), q16(log2(actual_xd)), log2(32000.0));
+        }
+        SWEEP_ROW("FR_log2", "(s32,u16 16,u16 16)", "0.01", "256", N, "0.0039", st, "r16 in/out");
+    }
+    /* FR_ln */
+    {
+        stats_t st; stats_reset(&st);
+        const int N = 65536;
+        for (int i = 1; i <= N; i++) {
+            double xd = 0.01 + (256.0 - 0.01) * i / (double)N;
+            s32 fr = tofix(xd, 16);
+            double actual_xd = frd(fr, 16);
+            s32 r = FR_ln(fr, 16, 16);
+            stats_add(&st, actual_xd, frd(r, 16), q16(log(actual_xd)), log(32000.0));
+        }
+        SWEEP_ROW("FR_ln", "(s32,u16 16,u16 16)", "0.01", "256", N, "0.0039", st, "r16 in/out");
+    }
+    /* FR_log10 */
+    {
+        stats_t st; stats_reset(&st);
+        const int N = 65536;
+        for (int i = 1; i <= N; i++) {
+            double xd = 0.01 + (256.0 - 0.01) * i / (double)N;
+            s32 fr = tofix(xd, 16);
+            double actual_xd = frd(fr, 16);
+            s32 r = FR_log10(fr, 16, 16);
+            stats_add(&st, actual_xd, frd(r, 16), q16(log10(actual_xd)), log10(32000.0));
+        }
+        SWEEP_ROW("FR_log10", "(s32,u16 16,u16 16)", "0.01", "256", N, "0.0039", st, "r16 in/out");
+    }
+    /* FR_pow2 */
+    {
+        stats_t st; stats_reset(&st);
+        const int N = 65536;
+        for (int i = 0; i < N; i++) {
+            double xd = -8.0 + 16.0 * i / (double)N;
+            s32 fr = tofix(xd, 16);
+            double actual_xd = frd(fr, 16);
+            s32 r = FR_pow2(fr, 16);
+            stats_add(&st, actual_xd, frd(r, 16), q16(pow(2.0, actual_xd)), pow(2.0, 8.0));
+        }
+        SWEEP_ROW("FR_pow2", "(s32,u16 16)", "-8.0", "+8.0", N, "2.44e-4", st, "r16 in/out");
+    }
+    /* FR_EXP (macro wrapping FR_pow2) */
+    {
+        stats_t st; stats_reset(&st);
+        const int N = 65536;
+        for (int i = 0; i < N; i++) {
+            double xd = -5.0 + 15.0 * i / (double)N;
+            s32 fr = tofix(xd, 16);
+            double actual_xd = frd(fr, 16);
+            s32 r = FR_EXP(fr, 16);
+            stats_add(&st, actual_xd, frd(r, 16), q16(exp(actual_xd)), 32000.0);
+        }
+        SWEEP_ROW("FR_EXP", "(s32,u16 16)", "-5.0", "+10.0", N, "2.29e-4", st, "macro, wraps FR_pow2");
+    }
+    /* FR_POW10 (macro wrapping FR_pow2) */
+    {
+        stats_t st; stats_reset(&st);
+        const int N = 65536;
+        for (int i = 0; i < N; i++) {
+            double xd = -2.0 + 6.0 * i / (double)N;
+            s32 fr = tofix(xd, 16);
+            double actual_xd = frd(fr, 16);
+            s32 r = FR_POW10(fr, 16);
+            stats_add(&st, actual_xd, frd(r, 16), q16(pow(10.0, actual_xd)), 32000.0);
+        }
+        SWEEP_ROW("FR_POW10", "(s32,u16 16)", "-2.0", "+4.0", N, "9.15e-5", st, "macro, wraps FR_pow2");
+    }
+
+    #undef SWEEP_ROW
     printf("\n");
 }
 
@@ -2131,4 +2805,4 @@ int main(void) {
     section_accuracy_table();
 
     return 0;
-}
+}

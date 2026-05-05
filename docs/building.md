@@ -14,9 +14,10 @@ FR_Math has no dependencies beyond a C99 compiler and
 - Optional: `lcov` / `gcov` for coverage
   reports.
 
-There is no Autotools, no CMake, no Ninja, no package-manager
-integration. The library is small enough that the Makefile fits on
-one screen.
+There is no Autotools, no Ninja, no package-manager integration.
+The primary build system is a single Makefile. A `CMakeLists.txt`
+exists for ESP-IDF integration only — it is not a general-purpose
+CMake build.
 
 ## Makefile targets
 
@@ -90,28 +91,27 @@ See `release_management.md` for the full step-by-step reference.
 
 ## The test suite
 
-Tests live under `tests/` and are split into six
+Tests live under `tests/` and are split into seven
 binaries to keep compile times low:
 
 | Binary | What it checks |
 | --- | --- |
-| `test_basic` | Radix conversions, `FR_ADD`, `FR_FixMuls`, rounding. |
-| `test_trig` | Integer-degree trig (`FR_Sin` et al.). |
-| `test_trig_radians` | Radian / BAM trig and the v2 `fr_sin` API. |
-| `test_log_exp` | Log base 2 / ln / log10 and their inverses. |
+| `fr_test` | Radix conversions, `FR_ADD`, `FR_FixMuls`, rounding (legacy harness). |
+| `test_comprehensive` | Trig (degree, radian, BAM), log/exp, sqrt, hypot. |
 | `test_2d` | 2D transforms, determinants, inverses. |
-| `test_full_coverage` | Dark-corner cases: overflow sentinels, edge radixes, round-trips. |
-| `test_tdd` | Characterisation tests pinned to bit-exact reference values. |
+| `test_overflow` | Overflow sentinels, saturation, edge radixes. |
+| `test_full` | Full-coverage dark-corner cases and round-trips. |
+| `test_2d_complete` | Extended 2D: matrix composition, inverse, point transforms. |
+| `test_tdd` | Characterization tests pinned to bit-exact reference values. |
 
-As of v2.0.0 the suite contains **42 tests** across
-those binaries and covers **99%** of the library source.
+The suite covers **99%** of the library source.
 Every public symbol is exercised at least once.
 
 ### Running a single binary
 
 ```bash
-make build/test_basic
-./build/test_basic
+make test-comprehensive
+./build/test_comprehensive
 
 # or all of them at once
 make test
@@ -119,12 +119,12 @@ make test
 
 ### Running the TDD pins after a change
 
-`test_tdd.cpp` is a characterisation suite. It records
+`test_tdd.cpp` is a characterization suite. It records
 exact bit patterns for a sample of inputs and fails loudly if those
-patterns drift. Any change that modifies the numerical behaviour of
+patterns drift. Any change that modifies the numerical behavior of
 the library will break this suite — that's the point.
 
-If you *intended* to change the numerical behaviour (e.g.
+If you *intended* to change the numerical behavior (e.g.
 you improved a polynomial approximation), update the pinned values in
 `tests/test_tdd.cpp` and note the change in
 `release_notes.md` along with any updates to the
@@ -155,43 +155,59 @@ you do *not* need `libm`.
 | Motorola 68k | `m68k-linux-gnu-gcc` | Docker. |
 | Motorola 68HC11 | `m68hc11-gcc` | Docker. |
 | PowerPC | `powerpc-linux-gnu-gcc` | Docker. |
+| MIPS32 | `mipsel-linux-gnu-gcc` | Docker. |
 | Xtensa LX106 (ESP8266) | `xtensa-lx106-elf-gcc` | Docker. |
+| Xtensa LX7 (ESP32-S3) | `xtensa-esp-elf-gcc` | Docker (Espressif toolchain). |
 | 8051 | `sdcc` | Manual. |
 
 ### Code size (.text section, compiled with `-Os`)
 
-Sizes are for `FR_math.c` compiled with `-Os -ffreestanding`.
-Core = compiled with `-DFR_CORE_ONLY` (math only, no print, no waves).
+Sizes are for `FR_math.c` compiled with `-Os`.
+Lean = `-DFR_LEAN -DFR_NO_PRINT` (radian trig, inv trig, log/exp, sqrt).
+Core = `-DFR_CORE_ONLY` (+ degree trig, BAM tan, log10, hypot).
+Full = all features (+ print, waves, ADSR).
 With `-ffunction-sections` and linker `--gc-sections`, only the
 functions your application references are linked, so real flash
 usage will be smaller.
 
 <!-- SIZE_TABLE_START -->
-| Target | Core | Full |
-|--------|-----:|-----:|
-| RP2040 (Cortex-M0+) | 2.6 KB | 4.2 KB |
-| STM32 (Cortex-M4) | 2.6 KB | 4.2 KB |
-| RISC-V 32 (rv32imac) | 3.0 KB | 4.7 KB |
-| ESP32 (Xtensa) | 3.5 KB | 5.2 KB |
-| 68k | 3.5 KB | 5.3 KB |
-| x86-64 (GCC) | 3.5 KB | 5.7 KB |
-| x86-32 | 4.5 KB | 6.8 KB |
-| MSP430 (16-bit) | 5.9 KB | 8.9 KB |
-| 68HC11 | 10.8 KB | 16.0 KB |
-| AVR (ATmega328P) | 7.0 KB | 10.6 KB |
+| Target | Lean | Core | Full |
+|--------|-----:|-----:|-----:|
+| Xtensa LX7 (ESP32-S3) | 2.9 KB | 4.2 KB | 5.3 KB |
+| Cortex-M4 (STM32) | 3.3 KB | 4.4 KB | 5.5 KB |
+| Cortex-M0 (RP2040) | 3.4 KB | 4.5 KB | 5.7 KB |
+| ARM Thumb | 3.4 KB | 4.7 KB | 5.9 KB |
+| RISC-V rv64 | 4.0 KB | 5.5 KB | 6.8 KB |
+| RISC-V rv32 | 4.1 KB | 5.5 KB | 6.8 KB |
+| Xtensa LX106 (ESP8266) | 4.2 KB | 5.8 KB | 7.3 KB |
+| ARM32 | 4.3 KB | 5.8 KB | 7.7 KB |
+| 68k | 4.4 KB | 6.2 KB | 7.8 KB |
+| MIPS32 | 4.7 KB | 6.6 KB | 8.7 KB |
+| x86-64 (GCC) | 4.6 KB | 6.1 KB | 8.0 KB |
+| AArch64 (ARM64) | 4.8 KB | 6.6 KB | 8.7 KB |
+| x86-32 | 5.3 KB | 7.2 KB | 9.2 KB |
+| PowerPC | 5.8 KB | 8.0 KB | 10.4 KB |
+| MSP430 (16-bit) | 7.8 KB | 10.7 KB | 12.8 KB |
+| AVR (ATmega328P) | 9.2 KB | 12.8 KB | 15.4 KB |
+| 68HC11 | 13.3 KB | 18.4 KB | 22.6 KB |
 <!-- SIZE_TABLE_END -->
 
 ### Lean build options
 
-Three compile-time `#define` guards let you strip optional subsystems
+Compile-time `#define` guards let you strip optional subsystems
 for ROM-constrained targets. Define them before including `FR_math.h`
 (or pass `-D` on the compiler command line):
 
 | Define | What it removes | Typical savings |
 |---|---|---|
-| `FR_CORE_ONLY` | Everything below (print + waves) | ~1.9 KB |
+| `FR_LEAN` | Degree trig, BAM tan, angle converters, `FR_log10`, `FR_hypot`, waves + ADSR | ~3.7 KB |
+| `FR_CORE_ONLY` | Print + waves (shorthand for both below) | ~1.9 KB |
 | `FR_NO_PRINT` | `FR_printNumF`, `FR_printNumD`, `FR_printNumH`, `FR_numstr` | ~1.3 KB |
 | `FR_NO_WAVES` | `fr_wave_*` (6 shapes), `fr_adsr_*` (ADSR envelope), `FR_HZ2BAM_INC` | ~0.6 KB |
+
+`FR_LEAN` keeps only radian trig (sin, cos, tan), inverse trig, sqrt,
+log2, ln, exp, pow2, and arithmetic — comparable to libfixmath's API at
+4.7 KB text. `FR_LEAN` implies `FR_NO_WAVES`.
 
 `FR_CORE_ONLY` is a convenience shorthand that defines both
 `FR_NO_PRINT` and `FR_NO_WAVES` in one step.
@@ -211,7 +227,7 @@ To regenerate this table, run the Docker cross-build
 (requires the [xelp](https://github.com/deftio/xelp) Docker image):
 
 ```bash
-scripts/crossbuild-docker.sh
+scripts/crossbuild_sizes.sh
 ```
 
 ### Example: RISC-V

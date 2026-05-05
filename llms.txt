@@ -9,7 +9,7 @@ or libraries. Pure C99, zero dependencies beyond `<stdint.h>`.
 - Repository: https://github.com/deftio/fr_math
 - Documentation: https://deftio.github.io/fr_math/
 - License: BSD-2-Clause
-- Version: 2.0.7
+- Version: 2.0.8
 
 ## Key concept: radix parameter
 
@@ -25,9 +25,8 @@ Common radix choices:
 ## Source files
 
 - `src/FR_math.h`   — all public declarations, macros, constants
-- `src/FR_math.c`   — all function implementations (~42KB)
+- `src/FR_math.c`   — all function implementations (trig tables inlined, ~45KB)
 - `src/FR_defs.h`   — type aliases: s8, s16, s32, u8, u16, u32
-- `src/FR_trig_table.h` — precomputed sine table (256 entries)
 - `src/FR_math_2D.h` / `src/FR_math_2D.cpp` — optional 2D transform class (C++)
 
 ## Types
@@ -82,6 +81,7 @@ s32 fr_tan(s32 rad, u16 radix);
 // BAM (Binary Angle Measurement) — u16 where 65536 = 360 degrees:
 s32 fr_cos_bam(u16 bam);
 s32 fr_sin_bam(u16 bam);
+s32 fr_tan_bam(u16 bam);
 
 // Degree API at any radix:
 s32 FR_Cos(s16 deg, u16 radix);
@@ -164,20 +164,24 @@ s32 ex    = FR_EXP(I2FR(1, R), R);        // e^1
 ## Building
 
 ```bash
-make lib       # build static library objects
-make test      # run all test suites
-make examples  # build example program
-make clean     # remove build artifacts
+make lib           # build static library objects
+make test          # run all test suites
+make examples      # build example programs
+make size-report   # cross-compile size report (Docker)
+make size-update   # size report + patch doc files
+make clean         # remove build artifacts
 ```
 
 ## Lean build options
 
 Define before including FR_math.h to exclude optional subsystems:
 
+- `FR_CORE_ONLY` — shorthand for FR_NO_PRINT + FR_NO_WAVES (~1.9 KB saved)
 - `FR_NO_PRINT` — removes FR_printNumF/D/H and FR_numstr (~1.3 KB saved)
 - `FR_NO_WAVES` — removes fr_wave_*, fr_adsr_*, FR_HZ2BAM_INC (~0.6 KB saved)
 
 ## Platform support
 
 Tested on: AVR (Arduino), ARM Cortex-M0/M4, ESP32 (Xtensa), RISC-V,
-x86/x64, MSP430, 68k, 8051. Code size is 4-8KB at -Os on 32-bit targets.
+x86/x64, MSP430, m68k, PowerPC, MIPS32, 68HC11.
+Code size is 3-9 KB at -Os on 32-bit targets (Lean to Full).

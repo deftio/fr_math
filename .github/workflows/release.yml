@@ -99,3 +99,27 @@ jobs:
           body_path: /tmp/release_notes.md
           draft: false
           prerelease: false
+
+  publish-pio:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PlatformIO
+        run: pip install platformio
+      - name: Publish to PlatformIO Registry
+        env:
+          PLATFORMIO_AUTH_TOKEN: ${{ secrets.PLATFORMIO_AUTH_TOKEN }}
+        run: pio pkg publish . --no-interactive
+
+  publish-espressif:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install compote (ESP Component Manager)
+        run: pip install idf-component-manager
+      - name: Publish to Espressif Component Registry
+        env:
+          IDF_COMPONENT_API_TOKEN: ${{ secrets.IDF_COMPONENT_API_TOKEN }}
+        run: compote component upload --name fr_math --namespace deftio

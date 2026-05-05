@@ -1,7 +1,7 @@
 # API Reference
 
 Every public symbol, grouped by topic. Each entry lists the radix
-convention, the precision, and the error / saturation behaviour. All
+convention, the precision, and the error / saturation behavior. All
 types are from `FR_defs.h`: `s8 s16 s32 s64` for
 signed and `u8 u16 u32 u64` for unsigned integers (these are
 aliases for the `<stdint.h>` types).
@@ -12,7 +12,7 @@ Most entries list **inputs**, **output**,
 **radix handling** and **precision**
 separately, because in a mixed-radix library those four things are
 what actually lets you plan an arithmetic pipeline without hidden
-quantisation. If you are new to fixed-point, the
+quantization. If you are new to fixed-point, the
 [Fixed-Point Primer](fixed-point-primer.md) explains the
 notation first; come back here once you're comfortable reading
 `s15.16` and `s0.15`.
@@ -79,6 +79,8 @@ and in return get float-like ergonomics with integer-only codegen.
 | `FR_OVERFLOW_POS` | `0x7FFFFFFF` (`INT32_MAX`) | Saturating ops when the true result exceeds `+2^31`. |
 | `FR_OVERFLOW_NEG` | `0x80000000` (`INT32_MIN`) | Saturating ops when the true result is below `−2^31`. |
 | `FR_DOMAIN_ERROR` | `0x80000000` (`INT32_MIN`) | Functions with an invalid input, e.g. `FR_sqrt(-1)`, `FR_log2(0)`, `FR_asin(2.0)`. **Shares the bit pattern of `FR_OVERFLOW_NEG`**, so don't mix a `≤ FR_OVERFLOW_NEG` check with a domain check — test for the exact sentinel. |
+| `FR_TRIG_MAXVAL` | `0x7FFFFFFF` (`INT32_MAX`) | Tangent saturation ceiling. Returned by `fr_tan_bam`, `fr_tan`, `fr_tan_deg`, and `FR_TanI` when the angle is near a pole (90° + k·180°). |
+| `FR_TRIG_MINVAL` | `-FR_TRIG_MAXVAL` | Tangent saturation floor. Negative-side pole saturation. |
 
 ### Common numerical constants (`FR_math.h`)
 
@@ -118,7 +120,7 @@ so call sites read as intent:
 | --- | --- | --- | --- |
 | `I2FR(i, r)` | `i`: integer; `r`: target radix in bits | `s32` at radix `r` | `(i) << (r)`. No bounds check. Use when you know `|i|` fits in `32 − r` signed bits. |
 | `FR2I(x, r)` | `x`: fixed-point at radix `r` | integer | `(x) >> (r)`. Truncates toward **−∞** (C's signed shift). `FR2I(-1, 4) == -1`, not 0. |
-| `FR_INT(x, r)` | `x`: fixed-point at radix `r` | integer | Truncates toward **zero**. `FR_INT(-1, 4) == 0`. Useful when you want C's normal integer-cast behaviour. |
+| `FR_INT(x, r)` | `x`: fixed-point at radix `r` | integer | Truncates toward **zero**. `FR_INT(-1, 4) == 0`. Useful when you want C's normal integer-cast behavior. |
 | `FR_NUM(i, f, d, r)` | `i`: integer part; `f`: decimal fraction digits; `d`: number of digits in `f`; `r`: target radix | `s32` at radix `r` | Build a fixed-point literal from decimal. `FR_NUM(12, 34, 2, 10)` is 12.34 at s.10. Rounds toward zero; for round-to-nearest, add half an LSB at the call site. |
 | `FR_numstr(s, r)` | `s`: null-terminated decimal string (e.g. `"3.14159"`); `r`: target radix | `s32` at radix `r` | Runtime string-to-fixed-point parser (inverse of `FR_printNumF`). Handles signs, leading whitespace, and leading-zero fractions like `"0.05"`. Up to 9 fractional digits. No malloc, no strtod, no libm. Returns 0 for NULL or empty input. |
 | `FR2D(x, r)` | `x`: fixed-point at radix `r` | `double` | Debug-only: `x / (double)(1 << r)`. Pulls in `libm` — compile it out of release builds. |
@@ -157,13 +159,13 @@ so call sites read as intent:
 | `FR_MAX(a, b)` | Two values of the same type | The larger of the two | Evaluates each argument once. |
 | `FR_CLAMP(x, lo, hi)` | `x`: value; `lo`, `hi`: bounds | `x` clamped to `[lo, hi]` | Equivalent to `FR_MIN(FR_MAX(x, lo), hi)`. |
 | `FR_DIV(x, xr, y, yr)` | `x`: numerator at radix `xr`; `y`: denominator at radix `yr` | `s32` at radix `xr` | Pre-scales the numerator in a 64-bit intermediate and **rounds to nearest** (adds half the divisor before truncating, with correct sign handling). Worst-case error ≤ 0.5 LSB. Works correctly across the full Q16.16 range. |
-| `FR_DIV_TRUNC(x, xr, y, yr)` | same as `FR_DIV` | `s32` at radix `xr` | `((s64)(x) << (yr)) / (s32)(y)`. Truncating division (rounds toward zero). This was the behaviour of `FR_DIV` in v2.0.0; use it when you need exact backward compatibility or when the truncation bias is acceptable. |
+| `FR_DIV_TRUNC(x, xr, y, yr)` | same as `FR_DIV` | `s32` at radix `xr` | `((s64)(x) << (yr)) / (s32)(y)`. Truncating division (rounds toward zero). This was the behavior of `FR_DIV` in v2.0.0; use it when you need exact backward compatibility or when the truncation bias is acceptable. |
 | `FR_DIV32(x, xr, y, yr)` | same as `FR_DIV` | `s32` at radix `xr` | `((s32)(x) << (yr)) / (s32)(y)`. 32-bit-only truncating path — requires `|x| < 2^(31 − yr)` to avoid overflow in the intermediate shift. Use on tiny targets (PIC, AVR, 8051) where 64-bit ops pull in unwanted compiler runtime code. |
 | `FR_MOD(x, y)` | `x`, `y`: same radix | remainder at the same radix | `(x) % (y)`. Standard C remainder semantics. |
 
 ## Arithmetic
 
-FR_Math splits arithmetic into three flavours. The
+FR_Math splits arithmetic into three flavors. The
 **macros** (`FR_ADD`, `FR_SUB`)
 are mixed-radix, inline, and wrap on overflow. The **s.16
 helper functions** (`FR_FixMuls`,
@@ -291,7 +293,7 @@ bits = 16. Going wider would only add noise, not precision.
 
 "But what if I want to pass in any signed angle without worrying
 about conversion?" That is exactly what `FR_CosI(deg)`,
-`FR_Cos(deg, radix)`, and `fr_cos(rad, radix)` are for. All three
+`fr_cos_deg(deg, radix)`, and `fr_cos(rad, radix)` are for. All three
 take *signed* inputs and reduce them to BAM for you. The only place
 you actually see a `u16` is at the internal `fr_cos_bam` /
 `fr_sin_bam` boundary, which you only call by hand if you *want*
@@ -346,7 +348,7 @@ Four shifts plus three adds — cheap on an 8051, AVR, or any
 hand-written DSP inner loop — and the answer has at most
 ±0.5 LSB of truncation error. The same discipline applies to
 the other direction: in `FR_DEG2BAM` the divide-by-360 is
-a compile-time constant, so any optimising compiler folds it into a
+a compile-time constant, so any optimizing compiler folds it into a
 multiply-by-reciprocal (or, on a weaker toolchain, a runtime call
 that you can inline yourself).
 
@@ -396,6 +398,7 @@ represents exactly 1.0 in the s15.16 output format.
 | --- | --- | --- |
 | `fr_cos_bam` | `s32 fr_cos_bam(u16 bam)` | s15.16, range [−65536, +65536]. Exact at cardinal angles. |
 | `fr_sin_bam` | `s32 fr_sin_bam(u16 bam)` | s15.16. Defined as `fr_cos_bam(bam − FR_BAM_QUADRANT)`. |
+| `fr_tan_bam` | `s32 fr_tan_bam(u16 bam)` | s15.16. Uses a 65-entry octant table for [0, 45°] and the reciprocal identity `tan(x) = 1/tan(90°−x)` for (45°, 90°). Saturates to `±FR_TRIG_MAXVAL` at the poles (90°, 270°). Returns exact 0 at 0° and 180°. No 64-bit intermediates; one 32-bit division only in the >45° path. |
 
 ### Radian-native
 
@@ -405,35 +408,35 @@ represents exactly 1.0 in the s15.16 output format.
 | `fr_sin` | `s32 fr_sin(s32 rad, u16 radix)` | Same convention. |
 | `fr_tan` | `s32 fr_tan(s32 rad, u16 radix)` | Returns at **radix 16** (`FR_TRIG_OUT_PREC`). Computed as `(sin << 16) / cos`; saturates to `±INT32_MAX` (`FR_TRIG_MAXVAL`) near π/2 + kπ where cos → 0. |
 
-### Integer-degree wrappers (legacy API)
+### Degree wrappers (current and legacy)
 
-The uppercase legacy API takes an angle in degrees.
-`FR_SinI`, `FR_CosI` and `FR_TanI`
-take plain integer degrees — the trailing *I* denotes
-*integer*. The variants *without* the `I`
-suffix (`FR_Sin`, `FR_Cos`, `FR_Tan`)
-accept a `radix` argument and treat the degree value as
-*fixed-point*, so you can pass fractional degrees like
-42.375°.
+The primary degree-based API uses lowercase `fr_` names.
+These are functions (not macros) that take a degree value as
+fixed-point at a caller-chosen radix:
+
+| Function | Signature | Notes |
+| --- | --- | --- |
+| `fr_sin_deg` | `s32 fr_sin_deg(s32 deg, u16 radix)` | `deg` is fixed-point degrees at `radix`. Returns s15.16. |
+| `fr_cos_deg` | `s32 fr_cos_deg(s32 deg, u16 radix)` | Same. |
+| `fr_tan_deg` | `s32 fr_tan_deg(s32 deg, u16 radix)` | Returns at radix 16; saturates to `±INT32_MAX` near 90° / 270°. |
+
+Pass `radix = 0` for plain integer degrees, or a higher radix
+for fractional degrees (e.g. 42.375° at radix 4).
+
+**Integer-degree macros** (`FR_SinI`, `FR_CosI`, `FR_TanI`)
+take plain integer degrees -- the trailing *I* denotes
+*integer*. These remain unchanged:
 
 | Symbol | Signature | Kind |
 | --- | --- | --- |
-| `FR_SinI` | `FR_SinI(deg)` → `s32` (s15.16) | Macro: `fr_sin_bam(FR_DEG2BAM(deg))`. Zero-cost inline. |
-| `FR_CosI` | `FR_CosI(deg)` → `s32` (s15.16) | Macro: `fr_cos_bam(FR_DEG2BAM(deg))`. |
+| `FR_SinI` | `FR_SinI(deg)` -> `s32` (s15.16) | Macro: `fr_sin_bam(FR_DEG2BAM(deg))`. Zero-cost inline. |
+| `FR_CosI` | `FR_CosI(deg)` -> `s32` (s15.16) | Macro: `fr_cos_bam(FR_DEG2BAM(deg))`. |
 | `FR_TanI` | `s32 FR_TanI(s16 deg)` | Function. Returns at radix 16; saturates to `±INT32_MAX` near 90° / 270°. |
-| `FR_Sin` | `s32 FR_Sin(s16 deg, u16 radix)` | `deg` is fixed-point at `radix`. Returns s15.16. |
-| `FR_Cos` | `s32 FR_Cos(s16 deg, u16 radix)` | Same. |
-| `FR_Tan` | `s32 FR_Tan(s16 deg, u16 radix)` | Returns at radix 16; saturates to `±INT32_MAX` near 90° / 270°. |
 
-### Degree wrappers on the BAM path
-
-If you're using the lowercase family and want to skip the
-radix entirely, two convenience macros cover pure integer degrees:
-
-| Macro | Expansion |
-| --- | --- |
-| `fr_cos_deg(deg)` | `fr_cos_bam(FR_DEG2BAM(deg))` |
-| `fr_sin_deg(deg)` | `fr_sin_bam(FR_DEG2BAM(deg))` |
+**Legacy aliases.** The uppercase `FR_Sin`, `FR_Cos`, and
+`FR_Tan` macros still work -- they map directly to
+`fr_sin_deg`, `fr_cos_deg`, and `fr_tan_deg` respectively.
+New code should use the `fr_` names.
 
 ## Inverse trigonometry
 

@@ -1,5 +1,8 @@
 # FR_Math Examples
 
+This directory contains examples on a few platforms for seeing how FR_math works.  For embedded platforms use of the built-in printxxx functions can help provide readable output in various radix formats.
+
+
 ## Arduino Examples
 
 Each example is a self-contained `.ino` sketch that prints results to
@@ -13,17 +16,31 @@ or PlatformIO, then open any example from **File > Examples > FR_Math**.
 | [wave-generators](wave-generators/wave-generators.ino) | sqr, tri, saw, PWM, noise, ADSR envelope |
 | [arduino_smoke](arduino_smoke/arduino_smoke.ino) | Compile-only smoke test — exercises every function group |
 
-## Desktop / POSIX Example
+## Desktop / POSIX Examples
+
+Each desktop example is self-contained with its own `Makefile` and `README.md`.
+Build artifacts stay within the example's directory.
 
 | Example | What it shows |
 |---|---|
-| [posix-example](posix-example/FR_Math_Example1.cpp) | Comprehensive demo of all library features including 2D transforms (requires `<stdio.h>`, `<math.h>`) |
+| [posix-example](posix-example/FR_Math_Example1.cpp) | Comprehensive demo of all library features including 2D transforms |
+| [fixed-point-basics](fixed-point-basics/) | Educational walkthrough: radix, conversions, add/sub/mul/div, saturation, formatted output |
+| [log-exp-curves](log-exp-curves/) | Sweep log2/ln/log10, pow2/exp/pow10, sqrt with error tables vs IEEE double |
+| [waveform-synth](waveform-synth/) | Wave generators + ADSR envelope with ASCII art and CSV output modes |
+| [trig-accuracy](trig-accuracy/) | FR_Math vs libfixmath trig accuracy comparison (requires libfixmath source) |
 
-Build the POSIX example with:
+Build all from the repo root:
 
 ```bash
-make examples        # produces build/fr_example
-./build/fr_example
+make examples        # builds all desktop examples
+make run-examples    # builds and runs examples 1-3, plus 4 if libfixmath present
+```
+
+Or build any single example from its directory:
+
+```bash
+cd examples/fixed-point-basics
+make run
 ```
 
 ## Using FR_Math in Arduino

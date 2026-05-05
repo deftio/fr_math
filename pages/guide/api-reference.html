@@ -5,7 +5,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>API Reference — FR_Math</title>
-  <meta name="description" content="Complete FR_Math API reference: inputs, outputs, radix, precision, and saturation behaviour for every public symbol.">
+  <meta name="description" content="Complete FR_Math API reference: inputs, outputs, radix, precision, and saturation behavior for every public symbol.">
   <link rel="stylesheet" href="../assets/main.css">
 </head>
 <body>
@@ -18,7 +18,7 @@
 <h1>API Reference</h1>
 
 <p>Every public symbol, grouped by topic. Each entry lists the radix
-convention, the precision, and the error / saturation behaviour. All
+convention, the precision, and the error / saturation behavior. All
 types are from <code>FR_defs.h</code>: <code>s8 s16 s32 s64</code> for
 signed and <code>u8 u16 u32 u64</code> for unsigned integers (these are
 aliases for the <code>&lt;stdint.h&gt;</code> types).</p>
@@ -29,7 +29,7 @@ aliases for the <code>&lt;stdint.h&gt;</code> types).</p>
 <strong>radix handling</strong> and <strong>precision</strong>
 separately, because in a mixed-radix library those four things are
 what actually lets you plan an arithmetic pipeline without hidden
-quantisation. If you are new to fixed-point, the
+quantization. If you are new to fixed-point, the
 <a href="fixed-point-primer.html">Fixed-Point Primer</a> explains the
 notation first; come back here once you&rsquo;re comfortable reading
 <code>s15.16</code> and <code>s0.15</code>.</p>
@@ -101,6 +101,8 @@ and in return get float-like ergonomics with integer-only codegen.</p>
 <tr><td><code>FR_OVERFLOW_POS</code></td><td><code>0x7FFFFFFF</code> (<code>INT32_MAX</code>)</td><td>Saturating ops when the true result exceeds <code>+2<sup>31</sup></code>.</td></tr>
 <tr><td><code>FR_OVERFLOW_NEG</code></td><td><code>0x80000000</code> (<code>INT32_MIN</code>)</td><td>Saturating ops when the true result is below <code>&minus;2<sup>31</sup></code>.</td></tr>
 <tr><td><code>FR_DOMAIN_ERROR</code></td><td><code>0x80000000</code> (<code>INT32_MIN</code>)</td><td>Functions with an invalid input, e.g. <code>FR_sqrt(-1)</code>, <code>FR_log2(0)</code>, <code>FR_asin(2.0)</code>. <strong>Shares the bit pattern of <code>FR_OVERFLOW_NEG</code></strong>, so don&rsquo;t mix a <code>&le; FR_OVERFLOW_NEG</code> check with a domain check &mdash; test for the exact sentinel.</td></tr>
+<tr><td><code>FR_TRIG_MAXVAL</code></td><td><code>0x7FFFFFFF</code> (<code>INT32_MAX</code>)</td><td>Tangent saturation ceiling. Returned by <code>fr_tan_bam</code>, <code>fr_tan</code>, <code>fr_tan_deg</code>, and <code>FR_TanI</code> when the angle is near a pole (90&deg; + k&middot;180&deg;).</td></tr>
+<tr><td><code>FR_TRIG_MINVAL</code></td><td><code>-FR_TRIG_MAXVAL</code></td><td>Tangent saturation floor. Negative-side pole saturation.</td></tr>
 </tbody>
 </table>
 
@@ -162,7 +164,7 @@ so call sites read as intent:</p>
   <td><code>FR_INT(x, r)</code></td>
   <td><code>x</code>: fixed-point at radix <code>r</code></td>
   <td>integer</td>
-  <td>Truncates toward <strong>zero</strong>. <code>FR_INT(-1, 4) == 0</code>. Useful when you want C&rsquo;s normal integer-cast behaviour.</td>
+  <td>Truncates toward <strong>zero</strong>. <code>FR_INT(-1, 4) == 0</code>. Useful when you want C&rsquo;s normal integer-cast behavior.</td>
 </tr>
 <tr>
   <td><code>FR_NUM(i, f, d, r)</code></td>
@@ -316,7 +318,7 @@ so call sites read as intent:</p>
   <td><code>FR_DIV_TRUNC(x, xr, y, yr)</code></td>
   <td><code>x</code>: numerator at radix <code>xr</code>; <code>y</code>: denominator at radix <code>yr</code></td>
   <td><code>((s64)(x) &lt;&lt; (yr)) / (s32)(y)</code></td>
-  <td>Truncating division (rounds toward zero). This was the behaviour of <code>FR_DIV</code> in v2.0.0; use it when you need exact backward compatibility or when the truncation bias is acceptable.</td>
+  <td>Truncating division (rounds toward zero). This was the behavior of <code>FR_DIV</code> in v2.0.0; use it when you need exact backward compatibility or when the truncation bias is acceptable.</td>
 </tr>
 <tr>
   <td><code>FR_DIV32(x, xr, y, yr)</code></td>
@@ -335,7 +337,7 @@ so call sites read as intent:</p>
 
 <h2>Arithmetic</h2>
 
-<p>FR_Math splits arithmetic into three flavours. The
+<p>FR_Math splits arithmetic into three flavors. The
 <strong>macros</strong> (<code>FR_ADD</code>, <code>FR_SUB</code>)
 are mixed-radix, inline, and wrap on overflow. The <strong>s.16
 helper functions</strong> (<code>FR_FixMuls</code>,
@@ -507,7 +509,7 @@ bits = 16. Going wider would only add noise, not precision.</p>
 
 <p>&ldquo;But what if I want to pass in any signed angle without
 worrying about conversion?&rdquo; That is exactly what
-<code>FR_CosI(deg)</code>, <code>FR_Cos(deg, radix)</code>, and
+<code>FR_CosI(deg)</code>, <code>fr_cos_deg(deg, radix)</code>, and
 <code>fr_cos(rad, radix)</code> are for. All three take
 <em>signed</em> inputs and reduce them to BAM for you. The only
 place you actually see a <code>u16</code> is at the internal
@@ -564,7 +566,7 @@ s16 deg = (s16)(x &gt;&gt; 13);
 hand-written DSP inner loop &mdash; and the answer has at most
 &plusmn;0.5 LSB of truncation error. The same discipline applies to
 the other direction: in <code>FR_DEG2BAM</code> the divide-by-360 is
-a compile-time constant, so any optimising compiler folds it into a
+a compile-time constant, so any optimizing compiler folds it into a
 multiply-by-reciprocal (or, on a weaker toolchain, a runtime call
 that you can inline yourself).</p>
 
@@ -614,6 +616,7 @@ radix.</p>
 <tbody>
 <tr><td><code>fr_cos_bam</code></td><td><code>s32 fr_cos_bam(u16 bam)</code></td><td>s15.16, range [&minus;65536, +65536]. Exact at cardinal angles.</td></tr>
 <tr><td><code>fr_sin_bam</code></td><td><code>s32 fr_sin_bam(u16 bam)</code></td><td>s15.16, range [&minus;65536, +65536]. Exact at cardinal angles. Defined as <code>fr_cos_bam(bam &minus; FR_BAM_QUADRANT)</code>.</td></tr>
+<tr><td><code>fr_tan_bam</code></td><td><code>s32 fr_tan_bam(u16 bam)</code></td><td>s15.16. Uses a 65-entry octant table for [0, 45&deg;] and the reciprocal identity <code>tan(x) = 1/tan(90&deg;&minus;x)</code> for (45&deg;, 90&deg;). Saturates to <code>&plusmn;FR_TRIG_MAXVAL</code> at the poles (90&deg;, 270&deg;). Returns exact 0 at 0&deg; and 180&deg;. No 64-bit intermediates; one 32-bit division only in the &gt;45&deg; path.</td></tr>
 </tbody>
 </table>
 
@@ -628,16 +631,18 @@ radix.</p>
 </tbody>
 </table>
 
-<h3>Integer-degree wrappers (legacy API)</h3>
+<h3>Degree wrappers</h3>
 
-<p>The uppercase legacy API takes an angle in degrees.
+<p>The degree API takes an angle in degrees.
 <code>FR_SinI</code>, <code>FR_CosI</code> and <code>FR_TanI</code>
 take plain integer degrees &mdash; the trailing <em>I</em> denotes
-<em>integer</em>. The variants <em>without</em> the <code>I</code>
-suffix (<code>FR_Sin</code>, <code>FR_Cos</code>, <code>FR_Tan</code>)
-accept a <code>radix</code> argument and treat the degree value as
-<em>fixed-point</em>, so you can pass fractional degrees like
-42.375&deg;.</p>
+<em>integer</em>. The primary degree wrappers with a
+<code>radix</code> argument are <code>fr_sin_deg</code>,
+<code>fr_cos_deg</code>, and <code>fr_tan_deg</code> &mdash; they
+treat the degree value as <em>fixed-point</em>, so you can pass
+fractional degrees like 42.375&deg;. The uppercase names
+<code>FR_Sin</code>, <code>FR_Cos</code>, and <code>FR_Tan</code>
+are legacy aliases that map to the same functions.</p>
 
 <table>
 <thead><tr><th>Symbol</th><th>Signature</th><th>Kind</th></tr></thead>
@@ -645,24 +650,23 @@ accept a <code>radix</code> argument and treat the degree value as
 <tr><td><code>FR_SinI</code></td><td><code>FR_SinI(deg)</code> &rarr; <code>s32</code> (s15.16)</td><td>Macro: <code>fr_sin_bam(FR_DEG2BAM(deg))</code>. Zero-cost inline.</td></tr>
 <tr><td><code>FR_CosI</code></td><td><code>FR_CosI(deg)</code> &rarr; <code>s32</code> (s15.16)</td><td>Macro: <code>fr_cos_bam(FR_DEG2BAM(deg))</code>.</td></tr>
 <tr><td><code>FR_TanI</code></td><td><code>s32 FR_TanI(s16 deg)</code></td><td>Function. Returns at radix 16; saturates to <code>&plusmn;INT32_MAX</code> near 90&deg; / 270&deg;.</td></tr>
-<tr><td><code>FR_Sin</code></td><td><code>s32 FR_Sin(s16 deg, u16 radix)</code></td><td><code>deg</code> is fixed-point at <code>radix</code>. Returns s15.16.</td></tr>
-<tr><td><code>FR_Cos</code></td><td><code>s32 FR_Cos(s16 deg, u16 radix)</code></td><td>Same.</td></tr>
-<tr><td><code>FR_Tan</code></td><td><code>s32 FR_Tan(s16 deg, u16 radix)</code></td><td>Returns at radix 16; saturates to <code>&plusmn;INT32_MAX</code> near 90&deg; / 270&deg;.</td></tr>
+<tr><td><code>fr_sin_deg</code></td><td><code>s32 fr_sin_deg(s32 deg, u16 radix)</code></td><td>Function. <code>deg</code> is fixed-point at <code>radix</code>. Returns s15.16.</td></tr>
+<tr><td><code>fr_cos_deg</code></td><td><code>s32 fr_cos_deg(s32 deg, u16 radix)</code></td><td>Function. Same.</td></tr>
+<tr><td><code>fr_tan_deg</code></td><td><code>s32 fr_tan_deg(s32 deg, u16 radix)</code></td><td>Function. Returns at radix 16; saturates to <code>&plusmn;INT32_MAX</code> near 90&deg; / 270&deg;.</td></tr>
+<tr><td><code>FR_Sin</code></td><td><code>FR_Sin(deg, radix)</code></td><td>Legacy macro alias for <code>fr_sin_deg</code>.</td></tr>
+<tr><td><code>FR_Cos</code></td><td><code>FR_Cos(deg, radix)</code></td><td>Legacy macro alias for <code>fr_cos_deg</code>.</td></tr>
+<tr><td><code>FR_Tan</code></td><td><code>FR_Tan(deg, radix)</code></td><td>Legacy macro alias for <code>fr_tan_deg</code>.</td></tr>
 </tbody>
 </table>
 
-<h3>Degree wrappers on the BAM path</h3>
+<h3>Degree-to-BAM path</h3>
 
-<p>If you&rsquo;re using the lowercase family and want to skip the
-radix entirely, two convenience macros cover pure integer degrees:</p>
-
-<table>
-<thead><tr><th>Macro</th><th>Expansion</th></tr></thead>
-<tbody>
-<tr><td><code>fr_cos_deg(deg)</code></td><td><code>fr_cos_bam(FR_DEG2BAM(deg))</code></td></tr>
-<tr><td><code>fr_sin_deg(deg)</code></td><td><code>fr_sin_bam(FR_DEG2BAM(deg))</code></td></tr>
-</tbody>
-</table>
+<p><code>fr_cos_deg</code>, <code>fr_sin_deg</code>, and
+<code>fr_tan_deg</code> are now functions (not macros). They accept
+a fixed-point degree value with a <code>radix</code> argument,
+convert to BAM internally, and call the BAM core. For plain integer
+degrees with no radix parameter, use <code>FR_CosI</code> /
+<code>FR_SinI</code> / <code>FR_TanI</code> instead.</p>
 
 <h2>Inverse trigonometry</h2>
 

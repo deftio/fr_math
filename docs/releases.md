@@ -4,16 +4,27 @@ Release highlights. For the full per-symbol change log, see
 [release_notes.md](https://github.com/deftio/fr_math/blob/master/release_notes.md)
 in the repo.
 
+## v2.0.8 — 2026
+
+Tangent accuracy rewrite and trig rounding fix.
+
+- **BAM-native tangent**: new `fr_tan_bam(u16 bam)` with 65-entry octant table (130 bytes). No 64-bit math. `FR_TanI`, `FR_Tan`, `fr_tan` are now thin wrappers.
+- **Round-to-nearest fix**: radian/degree trig wrappers now round instead of truncating when converting to BAM. Peak error drops from ~1.03% to 0.16% on the radian path, matching BAM-native accuracy.
+- **Conversion macro trimming**: `FR_DEG2BAM` and `FR_RAD2BAM` reduced to ~18-21 bits (from ~28 bits). Verified: no measurable accuracy impact.
+- **`FR_TRIG_MINVAL` fixed**: now `-FR_TRIG_MAXVAL` (was `-FR_TRIG_MASK`)
+
+---
+
 ## v2.0.7 — 2026
 
 README restructure, accuracy table cleanup, expanded cross-compile support.
 
 - **`FR_CORE_ONLY` convenience define** — single `#define` strips both print helpers and wave generators
 - **Accuracy table cleanup** — removed LSB column (percent error is the user-facing metric)
-- **New cross-compile targets** — RP2040 (Cortex-M0+), STM32 (Cortex-M4), 68HC11 added to Docker build
-- **Two-column size table** — Core (`-DFR_CORE_ONLY`) vs Full for every target
-- **`scripts/update_sizes.sh`** — auto-patches size tables from `build/sizes.csv`
-- README reordered: accuracy table first, then function list, then size table
+- **New cross-compile targets** — RP2040 (Cortex-M0+), STM32 (Cortex-M4), 68HC11, MIPS32 added to Docker build
+- **Three-column size table** — Lean / Core / Full for every target, sorted 8-bit → 64-bit
+- **Consolidated `scripts/crossbuild_sizes.sh`** — single script runs Docker, builds, writes CSV + markdown, patches docs (replaces three separate scripts)
+- README reordered and cleaned up: accuracy table first, badges as standard markdown, concise build flavor descriptions
 
 ---
 
@@ -124,7 +135,7 @@ with v2.0.0 except where noted.
 - `FR_DIV(x, xr, y, yr)` — fixed-point division with 64-bit
   pre-scaling. Now **rounds to nearest** (≤ 0.5 LSB error)
   instead of truncating. `FR_DIV_TRUNC` preserves the old
-  truncating behaviour for backward compatibility. `FR_DIV32` is
+  truncating behavior for backward compatibility. `FR_DIV32` is
   the 32-bit-only truncating path.
 - `FR_MOD(x, xr, y, yr)` — fixed-point modulus.
 
@@ -149,7 +160,7 @@ with v2.0.0 except where noted.
 | FR_atan signature | `(input, radix)` → s16 degrees | `(input, radix, out_radix)` → s32 radians |
 | FR_atan2 signature | `(y, x)` → s16 degrees | `(y, x, out_radix)` → s32 radians |
 | FR_BAM2RAD | off by 1024× (bug) | correct |
-| FR_DIV rounding | truncates toward zero | rounds to nearest (use `FR_DIV_TRUNC` for old behaviour) |
+| FR_DIV rounding | truncates toward zero | rounds to nearest (use `FR_DIV_TRUNC` for old behavior) |
 
 ---
 
@@ -187,7 +198,7 @@ mandatory.
   dropped.
 - `FR_atan`, `FR_Tan`, `FR_TanI`:
   wiring and overflow fixes.
-- `FR_printNumD/F/H`: fixed undefined behaviour on
+- `FR_printNumD/F/H`: fixed undefined behavior on
   `INT_MIN` and a broken fraction extraction in the
   v1 code.
 - `FR_DEG2RAD` / `FR_RAD2DEG`: macro bodies
@@ -205,7 +216,7 @@ mandatory.
   `FR_BAM2DEG`, `FR_RAD2BAM`,
   `FR_BAM2RAD`. BAM (16 bits per full circle) is the
   natural integer representation for phase accumulators and
-  gives zero quantisation at the wraparound.
+  gives zero quantization at the wraparound.
 - **Square root and hypot**: `FR_sqrt`
   uses a digit-by-digit integer isqrt on `int64_t`;
   `FR_hypot` computes `sqrt(x² + y²)`
@@ -259,10 +270,9 @@ mandatory.
 
 ### Test suite
 
-v2 ships with **42 tests** across six test binaries
-and a characterisation suite (`test_tdd.cpp`) that pins
-numerical behaviour to bit-exact reference values. Overall line
-coverage is **99%** on the library sources.
+v2 ships with a full test suite covering **99%** of library
+source lines, plus a characterization suite (`test_tdd.cpp`)
+that pins numerical behavior to bit-exact reference values.
 
 ## v1.0.3 — 2025
 
@@ -298,6 +308,5 @@ FR_Math has been in continuous service since **2000**,
 when it was written to run 2D graphics transforms on 16 MHz 68k
 Palm Pilots for Trumpetsoft's *Inkstorm*. It has since
 been ported to ARM, x86, MIPS, RISC-V, and a menagerie of 8- and
-16-bit embedded targets. v2.0.7 is the current release with a
-full test suite, a bit-exact numerical specification, and CI on
-every push.
+16-bit embedded targets. The current release has a full test
+suite, a bit-exact numerical specification, and CI on every push.
