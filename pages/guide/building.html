@@ -107,30 +107,29 @@ reference.</p>
 
 <h2>The test suite</h2>
 
-<p>Tests live under <code>tests/</code> and are split into six
+<p>Tests live under <code>tests/</code> and are split into seven
 binaries to keep compile times low:</p>
 
 <table>
 <thead><tr><th>Binary</th><th>What it checks</th></tr></thead>
 <tbody>
-<tr><td><code>test_basic</code></td><td>Radix conversions, <code>FR_ADD</code>, <code>FR_FixMuls</code>, rounding.</td></tr>
-<tr><td><code>test_trig</code></td><td>Integer-degree trig (<code>fr_sin_deg</code> et al.).</td></tr>
-<tr><td><code>test_trig_radians</code></td><td>Radian / BAM trig and the v2 <code>fr_sin</code> API.</td></tr>
-<tr><td><code>test_log_exp</code></td><td>Log base 2 / ln / log10 and their inverses.</td></tr>
+<tr><td><code>fr_test</code></td><td>Radix conversions, <code>FR_ADD</code>, <code>FR_FixMuls</code>, rounding (legacy harness).</td></tr>
+<tr><td><code>test_comprehensive</code></td><td>Trig (degree, radian, BAM), log/exp, sqrt, hypot.</td></tr>
 <tr><td><code>test_2d</code></td><td>2D transforms, determinants, inverses.</td></tr>
-<tr><td><code>test_full_coverage</code></td><td>Dark-corner cases: overflow sentinels, edge radixes, round-trips.</td></tr>
+<tr><td><code>test_overflow</code></td><td>Overflow sentinels, saturation, edge radixes.</td></tr>
+<tr><td><code>test_full</code></td><td>Full-coverage dark-corner cases and round-trips.</td></tr>
+<tr><td><code>test_2d_complete</code></td><td>Extended 2D: matrix composition, inverse, point transforms.</td></tr>
 <tr><td><code>test_tdd</code></td><td>Characterization tests pinned to bit-exact reference values.</td></tr>
 </tbody>
 </table>
 
-<p>As of v2.0.0 the suite contains <strong>42 tests</strong> across
-those binaries and covers <strong>99%</strong> of the library source.
+<p>The suite covers <strong>99%</strong> of the library source.
 Every public symbol is exercised at least once.</p>
 
 <h3>Running a single binary</h3>
 
-<pre><code class="language-bash">make build/test_basic
-./build/test_basic
+<pre><code class="language-bash">make test-comprehensive
+./build/test_comprehensive
 
 # or all of them at once
 make test</code></pre>
@@ -252,7 +251,7 @@ or static archive without section-level dead-code elimination.</p>
 <p>To regenerate this table, run the Docker cross-build
 (requires the <a href="https://github.com/deftio/xelp">xelp</a> Docker image):</p>
 
-<pre><code class="language-bash">scripts/crossbuild-docker.sh</code></pre>
+<pre><code class="language-bash">scripts/crossbuild_sizes.sh</code></pre>
 
 <h3>Example: RISC-V</h3>
 

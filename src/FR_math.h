@@ -53,21 +53,14 @@ extern "C"
 #include "FR_defs.h"
 #endif
 
-/* Quick Note on MACRO param wrapping:
- * All macro inputs are wrapped in paranthesis in this code.
- * eg: #define MACRO_X_SQUARED(x)  ((x)*(x)) //<<-- note internal paranthesis
- * this is done because macros use true source substitution in C/C++ so a if
- * a macro internally uses many operators of mixed precedence e.g. >> and * together
- * undesired behavior can result if the parameter "passed" in the the macro is a
- * a complex contruct e.g. instead of being a value or single variable is a
- * something like 3+4*5  --> all of this would gets substituted in to the MACRO
- * expression and parans eliminate chances for odd behavior.
- * For example:
- * MACRO_X_SQUARED_BAD(x) (x*x)
- * will expand this way:
- * 3+4*5*3+4*5 ==> 3+60+20 == 83 // due to precedence operations whereas
- * MACRO_X_SQUARED(x) ((x)*(x))
- * (3+4*5)*(3+4*5) ==> (3+20)*(3+20) == (23)*(23) == 529
+/* Quick note on macro parameter wrapping:
+ * Arguments are parenthesized in expansions, e.g.
+ *   #define MACRO_X_SQUARED(x)  ((x)*(x))   // inner parens around each x
+ * Macros substitute text as-is. If a parameter is an expression like 3+4*5
+ * and the body mixes operators without extra parentheses, precedence errors
+ * follow. Parenthesize parameters (and fragile subexpressions) in the macro body.
+ * Example: MACRO_X_SQUARED_BAD(x)  (x*x)  ->  3+4*5*3+4*5  == 83 (wrong).
+ *          MACRO_X_SQUARED(x)  ((x)*(x))  ->  (3+4*5)*(3+4*5)  == 529 (right).
  */
 
 /*absolute value for integer and fixed radix types*/

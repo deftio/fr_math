@@ -31,7 +31,7 @@ dev/                  Development notes and planning (not shipped)
 
 ```bash
 make lib              # compile library objects
-make test             # run all 7 test suites (27+ tests)
+make test             # run full test suite (99% line coverage)
 make examples         # build example programs
 make size-report      # cross-compile size report (Docker)
 make size-update      # size report + patch doc files

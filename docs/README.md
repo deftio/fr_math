@@ -42,8 +42,8 @@ or any tooling. If you want the browser version, look in
 
 Errors below are measured at Q16.16 (s15.16). All functions accept any
 radix — Q16.16 is just the reference point for the table. See the
-[TDD report](../build/test_tdd_report.md) for sweeps at radixes 8, 12,
-16, and 24.
+TDD report (run `make test-tdd` to generate `build/test_tdd_report.md`)
+for sweeps at radixes 8, 12, 16, and 24.
 
 <!-- ACCURACY_TABLE_START -->
 | Function | Max err (%)*| Avg err (%) | Note |
@@ -227,7 +227,7 @@ Sizes measured with `arm-none-eabi-gcc -mcpu=cortex-m0 -mthumb -Os`.
 libfixmath covers trig/sqrt/exp in Q16.16 only; FR_Math includes
 log/ln/log10, wave generators, ADSR, print helpers, and variable radix.
 CMSIS-DSP estimate is for the math function subset only.
-See [`scripts/crossbuild-docker.sh`](../scripts/crossbuild-docker.sh) for
+See [`scripts/crossbuild_sizes.sh`](../scripts/crossbuild_sizes.sh) for
 the build script.
 
 ## History

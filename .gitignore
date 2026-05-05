@@ -56,8 +56,8 @@ htmlcov/
 .idea/
 *.sublime-*
 
-# Claude Code local files
-CLAUDE.local.md
+# Claude (Anthropic) project-local files — not part of the library
+CLAUDE*.md
 .claude/
 
 # OS files

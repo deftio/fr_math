@@ -75,7 +75,7 @@ echo -e "${GREEN}  ok${NC}"
 
 # Print host-compiled library sizes so the developer can see how the
 # objects came out without having to dig in build/. This is host-only;
-# for a multi-arch comparison run scripts/size_report.sh.
+# for a multi-arch comparison run scripts/crossbuild_sizes.sh.
 print_host_size() {
     local host_arch
     host_arch="$(uname -m 2>/dev/null || echo unknown)"
@@ -129,6 +129,6 @@ echo -e "${GREEN}=========================================${NC}"
 echo ""
 echo "Next steps:"
 echo "  - ./scripts/coverage_report.sh    (coverage analysis)"
-echo "  - ./scripts/size_report.sh        (object file sizes)"
+echo "  - ./scripts/crossbuild_sizes.sh   (object file sizes)"
 echo "  - ./tools/make_release.sh         (guided release pipeline)"
 echo ""

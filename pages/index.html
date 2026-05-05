@@ -46,8 +46,8 @@ into a single format.</p>
 
 <p>Errors below are measured at Q16.16 (s15.16). All functions accept any
 radix &mdash; Q16.16 is just the reference point for the table.
-See the <a href="https://github.com/deftio/fr_math/blob/master/build/test_tdd_report.md">TDD
-report</a> for sweeps at radixes 8, 12, 16, and 24.</p>
+Run <code>make test-tdd</code> to generate the TDD report
+(<code>build/test_tdd_report.md</code>) with sweeps at radixes 8, 12, 16, and 24.</p>
 
 <!-- ACCURACY_TABLE_START -->
 <table>
@@ -131,14 +131,14 @@ the linker will also strip any unused functions automatically, so these guards
 are most useful when you include the library as a single <code>.c</code> file
 or static archive without section-level dead-code elimination.</p>
 
-<h2>Why fixed-point, in 2026?</h2>
+<h2>Why fixed-point?</h2>
 
-<p>Most application code today has an FPU and can use <code>float</code>
-freely. But there are still large, interesting corners where
-fixed-point pays off:</p>
+<p>Many modern microcontrollers have an FPU and can use <code>float</code>
+freely. Older and low-cost MCUs remain common. Fixed-point is often faster and
+more deterministic than <code>float</code>, and it excels in situations like:</p>
 
 <ul>
-  <li><strong>8- and 16-bit MCUs</strong> (AVR, MSP430, 8051, sdcc) where the
+  <li><strong>8- and 16-bit MCUs</strong> (AVR, MSP430, 8051, SDCC) where the
       FPU does not exist and even software float is too slow or too
       large.</li>
   <li><strong>Hot inner loops on any CPU</strong> where a
@@ -249,7 +249,7 @@ want to understand <em>how</em> the radix notation works first.</p>
 FR_Math includes log/ln/log10, wave generators, ADSR, print helpers,
 and variable radix. CMSIS-DSP estimate is for the math function subset
 only. See
-<a href="https://github.com/deftio/fr_math/blob/master/scripts/crossbuild-docker.sh">scripts/crossbuild-docker.sh</a>
+<a href="https://github.com/deftio/fr_math/blob/master/scripts/crossbuild_sizes.sh">scripts/crossbuild_sizes.sh</a>
 for the build script.</small></p>
 
 <h2>History</h2>

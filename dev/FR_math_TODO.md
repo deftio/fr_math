@@ -1,6 +1,8 @@
-# FR_Math TODO 
-[![Build Status](https://travis-ci.org/deftio/fr_math.svg?branch=master)](https://travis-ci.org/deftio/fr_math)
-[![Coverage Status](https://coveralls.io/repos/github/deftio/fr_math/badge.svg?branch=master)](https://coveralls.io/github/deftio/fr_math?branch=master)
+# FR_Math TODO
+
+[![CI](https://github.com/deftio/fr_math/actions/workflows/ci.yml/badge.svg)](https://github.com/deftio/fr_math/actions/workflows/ci.yml)
+
+*Historical scratchpad — not maintained as a roadmap. For current build/test, see repo root `README.md` and `agents.md`.*
 
 (c) M. A. Chatterjee 2000-2016
 

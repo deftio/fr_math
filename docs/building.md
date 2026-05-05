@@ -14,9 +14,10 @@ FR_Math has no dependencies beyond a C99 compiler and
 - Optional: `lcov` / `gcov` for coverage
   reports.
 
-There is no Autotools, no CMake, no Ninja, no package-manager
-integration. The library is small enough that the Makefile fits on
-one screen.
+There is no Autotools, no Ninja, no package-manager integration.
+The primary build system is a single Makefile. A `CMakeLists.txt`
+exists for ESP-IDF integration only — it is not a general-purpose
+CMake build.
 
 ## Makefile targets
 
@@ -90,28 +91,27 @@ See `release_management.md` for the full step-by-step reference.
 
 ## The test suite
 
-Tests live under `tests/` and are split into six
+Tests live under `tests/` and are split into seven
 binaries to keep compile times low:
 
 | Binary | What it checks |
 | --- | --- |
-| `test_basic` | Radix conversions, `FR_ADD`, `FR_FixMuls`, rounding. |
-| `test_trig` | Integer-degree trig (`fr_sin_deg` et al.). |
-| `test_trig_radians` | Radian / BAM trig and the v2 `fr_sin` API. |
-| `test_log_exp` | Log base 2 / ln / log10 and their inverses. |
+| `fr_test` | Radix conversions, `FR_ADD`, `FR_FixMuls`, rounding (legacy harness). |
+| `test_comprehensive` | Trig (degree, radian, BAM), log/exp, sqrt, hypot. |
 | `test_2d` | 2D transforms, determinants, inverses. |
-| `test_full_coverage` | Dark-corner cases: overflow sentinels, edge radixes, round-trips. |
+| `test_overflow` | Overflow sentinels, saturation, edge radixes. |
+| `test_full` | Full-coverage dark-corner cases and round-trips. |
+| `test_2d_complete` | Extended 2D: matrix composition, inverse, point transforms. |
 | `test_tdd` | Characterization tests pinned to bit-exact reference values. |
 
-As of v2.0.0 the suite contains **42 tests** across
-those binaries and covers **99%** of the library source.
+The suite covers **99%** of the library source.
 Every public symbol is exercised at least once.
 
 ### Running a single binary
 
 ```bash
-make build/test_basic
-./build/test_basic
+make test-comprehensive
+./build/test_comprehensive
 
 # or all of them at once
 make test
@@ -227,7 +227,7 @@ To regenerate this table, run the Docker cross-build
 (requires the [xelp](https://github.com/deftio/xelp) Docker image):
 
 ```bash
-scripts/crossbuild-docker.sh
+scripts/crossbuild_sizes.sh
 ```
 
 ### Example: RISC-V

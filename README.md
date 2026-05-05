@@ -1,6 +1,6 @@
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-blue.svg)](https://opensource.org/licenses/BSD-2-Clause)
 [![CI](https://github.com/deftio/fr_math/actions/workflows/ci.yml/badge.svg)](https://github.com/deftio/fr_math/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen.svg)](#building-and-testing)
+[![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen.svg)](#building-and-testing)
 [![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://deftio.github.io/fr_math/)
 [![Version](https://img.shields.io/badge/version-2.0.8-blue.svg)](release_notes.md)
 
@@ -15,7 +15,7 @@ See: **[Documentation & Guide](https://deftio.github.io/fr_math/)** — for API 
  
 **FR_Math** is a compact, integer-only fixed-point math library built for systems where floating point is too slow, too big, or unavailable. Designed for embedded targets ranging from legacy 16 MHz 68k processors to modern Cortex-M and RISC-V cores, it provides a full suite of math primitives — trigonometry, logarithms, roots, transforms, and signal generators — while remaining deterministic, portable, and small.
  
-Unlike most fixed-point libraries, FR_Math lets the caller choose the binary point (raddix) per operation, trading precision and range explicitly instead of locking into a single format. FR_math is Pure C (C99/C11/C17,with) with C++ wrappers.
+Unlike most fixed-point libraries, FR_Math lets the caller choose the binary point (radix) per operation, trading precision and range explicitly instead of locking into a single format. Pure C with C++ wrappers — compiles cleanly under C99, C11, C17, C++11 and later.
 Compiles under Arduino, PlatformIO, Espressif, many older embedded targets.   
 Zero dependencies beyond `<stdint.h>`.
 

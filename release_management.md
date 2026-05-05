@@ -20,7 +20,7 @@ All version-bearing files are kept in sync via
 | `./scripts/build.sh` | Clean rebuild + run tests (one-shot) |
 | `./scripts/clean_build.sh` | Wipe `build/` and `coverage/`, recreate them |
 | `./scripts/coverage_report.sh` (or `make coverage`) | gcov coverage table |
-| `./scripts/size_report.sh` (or `make size-report`) | Multi-arch object-size report |
+| `./scripts/crossbuild_sizes.sh` (or `make size-report`) | Multi-arch object-size report (Docker) |
 | `./scripts/sync_version.sh` | Propagate `FR_MATH_VERSION_HEX` to every versioned file |
 | `./scripts/sync_version.sh --check` | Drift check (non-destructive) |
 | `./tools/make_release.sh` | Guided release pipeline (validate → PR → merge → tag → publish) |
@@ -77,7 +77,7 @@ start, so do not run it inside a session that depends on pre-existing
 Invoked automatically by `make coverage` and by
 `tools/make_release.sh`.
 
-### `scripts/size_report.sh` — multi-architecture size report
+### `scripts/crossbuild_sizes.sh` — multi-architecture size report
 
 Compiles `src/FR_math.c` against every cross-toolchain it can find and
 prints a formatted table of object sizes. Architectures attempted:
@@ -242,7 +242,7 @@ invoked individually.
 
 | Target | Effect |
 | --- | --- |
-| `make size-report` | Delegates to `scripts/size_report.sh` (multi-arch table) |
+| `make size-report` | Delegates to `scripts/crossbuild_sizes.sh` (multi-arch table, Docker) |
 | `make size-simple` | `size` (or `ls -lh`) on `build/*.o` for the current platform only |
 
 ### Clean
@@ -290,7 +290,7 @@ loop is:
 ```bash
 ./scripts/build.sh           # clean rebuild + tests
 ./scripts/coverage_report.sh # coverage after a change
-./scripts/size_report.sh     # size after a change
+./scripts/crossbuild_sizes.sh     # size after a change
 ```
 
 ---

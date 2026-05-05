@@ -270,10 +270,9 @@ mandatory.
 
 ### Test suite
 
-v2 ships with **42 tests** across six test binaries
-and a characterization suite (`test_tdd.cpp`) that pins
-numerical behavior to bit-exact reference values. Overall line
-coverage is **99%** on the library sources.
+v2 ships with a full test suite covering **99%** of library
+source lines, plus a characterization suite (`test_tdd.cpp`)
+that pins numerical behavior to bit-exact reference values.
 
 ## v1.0.3 — 2025
 
