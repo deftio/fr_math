@@ -20,7 +20,7 @@ Unlike most fixed-point libraries, FR_Math lets the caller choose the binary poi
 Compiles under Arduino, PlatformIO, Espressif, many older embedded targets.   
 Zero dependencies beyond `<stdint.h>`.
 
-Note [qf_math](github.com/deftio/qf_math) is the float32 version of this library with the same functions.  If you have floating point support on your platform and want a faster, lighter version of libm consider that library.
+Note [qf_math](https://github.com/deftio/qf_math) is the float32 version of this library with the same functions.  If you have floating point support on your platform and want a faster, lighter version of libm consider that library.
 
 ### Measured accuracy
 
