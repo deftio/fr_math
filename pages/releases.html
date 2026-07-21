@@ -21,6 +21,19 @@
 <a href="https://github.com/deftio/fr_math/blob/master/release_notes.md">release_notes.md</a>
 in the repo.</p>
 
+<h2>v2.0.9 &mdash; 2026</h2>
+
+<p>Arduino/ESP32 build fix and a saturating-add correctness fix. No API changes.</p>
+
+<ul>
+  <li><strong>Arduino <code>u8</code>/<code>u16</code> type error fixed</strong> (<a href="https://github.com/deftio/fr_math/issues/11">issue #11</a>): sketches failed to compile on ESP32 &mdash; and on any core other than AVR/SAM/SAMD &mdash; with <code>'u16' does not name a type</code>. <code>FR_defs.h</code> had skipped its typedefs in Arduino C++ builds, assuming <code>USBAPI.h</code> always provides them; it now emits them using <code>USBAPI.h</code>'s exact underlying types, which works whether or not that header is present. Thanks to <a href="https://github.com/beaka">@beaka</a> for the report.</li>
+  <li><strong><code>FR_FixAddSat</code> correctness</strong>: the overflow check relied on signed-overflow UB and was optimized away at <code>-Os</code>, so negative overflow returned a wrapped positive value instead of <code>FR_OVERFLOW_NEG</code>. Also, <code>FR_FixAddSat(0, 0)</code> wrongly returned <code>FR_OVERFLOW_POS</code>. Both fixed.</li>
+  <li><strong>New <code>test_arduino_compat</code> suite</strong>: compiles the headers as each Arduino core family does (with and without <code>USBAPI.h</code> typedefs, both include orders, C and C++), catching core-specific type clashes without a board toolchain.</li>
+  <li><strong>Coverage</strong>: 98% of library source lines, every mathematically reachable branch exercised.</li>
+</ul>
+
+<hr>
+
 <h2>v2.0.8 &mdash; 2026</h2>
 
 <p>Tangent accuracy rewrite and trig rounding fix.</p>

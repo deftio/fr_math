@@ -64,19 +64,21 @@ typedef signed   long long int64_t;
 #endif /* FR_NO_STDINT */
 
 /*
- * Arduino's USBAPI.h typedefs u8 and u16 as unsigned char / unsigned short.
- * On AVR, uint8_t/uint16_t resolve to unsigned int types, which are the same
- * width but different C++ types — causing a redefinition error.  Skip those
- * two typedefs when building in an Arduino environment; the Arduino-provided
- * types are the same width and work identically.
+ * Arduino's AVR/SAM/SAMD cores (USBAPI.h, pulled in by Arduino.h) typedef
+ * u8 as unsigned char and u16 as unsigned short.  On AVR, uint16_t is
+ * unsigned int — the same width as unsigned short but a distinct C++
+ * type — so "typedef uint16_t u16;" would clash with USBAPI.h's typedef.
+ * Other Arduino cores (ESP32, RP2040, STM32, ...) have no USBAPI.h
+ * typedefs at all and need ours (see GitHub issue #11).
  *
- * The guard checks __cplusplus too because Arduino.h (which pulls in
- * USBAPI.h) is only auto-included in .ino/.cpp translation units.
- * Plain-C files (.c) compiled by the Arduino build system need our
- * typedefs even though the ARDUINO macro is defined for them.
+ * In Arduino C++ builds we therefore typedef u8/u16 with USBAPI.h's exact
+ * underlying types: where USBAPI.h is present the duplicate typedef is
+ * identical and legal C++; where it is absent these provide the types.
+ * unsigned char / unsigned short are 8/16-bit on all Arduino targets.
  */
 #if defined(ARDUINO) && defined(__cplusplus)
-  /* Arduino C++ TU — USBAPI.h already provides u8 and u16 */
+typedef unsigned char  u8;
+typedef unsigned short u16;
 #else
 typedef uint8_t  u8;
 typedef uint16_t u16;

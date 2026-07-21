@@ -4,6 +4,17 @@ Release highlights. For the full per-symbol change log, see
 [release_notes.md](https://github.com/deftio/fr_math/blob/master/release_notes.md)
 in the repo.
 
+## v2.0.9 — 2026
+
+Arduino/ESP32 build fix and a saturating-add correctness fix. No API changes.
+
+- **Arduino `u8`/`u16` type error fixed** ([issue #11](https://github.com/deftio/fr_math/issues/11)): sketches failed to compile on ESP32 — and on any core other than AVR/SAM/SAMD — with `'u16' does not name a type`. `FR_defs.h` had skipped its typedefs in Arduino C++ builds, assuming `USBAPI.h` always provides them; it now emits them using `USBAPI.h`'s exact underlying types, which works whether or not that header is present. Thanks to [@beaka](https://github.com/beaka) for the report.
+- **`FR_FixAddSat` correctness**: the overflow check relied on signed-overflow UB and was optimized away at `-Os`, so negative overflow returned a wrapped positive value instead of `FR_OVERFLOW_NEG`. Also, `FR_FixAddSat(0, 0)` wrongly returned `FR_OVERFLOW_POS`. Both fixed.
+- **New `test_arduino_compat` suite**: compiles the headers as each Arduino core family does (with and without `USBAPI.h` typedefs, both include orders, C and C++), catching core-specific type clashes without a board toolchain.
+- **Coverage**: 98% of library source lines, every mathematically reachable branch exercised.
+
+---
+
 ## v2.0.8 — 2026
 
 Tangent accuracy rewrite and trig rounding fix.

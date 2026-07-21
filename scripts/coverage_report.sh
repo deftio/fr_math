@@ -117,7 +117,8 @@ parse_coverage() {
         
         local percent=0
         if [ "$total_lines" -gt 0 ]; then
-            percent=$((executed_lines * 100 / total_lines))
+            # round to nearest, not truncate: 97.99% must not report as 97%
+            percent=$(((executed_lines * 100 + total_lines / 2) / total_lines))
         fi
         
         echo "$executed_lines $total_lines $percent $not_executed"
@@ -171,7 +172,7 @@ total_lines=$((fr_math_total + fr_2d_total))
 total_exec=$((fr_math_exec + fr_2d_exec))
 
 if [ "$total_lines" -gt 0 ] && [ "$total_lines" != "0" ]; then
-    overall_percent=$((total_exec * 100 / total_lines))
+    overall_percent=$(((total_exec * 100 + total_lines / 2) / total_lines))
 else
     overall_percent=0
 fi

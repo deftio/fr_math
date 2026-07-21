@@ -91,7 +91,7 @@ See `release_management.md` for the full step-by-step reference.
 
 ## The test suite
 
-Tests live under `tests/` and are split into seven
+Tests live under `tests/` and are split into eight
 binaries to keep compile times low:
 
 | Binary | What it checks |
@@ -103,9 +103,13 @@ binaries to keep compile times low:
 | `test_full` | Full-coverage dark-corner cases and round-trips. |
 | `test_2d_complete` | Extended 2D: matrix composition, inverse, point transforms. |
 | `test_tdd` | Characterization tests pinned to bit-exact reference values. |
+| `test_arduino_compat` | Arduino build compatibility: compiles the headers as ESP32-style and AVR/USBAPI-style cores would (both include orders), plus type-size checks (issue #11). |
 
-The suite covers **99%** of the library source.
-Every public symbol is exercised at least once.
+The suite covers **98%** of the library source lines and every
+mathematically reachable branch. The remainder is defensive code
+(clamps and guards) that no input can trigger, kept in place as
+insurance against future edits. Every public symbol is exercised
+at least once.
 
 ### Running a single binary
 
@@ -258,7 +262,16 @@ arduino-cli compile --fqbn arduino:avr:uno examples/arduino_smoke
 arduino-cli compile --fqbn arduino:avr:uno examples/basic-math
 arduino-cli compile --fqbn arduino:avr:uno examples/trig-functions
 arduino-cli compile --fqbn arduino:avr:uno examples/wave-generators
+
+# Non-AVR cores work the same way, e.g. ESP32:
+arduino-cli compile --fqbn esp32:esp32:esp32 examples/arduino_smoke
 ```
+
+`make test-arduino-compat` (part of `make test`) simulates the
+Arduino build environments on the host — ESP32-style cores with no
+USBAPI.h typedefs and AVR-style cores that predefine `u8`/`u16`,
+in both include orders — so core-specific type clashes like
+issue #11 are caught without any board toolchain installed.
 
 See the [code size table](#code-size-text-section-compiled-with--os) above
 for exact numbers. With linker dead-code elimination, only the

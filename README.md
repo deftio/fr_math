@@ -1,8 +1,8 @@
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-blue.svg)](https://opensource.org/licenses/BSD-2-Clause)
 [![CI](https://github.com/deftio/fr_math/actions/workflows/ci.yml/badge.svg)](https://github.com/deftio/fr_math/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-96%25-brightgreen.svg)](#building-and-testing)
+[![Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen.svg)](#building-and-testing)
 [![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://deftio.github.io/fr_math/)
-[![Version](https://img.shields.io/badge/version-2.0.8-blue.svg)](release_notes.md)
+[![Version](https://img.shields.io/badge/version-2.0.9-blue.svg)](release_notes.md)
 [![GitHub](https://img.shields.io/badge/GitHub-repo-181717.svg?logo=github)](https://github.com/deftio/fr_math)
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-library-teal.svg)](https://registry.platformio.org/libraries/deftio/fr_math)
