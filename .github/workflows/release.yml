@@ -100,9 +100,19 @@ jobs:
           draft: false
           prerelease: false
 
+  # Registry publishing is best-effort and must not fail the release.
+  # The GitHub Release (above) is the authoritative artifact — Arduino
+  # Library Manager indexes from the tag, and both registries below can
+  # be published by hand if the automated step does not go through:
+  #   pio pkg publish . --no-interactive
+  #   compote component upload --name fr_math --namespace deftio
+  # continue-on-error keeps a registry outage, or an expired/mis-scoped
+  # token, from marking an otherwise good release as failed. The job
+  # itself still shows as failed inside the run, so the signal is kept.
   publish-pio:
     needs: release
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Install PlatformIO
@@ -115,6 +125,7 @@ jobs:
   publish-espressif:
     needs: release
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Install compote (ESP Component Manager)
