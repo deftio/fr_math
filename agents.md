@@ -18,7 +18,7 @@ src/                  Core library (this is what ships)
   FR_defs.h           Type aliases (s8, s16, s32, u8, u16, u32)
   FR_math_2D.h/.cpp   Optional C++ 2D transform class
 
-tests/                Test suite (7 programs, run via `make test`)
+tests/                Test suite (8 programs, run via `make test`)
 examples/             Arduino .ino sketches + POSIX example
 docs/                 Markdown documentation
 pages/                HTML documentation (mirrors docs/)
@@ -31,7 +31,7 @@ dev/                  Development notes and planning (not shipped)
 
 ```bash
 make lib              # compile library objects
-make test             # run full test suite (99% line coverage)
+make test             # run full test suite (98% line coverage, 100% of reachable branches)
 make examples         # build example programs
 make size-report      # cross-compile size report (Docker)
 make size-update      # size report + patch doc files
@@ -126,3 +126,9 @@ FR_Math is published to multiple package registries:
 - Don't change the `extern "C"` wrapping in `FR_math.h`
 - Don't hardcode a radix inside library functions — always parameterize
 - Don't add `#include` dependencies beyond `<stdint.h>`
+- Don't change the Arduino `u8`/`u16` typedef block in `FR_defs.h` to use
+  `uint8_t`/`uint16_t` — in Arduino C++ builds it must use
+  `unsigned char`/`unsigned short` verbatim so it stays typedef-identical
+  to USBAPI.h on AVR/SAM/SAMD cores while still defining the types on
+  cores without USBAPI.h (ESP32, RP2040, ...). See GitHub issue #11 and
+  `make test-arduino-compat`.

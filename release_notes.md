@@ -1,5 +1,82 @@
 # FR_Math Release Notes
 
+## Version 2.0.9 (2026)
+
+Arduino/ESP32 build fix and a saturating-add correctness fix. No API
+changes — `FR_math.h` declarations are identical to 2.0.8.
+
+### Arduino: `u8`/`u16` did not name a type on non-AVR cores
+
+- **Fixed** ([issue #11](https://github.com/deftio/fr_math/issues/11)):
+  sketches failed to compile on ESP32, and on any Arduino core other
+  than AVR/SAM/SAMD, with `'u16' does not name a type`. Thanks to
+  [@beaka](https://github.com/beaka) for reporting this, on ESP32 dev
+  and ESP32-S3 boards with Arduino IDE 2.3.10.
+- Cause: `FR_defs.h` skipped its `u8`/`u16` typedefs entirely in Arduino
+  C++ builds, on the assumption that `USBAPI.h` always supplies them.
+  That holds only for the AVR/SAM/SAMD cores; ESP32, RP2040, STM32 and
+  others have no such typedefs, so the types were left undefined.
+- Fix: in Arduino C++ builds the typedefs are now emitted using
+  `USBAPI.h`'s exact underlying types (`unsigned char` /
+  `unsigned short`). Where `USBAPI.h` is present the duplicate typedef
+  is identical and legal C++; where it is absent the types are defined.
+  Both include orders work.
+
+### `FR_FixAddSat` returned wrong results
+
+- **Fixed**: `FR_FixAddSat(x, y)` computed `x + y` in signed arithmetic
+  and then tested the result for wraparound. Signed overflow is
+  undefined behavior, so optimizers were free to delete the check — at
+  `-Os`, clang did, and negative overflow returned a wrapped positive
+  value instead of `FR_OVERFLOW_NEG`. The sum is now formed in unsigned
+  arithmetic, which is well-defined.
+- **Fixed**: `FR_FixAddSat(0, 0)` returned `FR_OVERFLOW_POS` instead of
+  `0`. The positive-overflow test was `sum <= 0`; it is now `sum < 0`,
+  since a zero sum from two non-negative operands is legitimate.
+
+### Testing
+
+- New `tests/test_arduino_compat.c` and `make test-arduino-compat`
+  target (now part of `make test`, bringing the suite to eight
+  binaries). It compiles the headers the way each Arduino core family
+  does — ESP32-style with no `USBAPI.h` typedefs, AVR-style with them
+  predefined, in both include orders, as both C and C++ — plus runtime
+  type-width checks. Catches core-specific type clashes without a board
+  toolchain installed.
+- New branch-coverage tests in `tests/test_full_coverage.c` covering
+  previously unexercised paths: radian range reduction beyond 2π and
+  4π, degree reduction beyond ±360°, `radix == 0` fast paths in
+  `fr_cos_deg`/`fr_sin_deg`, BAM pole handling in `fr_tan_deg`,
+  radix-conversion arms in `FR_acos`/`FR_asin`/`FR_atan2` at output
+  radix 14 and 20, `FR_pow2(x, 0)`, `FR_printNumF` with `radix == 0`
+  and `prec == 0`, `FR_numstr` leading `+` and >9 fractional digits,
+  `FR_hypot_fast8` at `INT32_MIN`, and the `fr_wave_noise` /
+  `fr_adsr_step` clamps.
+- Library coverage is now 98% of source lines, with every
+  mathematically reachable branch exercised. The remainder is defensive
+  code (clamps and guards) that no input can reach; it is kept in place
+  deliberately.
+
+### Documentation
+
+- **Install instructions corrected**: `docs/getting-started.md`,
+  `pages/guide/getting-started.html`, and `llms.txt` now show how to
+  obtain the library from the package registries it is published to
+  (Arduino Library Manager, PlatformIO, ESP-IDF), alongside copying the
+  sources in directly. The guide previously said FR_Math had "no
+  package manager integration", which conflated two separate things:
+  the library indeed has no *dependencies* to install, but it is and
+  was distributed through those registries — which is how the reporter
+  in issue #11 obtained it.
+- `docs/building.md` and `pages/guide/building.html`: test-suite table
+  now lists eight binaries including `test_arduino_compat`, with an
+  ESP32 `arduino-cli compile` example and a note on what the
+  compatibility matrix covers.
+- `agents.md` records the `FR_defs.h` Arduino typedef invariant in
+  "What NOT to do", so the issue #11 fix is not undone by a future
+  cleanup, and the test count is corrected to eight.
+- Coverage figures refreshed across README, the guides, and `agents.md`.
+
 ## Version 2.0.8 (2026)
 
 Tangent accuracy rewrite and trig rounding fix.

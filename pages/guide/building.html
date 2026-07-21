@@ -107,7 +107,7 @@ reference.</p>
 
 <h2>The test suite</h2>
 
-<p>Tests live under <code>tests/</code> and are split into seven
+<p>Tests live under <code>tests/</code> and are split into eight
 binaries to keep compile times low:</p>
 
 <table>
@@ -120,10 +120,14 @@ binaries to keep compile times low:</p>
 <tr><td><code>test_full</code></td><td>Full-coverage dark-corner cases and round-trips.</td></tr>
 <tr><td><code>test_2d_complete</code></td><td>Extended 2D: matrix composition, inverse, point transforms.</td></tr>
 <tr><td><code>test_tdd</code></td><td>Characterization tests pinned to bit-exact reference values.</td></tr>
+<tr><td><code>test_arduino_compat</code></td><td>Arduino build compatibility: compiles the headers as ESP32-style and AVR/USBAPI-style cores would (both include orders), plus type-size checks (issue #11).</td></tr>
 </tbody>
 </table>
 
-<p>The suite covers <strong>99%</strong> of the library source.
+<p>The suite covers <strong>98%</strong> of the library source lines
+and every mathematically reachable branch; the remainder is defensive
+code (clamps and guards) that no input can trigger, kept in place as
+insurance against future edits.
 Every public symbol is exercised at least once.</p>
 
 <h3>Running a single binary</h3>
@@ -275,7 +279,17 @@ avr-size FR_math.avr.o</code></pre>
 # Or try the focused examples:
 arduino-cli compile --fqbn arduino:avr:uno examples/basic-math
 arduino-cli compile --fqbn arduino:avr:uno examples/trig-functions
-arduino-cli compile --fqbn arduino:avr:uno examples/wave-generators</code></pre>
+arduino-cli compile --fqbn arduino:avr:uno examples/wave-generators
+
+# Non-AVR cores work the same way, e.g. ESP32:
+arduino-cli compile --fqbn esp32:esp32:esp32 examples/arduino_smoke</code></pre>
+
+<p><code>make test-arduino-compat</code> (part of <code>make test</code>)
+simulates the Arduino build environments on the host — ESP32-style
+cores with no USBAPI.h typedefs and AVR-style cores that predefine
+<code>u8</code>/<code>u16</code>, in both include orders — so
+core-specific type clashes like issue #11 are caught without any
+board toolchain installed.</p>
 
 <p>See the code size table above for exact numbers. With linker
 dead-code elimination, only the functions you call are linked.</p>

@@ -708,16 +708,20 @@ s32 FR_FixMulSat(s32 x, s32 y)
  */
 s32 FR_FixAddSat(s32 x, s32 y)
 {
-	s32 sum = x + y;
+	/* Sum in unsigned space: signed overflow is undefined behavior, and
+	 * optimizers legally delete wrap-detection checks written as x + y. */
+	s32 sum = (s32)((u32)x + (u32)y);
 	if (x < 0)
 	{
-		if (y < 0)
-			return (sum >= 0) ? FR_OVERFLOW_NEG : sum;
+		if (y < 0 && sum >= 0)
+			return FR_OVERFLOW_NEG;
 	}
 	else
 	{
-		if (y >= 0)
-			return (sum <= 0) ? FR_OVERFLOW_POS : sum;
+		/* nonneg + nonneg wraps into [INT32_MIN, -2]; a zero sum (0+0)
+		 * is legitimate, so only sum < 0 signals overflow */
+		if (y >= 0 && sum < 0)
+			return FR_OVERFLOW_POS;
 	}
 	return sum;
 }

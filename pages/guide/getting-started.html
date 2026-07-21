@@ -25,8 +25,35 @@ back.</p>
 
 <h2>Install</h2>
 
-<p>FR_Math is a handful of C and C++ files. There is no package
-manager integration and no install step. Either:</p>
+<p>FR_Math has no dependencies to install &mdash; it needs nothing
+beyond <code>&lt;stdint.h&gt;</code>, which every C99-or-newer toolchain
+ships. &ldquo;Installing&rdquo; here only means getting the sources into
+the project, either from a package registry or by copying them in
+directly.</p>
+
+<h3>From a package manager</h3>
+
+<p>FR_Math is published to the major embedded package registries:</p>
+
+<ul>
+  <li><strong>Arduino (IDE or CLI)</strong> — open the Library Manager
+      and search for <strong>FR_Math</strong>, or run
+      <code>arduino-cli lib install FR_Math</code>. Then
+      <code>#include &lt;FR_math.h&gt;</code> in the sketch. Works on
+      all cores (AVR, ESP32, RP2040, SAMD, STM32, ...).</li>
+  <li><strong>PlatformIO</strong> — add
+      <code>lib_deps = deftio/fr_math</code> to
+      <code>platformio.ini</code>, or run
+      <code>pio pkg install --library "deftio/fr_math"</code>.</li>
+  <li><strong>ESP-IDF</strong> — run
+      <code>idf.py add-dependency "deftio/fr_math"</code> to pull it
+      from the ESP Component Registry.</li>
+</ul>
+
+<h3>Vendoring the sources</h3>
+
+<p>FR_Math is a handful of C and C++ files, so dropping it directly
+into a project works just as well. Either:</p>
 
 <ul>
   <li>Copy <code>src/FR_math.c</code>, <code>src/FR_math.h</code>,
@@ -37,8 +64,8 @@ manager integration and no install step. Either:</p>
       <code>src/</code>.</li>
 </ul>
 
-<p>There are no external dependencies beyond <code>&lt;stdint.h&gt;</code>,
-which every C99-or-newer toolchain ships.</p>
+<p>Nothing else needs to be added to the build &mdash; no libraries to
+link (not even <code>libm</code>), no configuration step.</p>
 
 <pre><code class="language-bash">git clone https://github.com/deftio/fr_math.git
 cd fr_math
@@ -46,7 +73,7 @@ cd fr_math
 
 <p><code>build.sh</code> wipes <code>build/</code>, rebuilds the
 library, examples, and tests, and runs the full test suite. On success
-the output shows all tests passing (99% line coverage).</p>
+the output shows all tests passing (98% line coverage, 100% of reachable branches).</p>
 
 <h2>A first program</h2>
 
@@ -287,7 +314,7 @@ envelope, and log/exp walkthroughs.</p>
 make coverage       # coverage report (requires gcov)</code></pre>
 
 <p>Run <code>make test</code> for a full pass. With <code>make coverage</code>,
-line coverage of the library sources is about <strong>99%</strong>.
+line coverage of the library sources is about <strong>98%</strong>, with every mathematically reachable branch exercised.
 See <a href="building.html">Building &amp; Testing</a> for targets,
 cross-compilation, and CI.</p>
 

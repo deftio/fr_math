@@ -8,8 +8,26 @@ back.
 
 ## Install
 
-FR_Math is a handful of C and C++ files. There is no package
-manager integration and no install step. Either:
+FR_Math has no dependencies to install — it needs nothing beyond
+`<stdint.h>`, which every C99-or-newer toolchain ships. "Installing"
+here only means getting the sources into the project, either from a
+package registry or by copying them in directly.
+
+### From a package manager
+
+- **Arduino (IDE or CLI)** — open the Library Manager and search for
+  **FR_Math**, or run `arduino-cli lib install FR_Math`. Then
+  `#include <FR_math.h>` in the sketch. Works on all cores (AVR,
+  ESP32, RP2040, SAMD, STM32, ...).
+- **PlatformIO** — add `lib_deps = deftio/fr_math` to
+  `platformio.ini`, or run `pio pkg install --library "deftio/fr_math"`.
+- **ESP-IDF** — run `idf.py add-dependency "deftio/fr_math"` to pull
+  it from the ESP Component Registry.
+
+### Vendoring the sources
+
+FR_Math is a handful of C and C++ files, so dropping it directly into
+a project works just as well. Either:
 
 - Copy `src/FR_math.c`, `src/FR_math.h`,
   `src/FR_defs.h` (and optionally
@@ -18,8 +36,8 @@ manager integration and no install step. Either:
 - Add FR_Math as a git submodule and point the build system at
   `src/`.
 
-There are no external dependencies beyond `<stdint.h>`,
-which every C99-or-newer toolchain ships.
+Nothing else needs to be added to the build — no libraries to link
+(not even `libm`), no configuration step.
 
 ```bash
 git clone https://github.com/deftio/fr_math.git
@@ -29,7 +47,7 @@ cd fr_math
 
 `build.sh` wipes `build/`, rebuilds the
 library, examples, and tests, and runs the full test suite. On success
-the output shows all tests passing (99% line coverage).
+the output shows all tests passing (98% line coverage, 100% of reachable branches).
 
 ## A first program
 
@@ -275,7 +293,7 @@ make coverage       # coverage report (requires gcov)
 ```
 
 Run `make test` for a full pass. With `make coverage`, line coverage of
-the library sources is about **99%**. See [Building & Testing](building.md)
+the library sources is about **98%**, with every mathematically reachable branch exercised. See [Building & Testing](building.md)
 for targets, cross-compilation, and CI.
 
 ## Next steps

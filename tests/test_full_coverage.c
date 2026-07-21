@@ -1079,6 +1079,144 @@ int test_constants_complete() {
     return TEST_PASS;
 }
 
+/*=======================================================
+ * Branch-coverage completion tests
+ * Each test targets a specific previously never-taken
+ * branch in FR_math.c, identified by gcov -b analysis.
+ *=======================================================*/
+
+static int near_s32(s32 a, s32 b, s32 tol) {
+    s32 d = a - b;
+    if (d < 0) d = -d;
+    return d <= tol;
+}
+
+static int cov_sink(char c) { (void)c; return 0; }
+
+/* normalize_to_r16 radix>16 arm; reduce_to_2pi both reduction arms */
+int test_cov_radian_reduction() {
+    /* radix 18 input: sin(pi/6) = 0.5 */
+    if (!near_s32(fr_sin(137258, 18), 32768, 80)) return TEST_FAIL;
+    /* r > 4*pi: sin(5*pi) = 0 */
+    if (!near_s32(fr_sin(1029435, 16), 0, 16)) return TEST_FAIL;
+    /* 2*pi < r <= 4*pi: sin(3*pi) = 0 */
+    if (!near_s32(fr_sin(617661, 16), 0, 16)) return TEST_FAIL;
+    return TEST_PASS;
+}
+
+/* fr_deg_to_bam |d| >= 360-degree reduction, both signs */
+int test_cov_deg_to_bam_reduction() {
+    if (fr_deg_to_bam(23625728, 16) != fr_deg_to_bam(32768, 16))
+        return TEST_FAIL;   /* 360.5 deg == 0.5 deg */
+    if (fr_deg_to_bam(-23625728, 16) != fr_deg_to_bam(-32768, 16))
+        return TEST_FAIL;   /* -360.5 deg == -0.5 deg */
+    return TEST_PASS;
+}
+
+/* fr_cos_deg/fr_sin_deg radix==0 fast path; >=360deg reductions */
+int test_cov_deg_trig_paths() {
+    if (!near_s32(fr_cos_deg(45, 0), 46341, 60)) return TEST_FAIL;
+    if (!near_s32(fr_sin_deg(45, 0), 46341, 60)) return TEST_FAIL;
+    /* 400.5 deg reduces to 40.5 deg */
+    if (fr_cos_deg(26247168, 16) != fr_cos_deg(2654208, 16)) return TEST_FAIL;
+    if (fr_tan_deg(26247168, 16) != fr_tan_deg(2654208, 16)) return TEST_FAIL;
+    return TEST_PASS;
+}
+
+/* fr_tan_deg non-cardinal inputs that land exactly on BAM poles */
+int test_cov_tan_deg_pole_bam() {
+    /* 90 + 2^-16 deg -> bam 0x4000, past the pole: large negative */
+    if (fr_tan_deg(5898241, 16) != -FR_TRIG_MAXVAL) return TEST_FAIL;
+    /* 270 + 2^-16 deg -> bam 0xC000 */
+    if (fr_tan_deg(17694721, 16) != -FR_TRIG_MAXVAL) return TEST_FAIL;
+    return TEST_PASS;
+}
+
+/* FR_FixAddSat overflow wraps. The negative case regression-tests the
+ * signed-overflow UB bug (optimizer deleted the wrap check at -Os), and
+ * the 0+0 case regression-tests the old `sum <= 0` false positive. */
+int test_cov_addsat_neg_overflow() {
+    if (FR_FixAddSat(-2000000000, -2000000000) != (s32)0x80000000)
+        return TEST_FAIL;
+    if (FR_FixAddSat(2000000000, 2000000000) != (s32)0x7fffffff)
+        return TEST_FAIL;
+    if (FR_FixAddSat(0, 0) != 0) return TEST_FAIL;
+    return TEST_PASS;
+}
+
+/* FR_acos/FR_asin radix-conversion arms not hit elsewhere */
+int test_cov_invtrig_radix_arms() {
+    s32 v;
+    /* clamp path with sign set, out_radix > 16 */
+    if (FR_acos(-70000, 16, 20) != (FR_kPI << 4)) return TEST_FAIL;
+    /* input radix < 15: shift-left normalization; acos(0.5) = pi/3 */
+    if (!near_s32(FR_acos(128, 8, 16), 68629, 400)) return TEST_FAIL;
+    /* small-angle fast path with radix >= out_radix */
+    v = FR_acos(65500, 16, 16);
+    if (v < 1500 || v > 2600) return TEST_FAIL;
+    /* fast path, negative input, out_radix > 16 */
+    v = FR_acos(-65500, 16, 20);
+    if (!near_s32(v, (FR_kPI << 4) - 2172 * 16, 9000)) return TEST_FAIL;
+    /* table path with out_radix <= 14: acos(0) = pi/2 at r14 */
+    if (!near_s32(FR_acos(0, 16, 14), 25736, 40)) return TEST_FAIL;
+    /* asin with out_radix > 16: asin(0.5) = pi/6 at r20 */
+    if (!near_s32(FR_asin(32768, 16, 20), 549066, 4000)) return TEST_FAIL;
+    return TEST_PASS;
+}
+
+/* FR_atan2 axis cases and fast paths at out_radix 14 and 20 */
+int test_cov_atan2_radix_arms() {
+    if (FR_atan2(5, 0, 20) != (FR_kQ2RAD << 4)) return TEST_FAIL;
+    if (FR_atan2(-5, 0, 20) != -(FR_kQ2RAD << 4)) return TEST_FAIL;
+    if (FR_atan2(0, -5, 20) != (FR_kPI << 4)) return TEST_FAIL;
+    if (!near_s32(FR_atan2(1, 100, 14), 164, 30)) return TEST_FAIL;
+    if (!near_s32(FR_atan2(100, 1, 20), 1636640, 6000)) return TEST_FAIL;
+    if (!near_s32(FR_atan2(100, 1, 14), 25572, 80)) return TEST_FAIL;
+    return TEST_PASS;
+}
+
+/* radix==0 / prec==0 arms in FR_pow2, FR_printNumF; FR_numstr edges */
+int test_cov_pow2_print_numstr() {
+    if (FR_pow2(3, 0) != 8) return TEST_FAIL;
+    /* radix 0, prec 0: prints "42", returns char count */
+    if (FR_printNumF(cov_sink, 42, 0, 0, 0) != 2) return TEST_FAIL;
+    /* leading '+' sign */
+    if (FR_numstr("+2.5", 16) != 163840) return TEST_FAIL;
+    /* more than 9 fractional digits: extras ignored */
+    if (FR_numstr("0.1234567890123", 16) != FR_numstr("0.123456789", 16))
+        return TEST_FAIL;
+    return TEST_PASS;
+}
+
+/* FR_hypot_fast8 INT32_MIN mirror clamps */
+int test_cov_hypot_intmin() {
+    if (FR_hypot_fast8((s32)0x80000000, 100) < 2140000000) return TEST_FAIL;
+    if (FR_hypot_fast8(100, (s32)0x80000000) < 2140000000) return TEST_FAIL;
+    return TEST_PASS;
+}
+
+/* fr_wave_noise -32768 clamp; fr_adsr_step defensive arms */
+int test_cov_noise_adsr_edges() {
+    fr_adsr_t env;
+    u32 st = 2;  /* lsb 0 -> state 1 -> top bits 0 -> v = -32768 -> clamp */
+    if (fr_wave_noise(&st) != -32767) return TEST_FAIL;
+
+    /* idle envelope with no trigger returns 0 */
+    fr_adsr_init(&env, 10, 10, 16384, 10);
+    if (fr_adsr_step(&env) != 0) return TEST_FAIL;
+
+    /* defensive default: unknown state value (struct is caller-owned) */
+    env.state = 99;
+    if (fr_adsr_step(&env) != 0) return TEST_FAIL;
+
+    /* defensive out<0 clamp: force a negative level mid-attack */
+    fr_adsr_init(&env, 65535, 0, 16384, 0);
+    env.state = FR_ADSR_ATTACK;
+    env.level = -(1 << 28);
+    if (fr_adsr_step(&env) != 0) return TEST_FAIL;
+    return TEST_PASS;
+}
+
 /* Main test runner */
 int main() {
     printf("\n=== FR_Math Full Coverage Test Suite ===\n\n");
@@ -1129,6 +1267,18 @@ int main() {
 
     printf("\nDark-Corner Edge Branches:\n");
     RUN_TEST(test_edge_branches);
+
+    printf("\nBranch-Coverage Completion:\n");
+    RUN_TEST(test_cov_radian_reduction);
+    RUN_TEST(test_cov_deg_to_bam_reduction);
+    RUN_TEST(test_cov_deg_trig_paths);
+    RUN_TEST(test_cov_tan_deg_pole_bam);
+    RUN_TEST(test_cov_addsat_neg_overflow);
+    RUN_TEST(test_cov_invtrig_radix_arms);
+    RUN_TEST(test_cov_atan2_radix_arms);
+    RUN_TEST(test_cov_pow2_print_numstr);
+    RUN_TEST(test_cov_hypot_intmin);
+    RUN_TEST(test_cov_noise_adsr_edges);
 
     printf("\n=== Test Summary ===\n");
     printf("Total: %d, Passed: %d, Failed: %d\n", 

@@ -48,6 +48,7 @@ help:
 	@echo "  test-full        Run full coverage tests"
 	@echo "  test-2d-complete Run 2D complete coverage tests"
 	@echo "  test-tdd         Run TDD characterization tests"
+	@echo "  test-arduino-compat  Run Arduino environment compatibility tests"
 	@echo ""
 	@echo "Analysis targets:"
 	@echo "  accuracy         Show accuracy summary table"
@@ -127,7 +128,7 @@ run-examples: examples
 
 # Build and run tests
 .PHONY: test
-test: dirs examples test-basic test-comprehensive test-2d test-overflow test-full test-2d-complete test-tdd
+test: dirs examples test-basic test-comprehensive test-2d test-overflow test-full test-2d-complete test-tdd test-arduino-compat
 
 .PHONY: test-tdd
 test-tdd: $(BUILD_DIR)/test_tdd
@@ -139,6 +140,28 @@ $(BUILD_DIR)/test_tdd: $(TEST_DIR)/test_tdd.cpp $(SRC_DIR)/FR_math.c $(SRC_DIR)/
 	$(CC) -I$(SRC_DIR) $(LIB_WARN) -Os $(TEST_FLAGS) -c $(SRC_DIR)/FR_math.c -o $(BUILD_DIR)/test_tdd_FR_math.o
 	$(CXX) -I$(SRC_DIR) $(LIB_WARN) -Os $(TEST_FLAGS) -c $(SRC_DIR)/FR_math_2D.cpp -o $(BUILD_DIR)/test_tdd_FR_math_2D.o
 	$(CXX) $(CXXFLAGS) $(TEST_FLAGS) $(TEST_DIR)/test_tdd.cpp $(BUILD_DIR)/test_tdd_FR_math.o $(BUILD_DIR)/test_tdd_FR_math_2D.o $(LDFLAGS) -o $@
+
+# Arduino environment compatibility (issue #11): compile-matrix simulating
+# Arduino cores with and without USBAPI.h's u8/u16 typedefs, plus a runtime
+# type-size check.  ARDUINO=10813 mimics the IDE-defined version macro.
+ARDUINO_SIM = -DARDUINO=10813
+.PHONY: test-arduino-compat
+test-arduino-compat: dirs
+	@echo "Running Arduino compatibility tests (issue #11)..."
+	@$(CXX) -x c++ $(CFLAGS) $(ARDUINO_SIM) -DARDUINO_ARCH_ESP32 -fsyntax-only $(TEST_DIR)/test_arduino_compat.c
+	@echo "  compile C++ ESP32-style core (no USBAPI typedefs): PASS"
+	@$(CXX) -x c++ $(CFLAGS) $(ARDUINO_SIM) -DFR_TEST_USBAPI_FIRST -fsyntax-only $(TEST_DIR)/test_arduino_compat.c
+	@echo "  compile C++ AVR-style core (USBAPI typedefs before): PASS"
+	@$(CXX) -x c++ $(CFLAGS) $(ARDUINO_SIM) -DFR_TEST_USBAPI_AFTER -fsyntax-only $(TEST_DIR)/test_arduino_compat.c
+	@echo "  compile C++ (USBAPI typedefs after FR_math.h): PASS"
+	@$(CC) $(CFLAGS) $(ARDUINO_SIM) -fsyntax-only $(TEST_DIR)/test_arduino_compat.c
+	@echo "  compile C translation unit under Arduino: PASS"
+	@$(CC) -I$(SRC_DIR) $(LIB_WARN) -Os $(ARDUINO_SIM) -fsyntax-only $(SRC_DIR)/FR_math.c
+	@$(CXX) -I$(SRC_DIR) $(LIB_WARN) -Os $(ARDUINO_SIM) -fsyntax-only $(SRC_DIR)/FR_math_2D.cpp
+	@echo "  compile library sources under Arduino: PASS"
+	@$(CC) $(CFLAGS) -c $(SRC_DIR)/FR_math.c -o $(BUILD_DIR)/test_arduino_compat_FR_math.o
+	@$(CXX) -x c++ $(CXXFLAGS) $(ARDUINO_SIM) $(TEST_DIR)/test_arduino_compat.c -x none $(BUILD_DIR)/test_arduino_compat_FR_math.o $(LDFLAGS) -o $(BUILD_DIR)/test_arduino_compat
+	@./$(BUILD_DIR)/test_arduino_compat
 
 .PHONY: test-basic
 test-basic: $(BUILD_DIR)/fr_test

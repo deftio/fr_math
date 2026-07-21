@@ -9,7 +9,16 @@ or libraries. Pure C99, zero dependencies beyond `<stdint.h>`.
 - Repository: https://github.com/deftio/fr_math
 - Documentation: https://deftio.github.io/fr_math/
 - License: BSD-2-Clause
-- Version: 2.0.8
+- Version: 2.0.9
+
+## Installation
+
+- Arduino: Library Manager, search "FR_Math" (or `arduino-cli lib install FR_Math`),
+  then `#include <FR_math.h>`. All cores supported (AVR, ESP32, RP2040, SAMD, ...).
+- PlatformIO: `lib_deps = deftio/fr_math` in platformio.ini
+- ESP-IDF: `idf.py add-dependency "deftio/fr_math"`
+- Vendoring: copy `src/FR_math.c`, `src/FR_math.h`, `src/FR_defs.h`
+  (plus `src/FR_math_2D.h/.cpp` if 2D transforms are needed) into the project.
 
 ## Key concept: radix parameter
 
