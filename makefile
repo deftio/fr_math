@@ -41,6 +41,8 @@ help:
 	@echo ""
 	@echo "Test targets:"
 	@echo "  test             Run all tests"
+	@echo "  test-s16-safe    Re-run crest-sensitive tests with FR_TRIG_S16_SAFE"
+	@echo "  test-trig-crest  Run exact vs s16-safe crest example pair"
 	@echo "  test-basic       Run basic tests"
 	@echo "  test-comprehensive  Run comprehensive tests"
 	@echo "  test-2d          Run 2D math tests"
@@ -94,13 +96,13 @@ $(BUILD_DIR)/FR_math_2D.o: $(SRC_DIR)/FR_math_2D.cpp $(HEADERS)
 
 # Build examples
 .PHONY: examples
-examples: dirs $(BUILD_DIR)/fr_example ex-basics ex-logexp ex-waveform ex-trig-accuracy
+examples: dirs $(BUILD_DIR)/fr_example ex-basics ex-logexp ex-waveform ex-trig-crest ex-trig-accuracy
 
 $(BUILD_DIR)/fr_example: $(EXAMPLE_DIR)/posix-example/FR_Math_Example1.cpp $(BUILD_DIR)/FR_math.o $(BUILD_DIR)/FR_math_2D.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
 # Self-contained desktop examples (each has its own Makefile)
-.PHONY: ex-basics ex-logexp ex-waveform ex-trig-accuracy run-examples
+.PHONY: ex-basics ex-logexp ex-waveform ex-trig-crest ex-trig-accuracy run-examples
 
 ex-basics:
 	@$(MAKE) -C $(EXAMPLE_DIR)/fixed-point-basics
@@ -110,6 +112,9 @@ ex-logexp:
 
 ex-waveform:
 	@$(MAKE) -C $(EXAMPLE_DIR)/waveform-synth
+
+ex-trig-crest:
+	@$(MAKE) -C $(EXAMPLE_DIR)/trig-crest
 
 ex-trig-accuracy:
 	@if [ -f compare_lfm/libfixmath/libfixmath/fix16.h ]; then \
@@ -122,13 +127,37 @@ run-examples: examples
 	@echo ""; echo "=== fixed-point-basics ===" ; $(MAKE) -s -C $(EXAMPLE_DIR)/fixed-point-basics run
 	@echo ""; echo "=== log-exp-curves ===" ;     $(MAKE) -s -C $(EXAMPLE_DIR)/log-exp-curves run
 	@echo ""; echo "=== waveform-synth ===" ;     $(MAKE) -s -C $(EXAMPLE_DIR)/waveform-synth run
+	@echo ""; echo "=== trig-crest ===" ;         $(MAKE) -s -C $(EXAMPLE_DIR)/trig-crest run
 	@if [ -f compare_lfm/libfixmath/libfixmath/fix16.h ]; then \
 		echo ""; echo "=== trig-accuracy ===" ; $(MAKE) -s -C $(EXAMPLE_DIR)/trig-accuracy run; \
 	fi
 
 # Build and run tests
 .PHONY: test
-test: dirs examples test-basic test-comprehensive test-2d test-overflow test-full test-2d-complete test-tdd test-arduino-compat
+test: dirs examples test-basic test-comprehensive test-2d test-overflow test-full test-2d-complete test-tdd test-arduino-compat test-trig-crest test-s16-safe
+
+# Exact vs s16-safe crest demo pair (examples/trig-crest).
+.PHONY: test-trig-crest
+test-trig-crest: ex-trig-crest
+	@echo "Running trig-crest examples (exact + FR_TRIG_S16_SAFE)..."
+	@$(EXAMPLE_DIR)/trig-crest/trig_crest_exact
+	@$(EXAMPLE_DIR)/trig-crest/trig_crest_s16_safe
+	@echo "  trig-crest: PASS"
+
+# Crest-sensitive suites rebuilt with FR_TRIG_S16_SAFE (s16-safe crest).
+# No coverage flags — keep .gcda files belonging to the default-crest suite.
+.PHONY: test-s16-safe
+test-s16-safe: dirs
+	@echo "Running crest-sensitive tests with -DFR_TRIG_S16_SAFE..."
+	@$(CC) $(CFLAGS) -DFR_TRIG_S16_SAFE \
+	  $(TEST_DIR)/test_full_coverage.c $(SRC_DIR)/FR_math.c $(LDFLAGS) \
+	  -o $(BUILD_DIR)/test_full_s16_safe
+	@$(CC) $(CFLAGS) -DFR_TRIG_S16_SAFE \
+	  $(TEST_DIR)/test_overflow_saturation.c $(SRC_DIR)/FR_math.c $(LDFLAGS) \
+	  -o $(BUILD_DIR)/test_overflow_s16_safe
+	@./$(BUILD_DIR)/test_full_s16_safe
+	@./$(BUILD_DIR)/test_overflow_s16_safe
+	@echo "  FR_TRIG_S16_SAFE suites: PASS"
 
 .PHONY: test-tdd
 test-tdd: $(BUILD_DIR)/test_tdd
@@ -324,6 +353,7 @@ clean-examples:
 	@$(MAKE) -s -C $(EXAMPLE_DIR)/fixed-point-basics clean 2>/dev/null || true
 	@$(MAKE) -s -C $(EXAMPLE_DIR)/log-exp-curves clean 2>/dev/null || true
 	@$(MAKE) -s -C $(EXAMPLE_DIR)/waveform-synth clean 2>/dev/null || true
+	@$(MAKE) -s -C $(EXAMPLE_DIR)/trig-crest clean 2>/dev/null || true
 	@$(MAKE) -s -C $(EXAMPLE_DIR)/trig-accuracy clean 2>/dev/null || true
 
 .PHONY: cleanall

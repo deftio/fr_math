@@ -1217,6 +1217,100 @@ int test_cov_noise_adsr_edges() {
     return TEST_PASS;
 }
 
+/* Default crest is exact ±FR_TRIG_ONE (±65536). With FR_TRIG_S16_SAFE the
+ * crest is 65534 so (s16)(x >> 1) does not wrap. Return type stays s15.16.
+ */
+int test_trig_exact_codes() {
+#ifdef FR_TRIG_S16_SAFE
+    const s32 peak = 65534;
+    const s16 pos_s16 = 32767;
+    const s16 neg_s16 = -32767;
+#else
+    const s32 peak = FR_TRIG_ONE;     /* 65536 */
+    /* Blind (s16)(±65536 >> 1) both wrap to -32768. */
+    const s16 pos_s16 = (s16)-32768;
+    const s16 neg_s16 = (s16)-32768;
+#endif
+    int bam;
+
+    if (fr_sin_bam(0)      != 0)     return TEST_FAIL;
+    if (fr_sin_bam(0x4000) != peak)  return TEST_FAIL;
+    if (fr_sin_bam(0x8000) != 0)     return TEST_FAIL;
+    if (fr_sin_bam(0xC000) != -peak) return TEST_FAIL;
+
+    if (fr_cos_bam(0)      != peak)  return TEST_FAIL;
+    if (fr_cos_bam(0x4000) != 0)     return TEST_FAIL;
+    if (fr_cos_bam(0x8000) != -peak) return TEST_FAIL;
+    if (fr_cos_bam(0xC000) != 0)     return TEST_FAIL;
+
+    /* Wrappers that return the crest without a table walk. */
+    if (fr_cos(0, 16) != peak) return TEST_FAIL;
+    if (fr_cos_deg(0, 16) != peak) return TEST_FAIL;
+    if (fr_cos_deg(180 << 16, 16) != -peak) return TEST_FAIL;
+    if (fr_sin_deg(90 << 16, 16) != peak) return TEST_FAIL;
+    if (fr_sin_deg(((s32)-90) << 16, 16) != -peak) return TEST_FAIL;
+
+    for (bam = 0; bam < 65536; bam++) {
+        s32 v = fr_sin_bam((u16)bam);
+        s32 sh = v >> 1;
+        if (v > peak || v < -peak) return TEST_FAIL;
+#ifdef FR_TRIG_S16_SAFE
+        if (sh > 32767 || sh < -32767) return TEST_FAIL;
+        if ((s16)sh != sh) return TEST_FAIL;
+#else
+        if (v == peak) {
+            if ((s16)sh != pos_s16) return TEST_FAIL;
+        } else if (v == -peak) {
+            if ((s16)sh != neg_s16) return TEST_FAIL;
+        } else if ((s16)sh != sh) {
+            return TEST_FAIL;
+        }
+#endif
+
+        v = fr_cos_bam((u16)bam);
+        sh = v >> 1;
+        if (v > peak || v < -peak) return TEST_FAIL;
+#ifdef FR_TRIG_S16_SAFE
+        if (sh > 32767 || sh < -32767) return TEST_FAIL;
+        if ((s16)sh != sh) return TEST_FAIL;
+#else
+        if (v == peak) {
+            if ((s16)sh != pos_s16) return TEST_FAIL;
+        } else if (v == -peak) {
+            if ((s16)sh != neg_s16) return TEST_FAIL;
+        } else if ((s16)sh != sh) {
+            return TEST_FAIL;
+        }
+#endif
+    }
+
+    /* 256-sample grid (waveform-synth style: phase step 256). */
+    {
+        u16 phase = 0;
+        int i;
+        for (i = 0; i < 256; i++) {
+            s32 raw = fr_sin_bam(phase);
+            s32 sh = raw >> 1;
+            s16 stored = (s16)sh;
+            if (i == 63 || i == 65) {
+                if (raw != 65516 || stored != 32758) return TEST_FAIL;
+            }
+            if (i == 64) {
+                if (raw != peak || stored != pos_s16) return TEST_FAIL;
+            }
+            if (i == 191 || i == 193) {
+                if (raw != -65516 || stored != (s16)-32758) return TEST_FAIL;
+            }
+            if (i == 192) {
+                if (raw != -peak || stored != neg_s16) return TEST_FAIL;
+            }
+            phase = (u16)(phase + 256);
+        }
+    }
+
+    return TEST_PASS;
+}
+
 /* Main test runner */
 int main() {
     printf("\n=== FR_Math Full Coverage Test Suite ===\n\n");
@@ -1252,6 +1346,9 @@ int main() {
 
     printf("\nRadian-native trig (v2):\n");
     RUN_TEST(test_radian_trig);
+
+    printf("\nExact trig codes (s15.16):\n");
+    RUN_TEST(test_trig_exact_codes);
 
     printf("\nWave Generators (v2):\n");
     RUN_TEST(test_waves);

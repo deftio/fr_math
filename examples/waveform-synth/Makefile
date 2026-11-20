@@ -11,7 +11,9 @@ CC  ?= gcc
 CXX ?= g++
 SRC_DIR = ../../src
 
-CXXFLAGS = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Os
+# Stores sine in s16 via (s16)(fr_sin_bam(phase) >> 1), so build with
+# FR_TRIG_S16_SAFE (crest 65534) to avoid the exact-crest wrap at ±1.0.
+CXXFLAGS = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Os -DFR_TRIG_S16_SAFE
 LDFLAGS  = -lm
 
 TARGET = waveform_synth

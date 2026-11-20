@@ -28,8 +28,13 @@ make clean      # removes build artifacts
 Or compile manually:
 
 ```bash
-g++ -I../../src -Wall -Os waveform_synth.cpp ../../src/FR_math.c -lm -o waveform_synth
+g++ -I../../src -Wall -Os -DFR_TRIG_S16_SAFE \
+  waveform_synth.cpp ../../src/FR_math.c -lm -o waveform_synth
 ```
+
+Sine samples are stored as `s16` via `(s16)(fr_sin_bam(phase) >> 1)`, so
+this example compiles with `FR_TRIG_S16_SAFE`. See
+[trig-crest](../trig-crest/) for the exact-crest vs s16-safe comparison.
 
 ## Running
 

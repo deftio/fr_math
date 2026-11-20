@@ -4,6 +4,15 @@ Release highlights. For the full per-symbol change log, see
 [release_notes.md](https://github.com/deftio/fr_math/blob/master/release_notes.md)
 in the repo.
 
+## v2.0.10 — 2026
+
+Optional s16-safe trig crest. Default sin/cos crest remains exact ±1.0 in s15.16 (±65536).
+
+- **`FR_TRIG_S16_SAFE` (default off)**: when compiling `FR_math.c`, crest becomes ±65534 so `(s16)(x >> 1)` does not wrap. Still s15.16, not q1.15. Leave off unless you need that cast.
+- New `examples/trig-crest/` pair shows exact vs safe. Tests cover both configs.
+
+---
+
 ## v2.0.9 — 2026
 
 Arduino/ESP32 build fix and a saturating-add correctness fix. No API changes.

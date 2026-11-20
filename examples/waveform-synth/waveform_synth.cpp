@@ -123,7 +123,8 @@ int main(int argc, char *argv[])
         buf_tri[i]   = fr_wave_tri(phase);
         buf_saw[i]   = fr_wave_saw(phase);
         buf_pwm[i]   = fr_wave_pwm(phase, PWM_DUTY);
-        buf_sin[i]   = (s16)(fr_sin_bam(phase) >> 1);  /* s15.16 -> s15 approx */
+        /* Built with -DFR_TRIG_S16_SAFE so crest>>1 fits in s16. */
+        buf_sin[i]   = (s16)(fr_sin_bam(phase) >> 1);
         buf_noise[i] = fr_wave_noise(&noise_state);
         phase += BAM_INC;
     }
@@ -153,13 +154,10 @@ int main(int argc, char *argv[])
     s16 buf_combined[COMBINED_LEN];
     phase = 0;
     for (int i = 0; i < COMBINED_LEN; i++) {
-        s32 sin_val = fr_sin_bam(phase);  /* s15.16 */
+        s32 sin_val = fr_sin_bam(phase);  /* s15.16; s16-safe crest here */
         s32 env_val = (s32)buf_env[i];    /* 0..32767 (s0.15) */
-        /* Multiply: (s15.16 * s0.15) >> 15 = s15.16, then >> 1 for s15 */
-        s32 combined = (sin_val * env_val) >> 16;
-        if (combined > 32767) combined = 32767;
-        if (combined < -32767) combined = -32767;
-        buf_combined[i] = (s16)combined;
+        /* s15.16 * s0.15 >> 16 = s0.15; product fits in s16 with safe crest. */
+        buf_combined[i] = (s16)((sin_val * env_val) >> 16);
         phase += BAM_INC;
     }
 

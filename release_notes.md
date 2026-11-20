@@ -1,5 +1,25 @@
 # FR_Math Release Notes
 
+## Version 2.0.10 (2026)
+
+Optional s16-safe trig crest. Default behavior unchanged: sin/cos still
+return exact ±1.0 in s15.16 (±65536).
+
+### `FR_TRIG_S16_SAFE` (default off)
+
+- **Added**: compile-time flag for an **s16-safe crest**. When defined
+  while compiling `FR_math.c`, the quadrant-table endpoint is 32767 and
+  cardinal early-outs use the same value, so the s15.16 crest is ±65534
+  (2 LSB under true 1.0). Then `(s16)(x >> 1)` yields ±32767 instead of
+  wrapping. Return type and radix stay s15.16 — not a q1.15 API.
+- Default (flag off) keeps exact ±`FR_TRIG_ONE` (±65536). That return is
+  correct; the old wrap symptom was casting into `s16`, not the library
+  value itself. Leave the flag off unless a caller needs that cast.
+- New example pair: `examples/trig-crest/` (`trig_crest_exact` and
+  `trig_crest_s16_safe`). `waveform-synth` builds with the flag so its
+  `s16` sine buffer stays in range.
+- Tests cover both configs (`make test` includes `test-s16-safe`).
+
 ## Version 2.0.9 (2026)
 
 Arduino/ESP32 build fix and a saturating-add correctness fix. No API

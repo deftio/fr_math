@@ -9,7 +9,7 @@ or libraries. Pure C99, zero dependencies beyond `<stdint.h>`.
 - Repository: https://github.com/deftio/fr_math
 - Documentation: https://deftio.github.io/fr_math/
 - License: BSD-2-Clause
-- Version: 2.0.9
+- Version: 2.0.10
 
 ## Installation
 
@@ -88,9 +88,11 @@ s32 fr_sin(s32 rad, u16 radix);
 s32 fr_tan(s32 rad, u16 radix);
 
 // BAM (Binary Angle Measurement) — u16 where 65536 = 360 degrees:
-s32 fr_cos_bam(u16 bam);
-s32 fr_sin_bam(u16 bam);
+s32 fr_cos_bam(u16 bam);   // s15.16; default crest ±65536
+s32 fr_sin_bam(u16 bam);   // same; FR_TRIG_S16_SAFE → crest ±65534
 s32 fr_tan_bam(u16 bam);
+// FR_TRIG_S16_SAFE (compile FR_math.c): s16-safe crest for (s16)(x>>1);
+// still returns s15.16, not q1.15. Default off = exact ±1.0.
 
 // Degree API at any radix:
 s32 FR_Cos(s16 deg, u16 radix);

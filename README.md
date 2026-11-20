@@ -2,7 +2,7 @@
 [![CI](https://github.com/deftio/fr_math/actions/workflows/ci.yml/badge.svg)](https://github.com/deftio/fr_math/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen.svg)](#building-and-testing)
 [![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://deftio.github.io/fr_math/)
-[![Version](https://img.shields.io/badge/version-2.0.9-blue.svg)](release_notes.md)
+[![Version](https://img.shields.io/badge/version-2.0.10-blue.svg)](release_notes.md)
 [![GitHub](https://img.shields.io/badge/GitHub-repo-181717.svg?logo=github)](https://github.com/deftio/fr_math)
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-library-teal.svg)](https://registry.platformio.org/libraries/deftio/fr_math)
@@ -116,6 +116,14 @@ for ROM-constrained targets. Define them before including `FR_math.h`
 
 `FR_CORE_ONLY` is a convenience shorthand that defines both
 `FR_NO_PRINT` and `FR_NO_WAVES` in one step.
+
+**Trig crest (`FR_TRIG_S16_SAFE`, default off):** sin/cos return s15.16 with
+an exact ±1.0 crest (±65536). That is correct by design. If a caller
+blind-casts `(s16)(x >> 1)`, 32768 wraps to −32768. Define
+`FR_TRIG_S16_SAFE` when compiling `FR_math.c` for an s16-safe crest
+(65534, 2 LSB under 1.0) so that cast yields ±32767. Still s15.16 — not
+a q1.15 return. Leave the flag off unless you need that cast. See
+`examples/trig-crest/`.
 
 ```c
 /* Example: headless sensor node — math only, no print, no audio */
