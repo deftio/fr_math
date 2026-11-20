@@ -1771,7 +1771,7 @@ static void section_summary(void) {
     printf("| FR_FixMuls | OK | 4.1 | int64 fast path; rounds to nearest (+0x8000 before >>16) |\n");
     printf("| FR_FixMulSat | OK | 4.2, 4.3 | int64 fast path with round-to-nearest and explicit saturation |\n");
     printf("| FR_FixAddSat | OK | 4.4, 4.5 | Saturation behaves identically on LP64 host and ILP32 MCU |\n");
-    printf("| FR_CosI / FR_SinI | OK | 5 | s15.16 output; default crest exact ±65536 (FR_TRIG_S16_SAFE → 65534); max abs error ~3e-5 (2 LSB s15.16) over [-720, +720]; macros routing to fr_*_bam |\n");
+    printf("| FR_CosI / FR_SinI | OK | 5 | s15.16 output; default crest exact ±65536 (FR_TRIG_S16_SAFE → 65534); max abs error ~6.6e-5 (~4 LSB s15.16, see section 5) over [-720, +720]; macros routing to fr_*_bam |\n");
     printf("| FR_TanI (integer degrees) | OK | 5.1, 5.2 | BAM table lookup; 65-entry octant table; no 64-bit division |\n");
     printf("| FR_Cos / FR_Sin (interpolated) | OK | 6.1 | Within LSB-level error for r8 inputs in s16 |\n");
     printf("| FR_Tan (interpolated) | OK | 6.2 | Via fr_tan_bam; 65-entry octant table |\n");
@@ -2805,4 +2805,4 @@ int main(void) {
     section_accuracy_table();
 
     return 0;
-}
+}

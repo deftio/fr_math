@@ -599,8 +599,8 @@ s32 back   = FR_BAM2RAD(bam, 16);
 <h2>Trigonometry</h2>
 
 <p>Every trig function in FR_Math &mdash; integer-degree, radian, or
-BAM &mdash; funnels through a single 129-entry quadrant cosine table,
-<code>gFR_COS_TAB_Q</code> (128 intervals plus a sentinel for the
+BAM &mdash; funnels through a single 129-entry quadrant sine table,
+<code>gFR_SIN_TAB_Q</code> (128 intervals plus a sentinel for the
 interpolation). Every wrapper converts its angle to BAM and calls the
 same core routine. The internal table stores s0.15 values; the output
 is shifted to <strong>s15.16</strong> (radix 16).
@@ -624,8 +624,8 @@ flag off unless you need that cast.</p>
 <table>
 <thead><tr><th>Function</th><th>Signature</th><th>Output</th></tr></thead>
 <tbody>
-<tr><td><code>fr_cos_bam</code></td><td><code>s32 fr_cos_bam(u16 bam)</code></td><td>s15.16. Default range [&minus;65536, +65536] (exact crest). With <code>FR_TRIG_S16_SAFE</code>: [&minus;65534, +65534]. Zeros exact.</td></tr>
-<tr><td><code>fr_sin_bam</code></td><td><code>s32 fr_sin_bam(u16 bam)</code></td><td>s15.16, same range. Defined as <code>fr_cos_bam(bam &minus; FR_BAM_QUADRANT)</code>.</td></tr>
+<tr><td><code>fr_sin_bam</code></td><td><code>s32 fr_sin_bam(u16 bam)</code></td><td>s15.16. Default range [&minus;65536, +65536] (exact crest). With <code>FR_TRIG_S16_SAFE</code>: [&minus;65534, +65534]. Zeros exact.</td></tr>
+<tr><td><code>fr_cos_bam</code></td><td><code>s32 fr_cos_bam(u16 bam)</code></td><td>s15.16, same range. Defined as <code>fr_sin_bam(bam + FR_BAM_QUADRANT)</code>.</td></tr>
 <tr><td><code>fr_tan_bam</code></td><td><code>s32 fr_tan_bam(u16 bam)</code></td><td>s15.16. Uses a 65-entry octant table for [0, 45&deg;] and the reciprocal identity <code>tan(x) = 1/tan(90&deg;&minus;x)</code> for (45&deg;, 90&deg;). Saturates to <code>&plusmn;FR_TRIG_MAXVAL</code> at the poles (90&deg;, 270&deg;). Returns exact 0 at 0&deg; and 180&deg;. No 64-bit intermediates; one 32-bit division only in the &gt;45&deg; path.</td></tr>
 </tbody>
 </table>

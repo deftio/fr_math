@@ -28,8 +28,8 @@ make clean      # removes build artifacts
 Or compile manually:
 
 ```bash
-g++ -I../../src -Wall -Os -DFR_TRIG_S16_SAFE \
-  waveform_synth.cpp ../../src/FR_math.c -lm -o waveform_synth
+cc  -I../../src -Wall -Os -DFR_TRIG_S16_SAFE -c ../../src/FR_math.c -o FR_math.o
+g++ -I../../src -Wall -Os -DFR_TRIG_S16_SAFE waveform_synth.cpp FR_math.o -lm -o waveform_synth
 ```
 
 Sine samples are stored as `s16` via `(s16)(fr_sin_bam(phase) >> 1)`, so

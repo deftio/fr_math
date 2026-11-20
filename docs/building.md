@@ -177,23 +177,26 @@ usage will be smaller.
 <!-- SIZE_TABLE_START -->
 | Target | Lean | Core | Full |
 |--------|-----:|-----:|-----:|
-| Xtensa LX7 (ESP32-S3) | 2.9 KB | 4.2 KB | 5.3 KB |
+| AVR ATmega328P | 9.2 KB | 12.8 KB | 15.4 KB |
+| AVR ATtiny85 | 9.4 KB | 13.3 KB | 16.0 KB |
+| 68HC11 | 13.3 KB | 18.4 KB | 22.6 KB |
+| MSP430 | 7.8 KB | 10.7 KB | 12.8 KB |
 | Cortex-M4 (STM32) | 3.3 KB | 4.4 KB | 5.5 KB |
 | Cortex-M0 (RP2040) | 3.4 KB | 4.5 KB | 5.7 KB |
 | ARM Thumb | 3.4 KB | 4.7 KB | 5.9 KB |
-| RISC-V rv64 | 4.0 KB | 5.5 KB | 6.8 KB |
+| Xtensa LX7 (ESP32-S3) | 3.9 KB | 5.3 KB | 6.5 KB |
 | RISC-V rv32 | 4.1 KB | 5.5 KB | 6.8 KB |
 | Xtensa LX106 (ESP8266) | 4.2 KB | 5.8 KB | 7.3 KB |
 | ARM32 | 4.3 KB | 5.8 KB | 7.7 KB |
-| 68k | 4.4 KB | 6.2 KB | 7.8 KB |
-| MIPS32 | 4.7 KB | 6.6 KB | 8.7 KB |
+| m68k | 4.4 KB | 6.2 KB | 7.8 KB |
+| x86-32 | 5.3 KB | 7.2 KB | 9.2 KB |
+| MIPS32 | 5.5 KB | 7.5 KB | 9.6 KB |
+| PowerPC | 5.8 KB | 8.0 KB | 10.4 KB |
+| TCC x86 | 8.2 KB | 11.5 KB | 15.1 KB |
+| RISC-V rv64 | 4.0 KB | 5.5 KB | 6.8 KB |
 | x86-64 (GCC) | 4.6 KB | 6.1 KB | 8.0 KB |
 | AArch64 (ARM64) | 4.8 KB | 6.6 KB | 8.7 KB |
-| x86-32 | 5.3 KB | 7.2 KB | 9.2 KB |
-| PowerPC | 5.8 KB | 8.0 KB | 10.4 KB |
-| MSP430 (16-bit) | 7.8 KB | 10.7 KB | 12.8 KB |
-| AVR (ATmega328P) | 9.2 KB | 12.8 KB | 15.4 KB |
-| 68HC11 | 13.3 KB | 18.4 KB | 22.6 KB |
+| x86-64 (Clang) | 4.7 KB | 6.6 KB | 9.0 KB |
 <!-- SIZE_TABLE_END -->
 
 ### Lean build options
@@ -215,6 +218,13 @@ log2, ln, exp, pow2, and arithmetic — comparable to libfixmath's API at
 
 `FR_CORE_ONLY` is a convenience shorthand that defines both
 `FR_NO_PRINT` and `FR_NO_WAVES` in one step.
+
+`FR_TRIG_S16_SAFE` (default off) removes nothing; it changes the sin/cos
+crest from exact ±65536 to ±65534 so a blind `(s16)(x >> 1)` cast yields
+±32767 instead of wrapping. Results stay s15.16. The sine table lives in
+`FR_math.c`, so the flag must be set when compiling that file (`-D` on
+the command line or in `build_flags`); a `#define` in your own source
+has no effect. See `examples/trig-crest/`.
 
 ```c
 /* Example: headless sensor node — math only, no print, no audio */

@@ -199,23 +199,26 @@ usage will be smaller.</p>
 <table>
 <thead><tr><th>Target</th><th>Lean</th><th>Core</th><th>Full</th></tr></thead>
 <tbody>
-<tr><td>Xtensa LX7 (ESP32-S3)</td><td>2.9 KB</td><td>4.2 KB</td><td>5.3 KB</td></tr>
+<tr><td>AVR ATmega328P</td><td>9.2 KB</td><td>12.8 KB</td><td>15.4 KB</td></tr>
+<tr><td>AVR ATtiny85</td><td>9.4 KB</td><td>13.3 KB</td><td>16.0 KB</td></tr>
+<tr><td>68HC11</td><td>13.3 KB</td><td>18.4 KB</td><td>22.6 KB</td></tr>
+<tr><td>MSP430</td><td>7.8 KB</td><td>10.7 KB</td><td>12.8 KB</td></tr>
 <tr><td>Cortex-M4 (STM32)</td><td>3.3 KB</td><td>4.4 KB</td><td>5.5 KB</td></tr>
 <tr><td>Cortex-M0 (RP2040)</td><td>3.4 KB</td><td>4.5 KB</td><td>5.7 KB</td></tr>
 <tr><td>ARM Thumb</td><td>3.4 KB</td><td>4.7 KB</td><td>5.9 KB</td></tr>
-<tr><td>RISC-V rv64</td><td>4.0 KB</td><td>5.5 KB</td><td>6.8 KB</td></tr>
+<tr><td>Xtensa LX7 (ESP32-S3)</td><td>3.9 KB</td><td>5.3 KB</td><td>6.5 KB</td></tr>
 <tr><td>RISC-V rv32</td><td>4.1 KB</td><td>5.5 KB</td><td>6.8 KB</td></tr>
 <tr><td>Xtensa LX106 (ESP8266)</td><td>4.2 KB</td><td>5.8 KB</td><td>7.3 KB</td></tr>
 <tr><td>ARM32</td><td>4.3 KB</td><td>5.8 KB</td><td>7.7 KB</td></tr>
-<tr><td>68k</td><td>4.4 KB</td><td>6.2 KB</td><td>7.8 KB</td></tr>
-<tr><td>MIPS32</td><td>4.7 KB</td><td>6.6 KB</td><td>8.7 KB</td></tr>
+<tr><td>m68k</td><td>4.4 KB</td><td>6.2 KB</td><td>7.8 KB</td></tr>
+<tr><td>x86-32</td><td>5.3 KB</td><td>7.2 KB</td><td>9.2 KB</td></tr>
+<tr><td>MIPS32</td><td>5.5 KB</td><td>7.5 KB</td><td>9.6 KB</td></tr>
+<tr><td>PowerPC</td><td>5.8 KB</td><td>8.0 KB</td><td>10.4 KB</td></tr>
+<tr><td>TCC x86</td><td>8.2 KB</td><td>11.5 KB</td><td>15.1 KB</td></tr>
+<tr><td>RISC-V rv64</td><td>4.0 KB</td><td>5.5 KB</td><td>6.8 KB</td></tr>
 <tr><td>x86-64 (GCC)</td><td>4.6 KB</td><td>6.1 KB</td><td>8.0 KB</td></tr>
 <tr><td>AArch64 (ARM64)</td><td>4.8 KB</td><td>6.6 KB</td><td>8.7 KB</td></tr>
-<tr><td>x86-32</td><td>5.3 KB</td><td>7.2 KB</td><td>9.2 KB</td></tr>
-<tr><td>PowerPC</td><td>5.8 KB</td><td>8.0 KB</td><td>10.4 KB</td></tr>
-<tr><td>MSP430 (16-bit)</td><td>7.8 KB</td><td>10.7 KB</td><td>12.8 KB</td></tr>
-<tr><td>AVR (ATmega328P)</td><td>9.2 KB</td><td>12.8 KB</td><td>15.4 KB</td></tr>
-<tr><td>68HC11</td><td>13.3 KB</td><td>18.4 KB</td><td>22.6 KB</td></tr>
+<tr><td>x86-64 (Clang)</td><td>4.7 KB</td><td>6.6 KB</td><td>9.0 KB</td></tr>
 </tbody>
 </table>
 <!-- SIZE_TABLE_END -->
@@ -242,6 +245,13 @@ log2, ln, exp, pow2, and arithmetic &mdash; comparable to libfixmath&rsquo;s API
 
 <p><code>FR_CORE_ONLY</code> is a convenience shorthand that defines both
 <code>FR_NO_PRINT</code> and <code>FR_NO_WAVES</code> in one step.</p>
+
+<p><code>FR_TRIG_S16_SAFE</code> (default off) removes nothing; it changes the sin/cos
+crest from exact &plusmn;65536 to &plusmn;65534 so a blind <code>(s16)(x &gt;&gt; 1)</code> cast yields
+&plusmn;32767 instead of wrapping. Results stay s15.16. The sine table lives in
+<code>FR_math.c</code>, so the flag must be set when compiling that file (<code>-D</code> on
+the command line or in <code>build_flags</code>); a <code>#define</code> in your own source
+has no effect. See <code>examples/trig-crest/</code>.</p>
 
 <pre><code class="language-c">/* Example: headless sensor node &mdash; math only, no print, no audio */
 #define FR_CORE_ONLY

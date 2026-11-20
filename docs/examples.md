@@ -566,7 +566,7 @@ eighth digit (`5` vs `4`) shows the quantization floor: `2^−24 ≈
 ## Desktop example programs
 
 In addition to the inline snippets above, the `examples/` directory
-contains four self-contained desktop programs. Each has its own
+contains five self-contained desktop programs. Each has its own
 `Makefile` and `README.md`; build artifacts stay within the example's
 directory.
 
@@ -575,13 +575,14 @@ directory.
 | [`examples/fixed-point-basics/`](../examples/fixed-point-basics/) | Educational walkthrough of radix interpretation, `I2FR`/`FR2I` round-trips, `FR_NUM` constant construction, aligned add/sub, multiply precision, division, saturation, and `FR_printNumF` formatted output. |
 | [`examples/log-exp-curves/`](../examples/log-exp-curves/) | Sweeps `FR_log2`, `FR_ln`, `FR_log10`, `FR_pow2`, `FR_EXP`, `FR_POW10`, and `FR_sqrt` against IEEE double reference values, printing per-point and summary error tables. |
 | [`examples/waveform-synth/`](../examples/waveform-synth/) | Generates square, triangle, sawtooth, PWM, sine, and noise waveforms plus an ADSR envelope and amplitude-modulated combination. Default mode renders ASCII art; `--csv` mode outputs machine-readable CSV. |
+| [`examples/trig-crest/`](../examples/trig-crest/) | One source built twice: default exact ±1.0 crest (±65536) and `-DFR_TRIG_S16_SAFE` (±65534). Prints sin/cos at the cardinal angles and shows where a blind `(s16)(x >> 1)` cast wraps. |
 | [`examples/trig-accuracy/`](../examples/trig-accuracy/) | Head-to-head comparison of FR_Math (`FR_SinI`/`FR_CosI`/`FR_TanI`) vs libfixmath (`fix16_sin`/`fix16_cos`/`fix16_tan`) vs IEEE double over 0–360 degrees. Requires libfixmath source. |
 
 Build all from the repo root:
 
 ```bash
 make examples        # builds all desktop examples
-make run-examples    # builds and runs 1-3, plus 4 if libfixmath present
+make run-examples    # builds and runs 1-4, plus 5 if libfixmath present
 ```
 
 Or build any single example from its directory:

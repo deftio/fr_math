@@ -1227,7 +1227,7 @@ int test_trig_exact_codes() {
     const s16 neg_s16 = -32767;
 #else
     const s32 peak = FR_TRIG_ONE;     /* 65536 */
-    /* Blind (s16)(±65536 >> 1) both wrap to -32768. */
+    /* (s16)(65536 >> 1) wraps to -32768; -65536 >> 1 is already -32768. */
     const s16 pos_s16 = (s16)-32768;
     const s16 neg_s16 = (s16)-32768;
 #endif

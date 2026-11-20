@@ -10,7 +10,9 @@ CC  ?= gcc
 CXX ?= g++
 SRC_DIR = ../../src
 
-CXXFLAGS = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Os
+# FR_math.c is C: build it with $(CC), link with $(CXX).
+CFLAGS   = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Werror -Os
+CXXFLAGS = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Werror -Os
 LDFLAGS  = -lm
 
 TARGET = log_exp_curves
@@ -19,8 +21,11 @@ TARGET = log_exp_curves
 
 all: $(TARGET)
 
-$(TARGET): log_exp_curves.cpp $(SRC_DIR)/FR_math.c
+$(TARGET): log_exp_curves.cpp FR_math.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+FR_math.o: $(SRC_DIR)/FR_math.c $(SRC_DIR)/FR_math.h
+	$(CC) $(CFLAGS) -c $< -o $@
 
 run: $(TARGET)
 	./$(TARGET)

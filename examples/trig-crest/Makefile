@@ -11,18 +11,26 @@ CC  ?= gcc
 CXX ?= g++
 SRC_DIR = ../../src
 
-CXXFLAGS = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Os
+# FR_math.c is C: build it with $(CC) (once per crest mode), link with $(CXX).
+CFLAGS   = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Werror -Os
+CXXFLAGS = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Werror -Os
 LDFLAGS  = -lm
 
 .PHONY: all run clean
 
 all: trig_crest_exact trig_crest_s16_safe
 
-trig_crest_exact: trig_crest.cpp $(SRC_DIR)/FR_math.c
+trig_crest_exact: trig_crest.cpp FR_math_exact.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
 
-trig_crest_s16_safe: trig_crest.cpp $(SRC_DIR)/FR_math.c
+trig_crest_s16_safe: trig_crest.cpp FR_math_s16_safe.o
 	$(CXX) $(CXXFLAGS) -DFR_TRIG_S16_SAFE $^ $(LDFLAGS) -o $@
+
+FR_math_exact.o: $(SRC_DIR)/FR_math.c $(SRC_DIR)/FR_math.h
+	$(CC) $(CFLAGS) -c $< -o $@
+
+FR_math_s16_safe.o: $(SRC_DIR)/FR_math.c $(SRC_DIR)/FR_math.h
+	$(CC) $(CFLAGS) -DFR_TRIG_S16_SAFE -c $< -o $@
 
 run: all
 	@echo "=== trig_crest_exact ==="

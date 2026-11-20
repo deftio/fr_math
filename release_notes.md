@@ -20,6 +20,30 @@ return exact ±1.0 in s15.16 (±65536).
   `s16` sine buffer stays in range.
 - Tests cover both configs (`make test` includes `test-s16-safe`).
 
+### Build and tooling
+
+- **Fixed**: example Makefiles compiled `FR_math.c` with the C++ compiler,
+  which clang warns about. They now build it with `$(CC)` and link with
+  `$(CXX)`, and the examples build with `-Werror` (except `trig-accuracy`,
+  which also compiles libfixmath). The library, tests and examples build
+  with zero warnings under gcc and clang. Manual build commands in the
+  example READMEs match.
+- **Fixed**: `scripts/crossbuild_sizes.sh` had CRLF line endings, so
+  `make size-update` failed with `bash\r`. Converted to LF.
+- Size tables in `README.md`, `docs/building.md` and the building guide
+  page regenerated with `make size-update`. Code size is unchanged from
+  2.0.9; differences come from the current cross toolchains.
+
+### Docs
+
+- `FR_TRIG_S16_SAFE` documented in the build options guide.
+- Examples guide lists the new `trig-crest` example.
+- API reference: the trig table is the sine table `gFR_SIN_TAB_Q`, and
+  `fr_cos_bam` is defined as `fr_sin_bam(bam + FR_BAM_QUADRANT)`
+  (previously described the other way round).
+- TDD report summary: FR_CosI/FR_SinI max error stated as ~6.6e-5
+  (~4 LSB), matching the measured section-5 table.
+
 ## Version 2.0.9 (2026)
 
 Arduino/ESP32 build fix and a saturating-add correctness fix. No API

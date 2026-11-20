@@ -78,21 +78,27 @@ number of fractional bits available.
 
 <!-- SIZE_TABLE_START -->
 | Target | Lean | Core | Full |
-| --- | ---:| ---:| ---:|
-| AVR ATmega328P (8-bit) | 9.2 KB | 12.8 KB | 15.4 KB |
-| 68HC11 (8-bit) | 13.3 KB | 18.4 KB | 22.6 KB |
-| MSP430 (16-bit) | 7.8 KB | 10.7 KB | 12.8 KB |
-| Xtensa LX7 (ESP32-S3) | 2.9 KB | 4.2 KB | 5.3 KB |
-| Cortex-M4 (32-bit) | 3.3 KB | 4.4 KB | 5.5 KB |
-| Cortex-M0 (32-bit) | 3.4 KB | 4.5 KB | 5.7 KB |
+|--------|-----:|-----:|-----:|
+| AVR ATmega328P | 9.2 KB | 12.8 KB | 15.4 KB |
+| AVR ATtiny85 | 9.4 KB | 13.3 KB | 16.0 KB |
+| 68HC11 | 13.3 KB | 18.4 KB | 22.6 KB |
+| MSP430 | 7.8 KB | 10.7 KB | 12.8 KB |
+| Cortex-M4 (STM32) | 3.3 KB | 4.4 KB | 5.5 KB |
+| Cortex-M0 (RP2040) | 3.4 KB | 4.5 KB | 5.7 KB |
+| ARM Thumb | 3.4 KB | 4.7 KB | 5.9 KB |
+| Xtensa LX7 (ESP32-S3) | 3.9 KB | 5.3 KB | 6.5 KB |
 | RISC-V rv32 | 4.1 KB | 5.5 KB | 6.8 KB |
 | Xtensa LX106 (ESP8266) | 4.2 KB | 5.8 KB | 7.3 KB |
-| m68k (32-bit) | 4.4 KB | 6.2 KB | 7.8 KB |
-| MIPS32 | 4.7 KB | 6.6 KB | 8.7 KB |
+| ARM32 | 4.3 KB | 5.8 KB | 7.7 KB |
+| m68k | 4.4 KB | 6.2 KB | 7.8 KB |
 | x86-32 | 5.3 KB | 7.2 KB | 9.2 KB |
+| MIPS32 | 5.5 KB | 7.5 KB | 9.6 KB |
+| PowerPC | 5.8 KB | 8.0 KB | 10.4 KB |
+| TCC x86 | 8.2 KB | 11.5 KB | 15.1 KB |
 | RISC-V rv64 | 4.0 KB | 5.5 KB | 6.8 KB |
 | x86-64 (GCC) | 4.6 KB | 6.1 KB | 8.0 KB |
 | AArch64 (ARM64) | 4.8 KB | 6.6 KB | 8.7 KB |
+| x86-64 (Clang) | 4.7 KB | 6.6 KB | 9.0 KB |
 <!-- SIZE_TABLE_END -->
 
 **Lean** (`-DFR_LEAN -DFR_NO_PRINT`): radian trig, inv trig, log/exp, sqrt.  

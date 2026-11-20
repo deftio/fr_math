@@ -10,7 +10,9 @@ CC  ?= gcc
 CXX ?= g++
 SRC_DIR = ../../src
 
-CXXFLAGS = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Os
+# FR_math.c is C: build it with $(CC), link with $(CXX).
+CFLAGS   = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Werror -Os
+CXXFLAGS = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Werror -Os
 LDFLAGS  = -lm
 
 TARGET = fixed_point_basics
@@ -19,8 +21,11 @@ TARGET = fixed_point_basics
 
 all: $(TARGET)
 
-$(TARGET): fixed_point_basics.cpp $(SRC_DIR)/FR_math.c
+$(TARGET): fixed_point_basics.cpp FR_math.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+FR_math.o: $(SRC_DIR)/FR_math.c $(SRC_DIR)/FR_math.h
+	$(CC) $(CFLAGS) -c $< -o $@
 
 run: $(TARGET)
 	./$(TARGET)

@@ -28,6 +28,9 @@ in the repo.</p>
 <ul>
   <li><strong><code>FR_TRIG_S16_SAFE</code> (default off)</strong>: when compiling <code>FR_math.c</code>, crest becomes &plusmn;65534 so <code>(s16)(x &gt;&gt; 1)</code> does not wrap. Still s15.16, not q1.15. Leave off unless you need that cast.</li>
   <li>New <code>examples/trig-crest/</code> pair shows exact vs safe. Tests cover both configs.</li>
+  <li>Examples now compile <code>FR_math.c</code> as C and build with <code>-Werror</code>; library, tests and examples build with zero warnings under gcc and clang.</li>
+  <li>Fixed <code>make size-update</code> (CRLF line endings in <code>scripts/crossbuild_sizes.sh</code>); size tables regenerated. Code size unchanged.</li>
+  <li>Doc fixes: <code>FR_TRIG_S16_SAFE</code> in the build guide; API reference names the sine table and the cos/sin relationship correctly.</li>
 </ul>
 
 <hr>

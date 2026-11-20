@@ -10,6 +10,9 @@ Optional s16-safe trig crest. Default sin/cos crest remains exact ±1.0 in s15.1
 
 - **`FR_TRIG_S16_SAFE` (default off)**: when compiling `FR_math.c`, crest becomes ±65534 so `(s16)(x >> 1)` does not wrap. Still s15.16, not q1.15. Leave off unless you need that cast.
 - New `examples/trig-crest/` pair shows exact vs safe. Tests cover both configs.
+- Examples now compile `FR_math.c` as C and build with `-Werror`; library, tests and examples build with zero warnings under gcc and clang.
+- Fixed `make size-update` (CRLF line endings in `scripts/crossbuild_sizes.sh`); size tables regenerated. Code size unchanged.
+- Doc fixes: `FR_TRIG_S16_SAFE` in the build guide; API reference names the sine table and the cos/sin relationship correctly.
 
 ---
 
