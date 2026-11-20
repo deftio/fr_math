@@ -710,7 +710,7 @@ static void section_trig_int(void) {
     table_header_stats();
     table_row_stats("FR_CosI [-720..720]", &cos_stats);
     table_row_stats("FR_SinI [-720..720]", &sin_stats);
-    printf("\n> Tolerance reference: 1 LSB in s15.16 = 1/65536 ≈ 1.53e-5. Poles (0,90,180,270) are exact.\n\n");
+    printf("\n> Tolerance reference: 1 LSB in s15.16 = 1/65536 ≈ 1.53e-5. Poles (0,90,180,270) are exact ±FR_TRIG_ONE or 0 (default build).\n\n");
 
     md_h3("5.1 FR_TanI vs tan() (skipping ±90n)");
     stats_t tan_stats;
@@ -1771,11 +1771,11 @@ static void section_summary(void) {
     printf("| FR_FixMuls | OK | 4.1 | int64 fast path; rounds to nearest (+0x8000 before >>16) |\n");
     printf("| FR_FixMulSat | OK | 4.2, 4.3 | int64 fast path with round-to-nearest and explicit saturation |\n");
     printf("| FR_FixAddSat | OK | 4.4, 4.5 | Saturation behaves identically on LP64 host and ILP32 MCU |\n");
-    printf("| FR_CosI / FR_SinI | OK | 5 | s15.16 output; exact at poles; max abs error ~1.5e-5 (1 LSB s15.16) over [-720, +720]; macros routing to fr_*_bam |\n");
+    printf("| FR_CosI / FR_SinI | OK | 5 | s15.16 output; default crest exact ±65536 (FR_TRIG_S16_SAFE → 65534); max abs error ~6.6e-5 (~4 LSB s15.16, see section 5) over [-720, +720]; macros routing to fr_*_bam |\n");
     printf("| FR_TanI (integer degrees) | OK | 5.1, 5.2 | BAM table lookup; 65-entry octant table; no 64-bit division |\n");
     printf("| FR_Cos / FR_Sin (interpolated) | OK | 6.1 | Within LSB-level error for r8 inputs in s16 |\n");
     printf("| FR_Tan (interpolated) | OK | 6.2 | Via fr_tan_bam; 65-entry octant table |\n");
-    printf("| fr_cos / fr_sin / fr_cos_bam / fr_sin_bam / fr_cos_deg / fr_sin_deg | OK | 6 | s15.16 output; 129-entry quadrant table with round-to-nearest linear interp; exact at cardinal angles |\n");
+    printf("| fr_cos / fr_sin / fr_cos_bam / fr_sin_bam / fr_cos_deg / fr_sin_deg | OK | 6 | s15.16 output; 129-entry quadrant table; default endpoint 32768 (exact 1.0); FR_TRIG_S16_SAFE → 32767 |\n");
     printf("| fr_tan_bam | OK | 14 | 65-entry octant table; first-octant lerp, second-octant 32-bit reciprocal; no 64-bit |\n");
     printf("| FR_acos | OK | 7.1 | Max error ~0.83° over [-1, +1] swept at 200 points |\n");
     printf("| FR_asin | OK | 7.2 | Same precision as FR_acos |\n");
@@ -2805,4 +2805,4 @@ int main(void) {
     section_accuracy_table();
 
     return 0;
-}
+}

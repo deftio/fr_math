@@ -5,7 +5,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Releases — FR_Math</title>
-  <meta name="description" content="FR_Math release history: v2.0.8 tangent rewrite and trig rounding, v2.0.7 FR_CORE_ONLY, v2.0.0 precision rewrite and new waveforms, v1.0.3 test coverage, v1.02 initial public release.">
+  <meta name="description" content="FR_Math release history: v2.0.10 s16-safe trig crest flag, v2.0.9 Arduino typedef fix, v2.0.8 tangent rewrite, v2.0.0 precision rewrite and new waveforms, v1.02 initial public release.">
   <link rel="stylesheet" href="assets/main.css">
 </head>
 <body>
@@ -20,6 +20,20 @@
 <p>Release highlights. For the full per-symbol change log, see
 <a href="https://github.com/deftio/fr_math/blob/master/release_notes.md">release_notes.md</a>
 in the repo.</p>
+
+<h2>v2.0.10 &mdash; 2026</h2>
+
+<p>Optional s16-safe trig crest. Default sin/cos crest remains exact &plusmn;1.0 in s15.16 (&plusmn;65536).</p>
+
+<ul>
+  <li><strong><code>FR_TRIG_S16_SAFE</code> (default off)</strong>: when compiling <code>FR_math.c</code>, crest becomes &plusmn;65534 so <code>(s16)(x &gt;&gt; 1)</code> does not wrap. Still s15.16, not q1.15. Leave off unless you need that cast.</li>
+  <li>New <code>examples/trig-crest/</code> pair shows exact vs safe. Tests cover both configs.</li>
+  <li>Examples now compile <code>FR_math.c</code> as C and build with <code>-Werror</code>; library, tests and examples build with zero warnings under gcc and clang.</li>
+  <li>Fixed <code>make size-update</code> (CRLF line endings in <code>scripts/crossbuild_sizes.sh</code>); size tables regenerated. Code size unchanged.</li>
+  <li>Doc fixes: <code>FR_TRIG_S16_SAFE</code> in the build guide; API reference names the sine table and the cos/sin relationship correctly.</li>
+</ul>
+
+<hr>
 
 <h2>v2.0.9 &mdash; 2026</h2>
 

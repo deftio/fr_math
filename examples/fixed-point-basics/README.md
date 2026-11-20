@@ -27,7 +27,8 @@ make clean      # removes build artifacts
 Or compile manually:
 
 ```bash
-g++ -I../../src -Wall -Os fixed_point_basics.cpp ../../src/FR_math.c -lm -o fixed_point_basics
+cc  -I../../src -Wall -Os -c ../../src/FR_math.c -o FR_math.o
+g++ -I../../src -Wall -Os fixed_point_basics.cpp FR_math.o -lm -o fixed_point_basics
 ```
 
 ## Expected output

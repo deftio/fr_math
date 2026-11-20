@@ -382,22 +382,30 @@ s32 back   = FR_BAM2RAD(bam, 16);
 ## Trigonometry
 
 Every trig function in FR_Math — integer-degree, radian, or
-BAM — funnels through a single 129-entry quadrant cosine table,
-`gFR_COS_TAB_Q` (128 intervals plus a sentinel for the
+BAM — funnels through a single 129-entry quadrant sine table,
+`gFR_SIN_TAB_Q` (128 intervals plus a sentinel for the
 interpolation). Every wrapper converts its angle to BAM and calls the
 same core routine. The internal table stores values in s0.15; the
-output functions shift the result to **s15.16** (radix 16), giving
-exact 1.0 representation. Cardinal angles (0°, 90°, 180°, 270°)
-produce exact results: `cos(0°) = 65536`, `cos(90°) = 0`,
-`sin(90°) = 65536`, etc. The constant `FR_TRIG_ONE` (65536)
-represents exactly 1.0 in the s15.16 output format.
+output functions shift the result to **s15.16** (radix 16).
+By default the crest is exact ±`FR_TRIG_ONE` (±65536): `sin(90°) = 65536`,
+`cos(0°) = 65536`, and zeros are exact. That value is correct for s15.16;
+the catch is a blind `(s16)(x >> 1)` cast, which wraps `32768` to `-32768`.
+
+Define `FR_TRIG_S16_SAFE` when compiling `FR_math.c` for an **s16-safe
+crest**: the quadrant-table endpoint becomes 32767, so the s15.16 crest
+is 65534 (2 LSB under true 1.0) and `(s16)(x >> 1)` yields ±32767. The
+return type and radix stay s15.16 either way — this is not a q1.15 API.
+The same endpoint is used for table interpolation and cardinal early-outs.
+A `#define` in a caller that links a library built without the flag does
+nothing; the table lives in `FR_math.c`. Leave the flag off unless you
+need that cast.
 
 ### BAM-native (the core)
 
 | Function | Signature | Output |
 | --- | --- | --- |
-| `fr_cos_bam` | `s32 fr_cos_bam(u16 bam)` | s15.16, range [−65536, +65536]. Exact at cardinal angles. |
-| `fr_sin_bam` | `s32 fr_sin_bam(u16 bam)` | s15.16. Defined as `fr_cos_bam(bam − FR_BAM_QUADRANT)`. |
+| `fr_sin_bam` | `s32 fr_sin_bam(u16 bam)` | s15.16. Default range [−65536, +65536] (exact crest). With `FR_TRIG_S16_SAFE`: [−65534, +65534]. Zeros exact. |
+| `fr_cos_bam` | `s32 fr_cos_bam(u16 bam)` | s15.16, same range. Defined as `fr_sin_bam(bam + FR_BAM_QUADRANT)`. |
 | `fr_tan_bam` | `s32 fr_tan_bam(u16 bam)` | s15.16. Uses a 65-entry octant table for [0, 45°] and the reciprocal identity `tan(x) = 1/tan(90°−x)` for (45°, 90°). Saturates to `±FR_TRIG_MAXVAL` at the poles (90°, 270°). Returns exact 0 at 0° and 180°. No 64-bit intermediates; one 32-bit division only in the >45° path. |
 
 ### Radian-native

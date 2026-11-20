@@ -27,7 +27,8 @@ make clean      # removes build artifacts
 Or compile manually:
 
 ```bash
-g++ -I../../src -Wall -Os log_exp_curves.cpp ../../src/FR_math.c -lm -o log_exp_curves
+cc  -I../../src -Wall -Os -c ../../src/FR_math.c -o FR_math.o
+g++ -I../../src -Wall -Os log_exp_curves.cpp FR_math.o -lm -o log_exp_curves
 ```
 
 ## Expected output

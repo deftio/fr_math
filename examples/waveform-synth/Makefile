@@ -11,7 +11,12 @@ CC  ?= gcc
 CXX ?= g++
 SRC_DIR = ../../src
 
-CXXFLAGS = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Os
+# Stores sine in s16 via (s16)(fr_sin_bam(phase) >> 1), so build with
+# FR_TRIG_S16_SAFE (crest 65534) to avoid the exact-crest wrap at ±1.0.
+# The flag must reach FR_math.c (the table lives there). FR_math.c is C:
+# build it with $(CC), link with $(CXX).
+CFLAGS   = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Werror -Os -DFR_TRIG_S16_SAFE
+CXXFLAGS = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Werror -Os -DFR_TRIG_S16_SAFE
 LDFLAGS  = -lm
 
 TARGET = waveform_synth
@@ -20,8 +25,11 @@ TARGET = waveform_synth
 
 all: $(TARGET)
 
-$(TARGET): waveform_synth.cpp $(SRC_DIR)/FR_math.c
+$(TARGET): waveform_synth.cpp FR_math.o
 	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+FR_math.o: $(SRC_DIR)/FR_math.c $(SRC_DIR)/FR_math.h
+	$(CC) $(CFLAGS) -c $< -o $@
 
 run: $(TARGET)
 	./$(TARGET)

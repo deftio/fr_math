@@ -1,5 +1,49 @@
 # FR_Math Release Notes
 
+## Version 2.0.10 (2026)
+
+Optional s16-safe trig crest. Default behavior unchanged: sin/cos still
+return exact ±1.0 in s15.16 (±65536).
+
+### `FR_TRIG_S16_SAFE` (default off)
+
+- **Added**: compile-time flag for an **s16-safe crest**. When defined
+  while compiling `FR_math.c`, the quadrant-table endpoint is 32767 and
+  cardinal early-outs use the same value, so the s15.16 crest is ±65534
+  (2 LSB under true 1.0). Then `(s16)(x >> 1)` yields ±32767 instead of
+  wrapping. Return type and radix stay s15.16 — not a q1.15 API.
+- Default (flag off) keeps exact ±`FR_TRIG_ONE` (±65536). That return is
+  correct; the old wrap symptom was casting into `s16`, not the library
+  value itself. Leave the flag off unless a caller needs that cast.
+- New example pair: `examples/trig-crest/` (`trig_crest_exact` and
+  `trig_crest_s16_safe`). `waveform-synth` builds with the flag so its
+  `s16` sine buffer stays in range.
+- Tests cover both configs (`make test` includes `test-s16-safe`).
+
+### Build and tooling
+
+- **Fixed**: example Makefiles compiled `FR_math.c` with the C++ compiler,
+  which clang warns about. They now build it with `$(CC)` and link with
+  `$(CXX)`, and the examples build with `-Werror` (except `trig-accuracy`,
+  which also compiles libfixmath). The library, tests and examples build
+  with zero warnings under gcc and clang. Manual build commands in the
+  example READMEs match.
+- **Fixed**: `scripts/crossbuild_sizes.sh` had CRLF line endings, so
+  `make size-update` failed with `bash\r`. Converted to LF.
+- Size tables in `README.md`, `docs/building.md` and the building guide
+  page regenerated with `make size-update`. Code size is unchanged from
+  2.0.9; differences come from the current cross toolchains.
+
+### Docs
+
+- `FR_TRIG_S16_SAFE` documented in the build options guide.
+- Examples guide lists the new `trig-crest` example.
+- API reference: the trig table is the sine table `gFR_SIN_TAB_Q`, and
+  `fr_cos_bam` is defined as `fr_sin_bam(bam + FR_BAM_QUADRANT)`
+  (previously described the other way round).
+- TDD report summary: FR_CosI/FR_SinI max error stated as ~6.6e-5
+  (~4 LSB), matching the measured section-5 table.
+
 ## Version 2.0.9 (2026)
 
 Arduino/ESP32 build fix and a saturating-add correctness fix. No API

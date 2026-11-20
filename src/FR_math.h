@@ -32,8 +32,8 @@
 #ifndef __FR_Math_h__
 #define __FR_Math_h__
 
-#define FR_MATH_VERSION     "2.0.9"
-#define FR_MATH_VERSION_HEX  0x020009  /* major << 16 | minor << 8 | patch */
+#define FR_MATH_VERSION     "2.0.10"
+#define FR_MATH_VERSION_HEX  0x02000A  /* major << 16 | minor << 8 | patch */
 
 #ifdef FR_CORE_ONLY
 #define FR_NO_PRINT
@@ -259,9 +259,11 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
  * FR_TRIG_OUT_PREC — output precision of sin/cos/tan (s15.16 since v2.0.1)
  * FR_TRIG_ONE      — exact 1.0 in output format (1 << 16 = 65536)
  *
- * sin/cos return s32 at radix 16 (s15.16). This matches libfixmath Q16.16
- * precision and allows exact representation of 1.0 at the poles.
- * tan returns s32 at radix 16 (s15.16). Saturates at ±FR_TRIG_MAXVAL.
+ * sin/cos return s32 at radix 16 (s15.16). The crest is exact ±FR_TRIG_ONE.
+ * Define FR_TRIG_S16_SAFE when compiling FR_math.c for an s16-safe crest
+ * (65534, 2 LSB under 1.0) so (s16)(x >> 1) does not wrap. The return
+ * type and radix do not change. tan returns s32 at radix 16 and
+ * saturates at ±FR_TRIG_MAXVAL.
  */
 #define FR_TRIG_PREC     (15)
 #define FR_TRIG_OUT_PREC (16)
@@ -407,8 +409,13 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
  * Radian-native and BAM-native trig (recommended)
  *
  * All sin/cos functions return s32 at radix 16 (s15.16).
- * 1.0 is represented exactly as FR_TRIG_ONE (65536).
- * Poles (0, 90, 180, 270 deg) produce exact ±FR_TRIG_ONE or 0.
+ * Zeros at 0° and 180° are exact. The crest is exact ±FR_TRIG_ONE
+ * (65536). Define FR_TRIG_S16_SAFE when compiling FR_math.c if a caller
+ * will blind-cast (s16)(x >> 1) for a ±1 waveform: the crest becomes
+ * 65534, and that shift fits in s16 as ±32767. Leave the flag off when
+ * you want exact ±1.0. The result stays s15.16 either way. A #define in
+ * a caller that links a library built without the flag does nothing;
+ * the table lives in FR_math.c.
  *
  *   fr_cos_bam(bam)         — cos of a BAM angle,        s15.16 result
  *   fr_sin_bam(bam)         — sin of a BAM angle,        s15.16 result
@@ -420,8 +427,9 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
  *   fr_tan_deg(deg, radix)  — tan of fixed-radix degrees, s15.16 result
  *
  * All go through the same 129-entry quadrant table with linear interpolation.
- * Worst-case error: ~2 LSB in s15.16 (~3e-5 absolute), except at the four
- * cardinal angles where the result is exact.
+ * Worst-case error: ~2 LSB in s15.16 (~3e-5 absolute). Cardinals are
+ * exact unless FR_TRIG_S16_SAFE is set, in which case the crest is
+ * 2 LSB under 1.0 and the zeros stay exact.
  *
  * The radian and degree wrappers (fr_sin, fr_cos, fr_tan, etc.) range-reduce
  * their input, convert to u16 BAM, and call the BAM-native functions. Small-

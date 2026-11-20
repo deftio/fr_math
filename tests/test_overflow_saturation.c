@@ -102,25 +102,31 @@ int test_mul_radix() {
 int test_trig_edge_cases() {
     s32 result;
 
-    /* Test cos(0) = 1.0 in s15.16 format (FR_TRIG_ONE = 65536) */
+    /* Default crest is exact ±FR_TRIG_ONE. With FR_TRIG_S16_SAFE it is
+     * 65534 (s16-safe crest). FR_TRIG_ONE itself stays 65536 either way. */
+#ifdef FR_TRIG_S16_SAFE
+    const s32 crest = 65534;
+#else
+    const s32 crest = FR_TRIG_ONE;
+#endif
     result = FR_CosI(0);
-    ASSERT_EQ(FR_TRIG_ONE, result, "cos(0) should be 1.0 (65536 in s15.16)");
+    ASSERT_EQ(crest, result, "cos(0) should be the configured crest");
 
     /* Test cos(90) = 0 */
     result = FR_CosI(90);
     ASSERT_EQ(0, result, "cos(90) should be 0");
 
-    /* Test cos(180) = -1.0 */
+    /* Test cos(180) = -crest */
     result = FR_CosI(180);
-    ASSERT_EQ(-FR_TRIG_ONE, result, "cos(180) should be -1.0");
+    ASSERT_EQ(-crest, result, "cos(180) should be the negative crest");
 
-    /* Test cos(360) = cos(0) = 1.0 */
+    /* Test cos(360) = cos(0) */
     result = FR_CosI(360);
-    ASSERT_EQ(FR_TRIG_ONE, result, "cos(360) should be 1.0");
+    ASSERT_EQ(crest, result, "cos(360) should match cos(0)");
 
     /* Test large angle (should wrap) */
     result = FR_CosI(720);  /* 720 = 2*360 */
-    ASSERT_EQ(FR_TRIG_ONE, result, "cos(720) should be 1.0 (wrapped)");
+    ASSERT_EQ(crest, result, "cos(720) should match cos(0)");
 
     /* Test negative angle */
     result = FR_CosI(-90);

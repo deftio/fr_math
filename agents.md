@@ -103,6 +103,10 @@ Define before including `FR_math.h` to exclude optional subsystems:
 | `FR_NO_PRINT` | `FR_printNumF/D/H`, `FR_numstr` | ~1.3 KB |
 | `FR_NO_WAVES` | `fr_wave_*`, `fr_adsr_*`, `FR_HZ2BAM_INC` | ~0.6 KB |
 
+`FR_TRIG_S16_SAFE` (default off, define when compiling `FR_math.c`): s16-safe
+sin/cos crest (65534) so `(s16)(x >> 1)` does not wrap. Still returns s15.16;
+leave off for exact ±1.0. See `examples/trig-crest/`.
+
 ## Platform targets
 
 The library compiles on: AVR (Arduino), ARM Cortex-M0/M4, ESP32,

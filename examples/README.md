@@ -27,6 +27,7 @@ Build artifacts stay within the example's directory.
 | [fixed-point-basics](fixed-point-basics/) | Educational walkthrough: radix, conversions, add/sub/mul/div, saturation, formatted output |
 | [log-exp-curves](log-exp-curves/) | Sweep log2/ln/log10, pow2/exp/pow10, sqrt with error tables vs IEEE double |
 | [waveform-synth](waveform-synth/) | Wave generators + ADSR envelope with ASCII art and CSV output modes |
+| [trig-crest](trig-crest/) | Exact ±1.0 crest vs `FR_TRIG_S16_SAFE` (shows blind `s16` cast wrap) |
 | [trig-accuracy](trig-accuracy/) | FR_Math vs libfixmath trig accuracy comparison (requires libfixmath source) |
 
 Build all from the repo root:

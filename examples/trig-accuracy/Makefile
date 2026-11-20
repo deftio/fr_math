@@ -13,6 +13,7 @@ CXX ?= g++
 SRC_DIR = ../../src
 LFM_DIR = ../../compare_lfm/libfixmath/libfixmath
 
+# FR_math.c is C: build it with $(CC), link with $(CXX).
 CXXFLAGS = -I$(SRC_DIR) -I$(LFM_DIR) -Wall -Wextra -Wshadow -Os
 CFLAGS   = -I$(SRC_DIR) -I$(LFM_DIR) -Wall -Wextra -Wshadow -Os
 LDFLAGS  = -lm
@@ -47,8 +48,11 @@ fix16_sqrt.o: $(LFM_DIR)/fix16_sqrt.c
 fix16_exp.o: $(LFM_DIR)/fix16_exp.c
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(TARGET): trig_accuracy.cpp $(SRC_DIR)/FR_math.c $(LFM_OBJS)
-	$(CXX) $(CXXFLAGS) trig_accuracy.cpp $(SRC_DIR)/FR_math.c $(LFM_OBJS) $(LDFLAGS) -o $@
+$(TARGET): trig_accuracy.cpp FR_math.o $(LFM_OBJS)
+	$(CXX) $(CXXFLAGS) $^ $(LDFLAGS) -o $@
+
+FR_math.o: $(SRC_DIR)/FR_math.c $(SRC_DIR)/FR_math.h
+	$(CC) $(CFLAGS) -c $< -o $@
 
 run: $(TARGET)
 	./$(TARGET)
