@@ -1,5 +1,18 @@
 # FR_Math Release Notes
 
+## Version 2.0.11 (2026)
+
+Maintenance release: GitHub code-scanning (CodeQL) cleanup. No library
+or API changes; `src/` compiles to the same code as 2.0.10.
+
+### Build and tooling
+
+- **CI**: `ci.yml` now sets workflow-level `permissions: contents: read`,
+  so the `GITHUB_TOKEN` is least-privilege for every CI job.
+- **Fixed**: `tools/fr_coef-gen.cpp` passed `long` values to `%d` / `%x`
+  printf specifiers; now `%ld` / `%lx`. Its coefficient comment was missing
+  a `%`, so the value was never printed; restored.
+
 ## Version 2.0.10 (2026)
 
 Optional s16-safe trig crest. Default behavior unchanged: sin/cos still

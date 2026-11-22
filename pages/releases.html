@@ -5,7 +5,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Releases — FR_Math</title>
-  <meta name="description" content="FR_Math release history: v2.0.10 s16-safe trig crest flag, v2.0.9 Arduino typedef fix, v2.0.8 tangent rewrite, v2.0.0 precision rewrite and new waveforms, v1.02 initial public release.">
+  <meta name="description" content="FR_Math release history: v2.0.11 CodeQL cleanup, v2.0.10 s16-safe trig crest flag, v2.0.9 Arduino typedef fix, v2.0.8 tangent rewrite, v2.0.0 precision rewrite and new waveforms, v1.02 initial public release.">
   <link rel="stylesheet" href="assets/main.css">
 </head>
 <body>
@@ -20,6 +20,17 @@
 <p>Release highlights. For the full per-symbol change log, see
 <a href="https://github.com/deftio/fr_math/blob/master/release_notes.md">release_notes.md</a>
 in the repo.</p>
+
+<h2>v2.0.11 &mdash; 2026</h2>
+
+<p>Maintenance release: CodeQL code-scanning cleanup. No library or API changes.</p>
+
+<ul>
+  <li>CI workflow now runs with a read-only <code>GITHUB_TOKEN</code> (<code>permissions: contents: read</code>).</li>
+  <li><code>tools/fr_coef-gen.cpp</code>: fixed printf format specifiers for <code>long</code> arguments and a missing <code>%</code> that dropped a value from its output.</li>
+</ul>
+
+<hr>
 
 <h2>v2.0.10 &mdash; 2026</h2>
 
