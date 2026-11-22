@@ -22,9 +22,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 cd "${PROJECT_ROOT}"
 
-# Log all output to build/release-<timestamp>.log
-mkdir -p build
-LOG_FILE="build/release-$(date -u '+%Y%m%d-%H%M%S').log"
+# Log all output to release-logs/release-<timestamp>.log. Not under
+# build/: step 3's `make clean` deletes build/ and the log with it.
+# (*.log is gitignored.)
+mkdir -p release-logs
+LOG_FILE="release-logs/release-$(date -u '+%Y%m%d-%H%M%S').log"
 exec > >(tee -a "$LOG_FILE") 2>&1
 echo "Log: $LOG_FILE"
 
@@ -126,11 +128,61 @@ do_sync_version() {
 # Step 3: Local validation (strict compile, tests, coverage)
 # -----------------------------------------------------------------------
 
+# True if a path is a tracked, non-empty binary file under examples/
+# (a compiled example program checked in for users to run directly).
+is_example_binary() {
+    local f="$1"
+    case "$f" in examples/*) ;; *) return 1 ;; esac
+    [ -f "$f" ] && [ -s "$f" ] || return 1
+    # grep -I treats binary files as non-matching.
+    ! grep -Iq . "$f"
+}
+
+# Every tracked example binary must be rebuilt from current source on
+# every release; otherwise it ships stale (old version string, old code).
+# The usual cause is a new example missing from the makefile's
+# `clean-examples` or `examples` target. Checked exactly, not by mtime
+# (macOS bash 3.2 compares mtimes at 1 s resolution):
+#   list_example_binaries   — before cleaning, record tracked binaries
+#   check_example_binaries  — after cleaning, each must be gone;
+#                             after building, each must be back
+list_example_binaries() {
+    local f
+    while IFS= read -r f; do
+        if is_example_binary "$f"; then echo "$f"; fi
+    done < <(git ls-files examples)
+}
+
+check_example_binaries() {
+    local phase="$1" list="$2" f bad=""
+    while IFS= read -r f; do
+        [ -n "$f" ] || continue
+        if [ "$phase" = "cleaned" ] && [ -e "$f" ]; then bad="$bad $f"; fi
+        if [ "$phase" = "built" ] && [ ! -e "$f" ]; then bad="$bad $f"; fi
+    done <<< "$list"
+    if [ -n "$bad" ]; then
+        echo ""
+        if [ "$phase" = "cleaned" ]; then
+            echo "  Tracked example binaries NOT removed by 'make clean-examples':"
+        else
+            echo "  Tracked example binaries NOT rebuilt by 'make examples':"
+        fi
+        for f in $bad; do echo "    $f"; done
+        echo ""
+        fail "Add these examples to the makefile's clean-examples and examples targets (or untrack the binaries)."
+    fi
+}
+
 do_validate() {
     step_header "Local validation (build, tests, warnings, coverage)"
 
-    echo "  --- Clean build ---"
-    run_cmd make clean >/dev/null 2>&1
+    echo "  --- Clean build (library, tests, examples) ---"
+    # clean-examples matters: example Makefiles rebuild by timestamp, so
+    # without it a tracked example binary can survive a release stale.
+    local example_bins
+    example_bins=$(list_example_binaries)
+    run_cmd make clean clean-examples >/dev/null 2>&1
+    check_example_binaries cleaned "${example_bins}"
 
     echo ""
     echo "  --- Build library + examples (uses LIB_WARN from makefile) ---"
@@ -140,6 +192,8 @@ do_validate() {
         fail "Library build failed (compiler warnings or errors)"
     fi
     pass "Library and examples built — zero warnings."
+    check_example_binaries built "${example_bins}"
+    pass "All $(echo "${example_bins}" | grep -c .) tracked example binaries rebuilt from current source."
 
     echo ""
     echo "  --- Full test suite ---"
@@ -229,9 +283,24 @@ do_cross_compile() {
 # Step 5: Commit pipeline-generated changes
 # -----------------------------------------------------------------------
 
-# Files the pipeline itself may modify (badge update, version sync).
-# Anything outside this list is unexpected and should block the release.
-PIPELINE_FILES="README.md VERSION src/FR_math.h library.properties library.json idf_component.yml llms.txt pages/version.json src/FR_math_2D.h src/FR_math_2D.cpp"
+# Files the pipeline itself may modify. Anything else dirty is unexpected
+# and blocks the release.
+#   version sync:    VERSION, src/*, manifests, llms.txt, pages/version.json
+#   badges:          README.md
+#   accuracy table:  README.md, docs/README.md, pages/index.html
+#                    (scripts/accuracy_report.sh --update)
+# Tracked example binaries under examples/ are also pipeline output: they
+# embed FR_MATH_VERSION, so every version bump rebuilds them (see
+# is_example_binary).
+PIPELINE_FILES="README.md VERSION src/FR_math.h library.properties library.json idf_component.yml llms.txt pages/version.json src/FR_math_2D.h src/FR_math_2D.cpp docs/README.md pages/index.html"
+
+is_pipeline_file() {
+    local file="$1" known
+    for known in $PIPELINE_FILES; do
+        [ "$file" = "$known" ] && return 0
+    done
+    is_example_binary "$file"
+}
 
 do_commit_pipeline_changes() {
     step_header "Commit pipeline-generated changes"
@@ -249,14 +318,10 @@ do_commit_pipeline_changes() {
     while IFS= read -r line; do
         # git status --porcelain: first two chars are status, then space, then path
         local file="${line:3}"
-        local found=false
-        for known in $PIPELINE_FILES; do
-            if [ "$file" = "$known" ]; then
-                found=true
-                break
-            fi
-        done
-        if $found; then
+        # Only modifications (staged and/or unstaged: " M", "M ", "MM")
+        # are pipeline output; added, deleted, renamed or untracked files
+        # are always unexpected.
+        if [[ "${line:0:2}" =~ ^[\ M][\ M]$ ]] && is_pipeline_file "$file"; then
             to_commit="$to_commit $file"
         else
             unexpected="$unexpected $file"
@@ -281,7 +346,7 @@ do_commit_pipeline_changes() {
     confirm "Commit these files?"
     # shellcheck disable=SC2086
     git add $to_commit
-    git commit -m "update badges and version strings for $VER_STRING"
+    git commit -m "update generated files (version strings, badges, accuracy tables, example binaries) for $VER_STRING"
     pass "Committed pipeline-generated changes."
 }
 
@@ -637,9 +702,35 @@ do_switch_master() {
 do_verify_master() {
     step_header "Verify build on master"
 
-    make clean >/dev/null 2>&1
-    make test >/dev/null 2>&1
-    pass "All tests pass on master."
+    local log example_bins
+    log=$(mktemp)
+    example_bins=$(list_example_binaries)
+    echo "  \$ make clean clean-examples && make lib examples test"
+    make clean clean-examples >/dev/null 2>&1
+    check_example_binaries cleaned "${example_bins}"
+    if ! make lib examples test >"${log}" 2>&1; then
+        tail -40 "${log}"
+        rm -f "${log}"
+        fail "Clean build/test failed on master. Tag NOT created."
+    fi
+    rm -f "${log}"
+    check_example_binaries built "${example_bins}"
+    pass "Clean build of library, examples and tests passes on master."
+
+    # Master must be self-consistent: a clean rebuild of everything must
+    # not change any tracked file. If it does, something generated (an
+    # example binary, a version string) was not committed, and tagging
+    # now would publish a release that does not match its own build.
+    local drift
+    drift=$(git status --porcelain --untracked-files=no)
+    if [ -n "${drift}" ]; then
+        echo ""
+        echo "  Tracked files changed by a clean rebuild on master:"
+        echo "${drift}" | sed 's/^/    /'
+        echo ""
+        fail "master is not consistent with its own build. Tag NOT created."
+    fi
+    pass "Clean rebuild leaves master unchanged."
 }
 
 # -----------------------------------------------------------------------

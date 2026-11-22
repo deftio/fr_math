@@ -154,15 +154,21 @@ Steps (full mode):
 1. **Extract version** — reads `FR_MATH_VERSION_HEX` from `src/FR_math.h`.
 2. **Sync manifests** — runs `sync_version.sh --check`; auto-syncs if
    drift is detected and stages the changes.
-3. **Local validation** — clean build, strict compile
+3. **Local validation** — clean build (`make clean clean-examples`, so
+   every tracked example binary is rebuilt, not just ones whose
+   timestamps are stale), strict compile
    (`-Wall -Wextra -Werror -Wshadow`), `make test`, coverage report,
    README badge update, and host size report. Aborts on any warning
-   or test failure.
+   or test failure. Fails if any tracked example binary is not removed
+   by `clean-examples` or not rebuilt by `examples` (a new example not
+   wired into the makefile).
 4. **Cross-compile sanity** — tries `arm-none-eabi-gcc`,
    `riscv64-unknown-elf-gcc`, and `arm-linux-gnueabi-gcc`. Missing
    toolchains are silently skipped. `--skip-cross` disables this step.
 5. **Commit pipeline-generated changes** — if only known files are dirty
-   (README.md badges, version-synced manifests), prompts to commit them.
+   (README.md badges, version-synced manifests, accuracy tables in
+   `docs/README.md` / `pages/index.html`, and rebuilt example binaries,
+   which embed the version string), prompts to commit them.
    If unexpected files are dirty, stops with an error.
 6. **Check git state** — identifies the current branch, checks whether
    the tag already exists, and verifies the working tree is clean.
@@ -175,8 +181,9 @@ Steps (full mode):
 10. **Merge PR** — enables auto-merge (squash) via `gh pr merge --auto`.
 11. **Switch to master** — waits for the merge to land, then checks out
     master and pulls.
-12. **Verify on master** — clean rebuild + `make test` on the merged
-    master.
+12. **Verify on master** — clean rebuild of library, examples and tests
+    on the merged master. Refuses to tag if the rebuild changes any
+    tracked file (master must match its own build).
 13. **Tag and push** — creates an annotated tag `vX.Y.Z` and pushes it,
     triggering the `release.yml` workflow.
 14. **Wait for GitHub Release** — polls until `release.yml` creates the
@@ -187,7 +194,8 @@ Steps (full mode):
     --namespace deftio` (skipped if `compote` is not installed).
 17. **Done** — prints a summary with links and an Arduino reminder.
 
-All output is tee'd to `build/release-<timestamp>.log`.
+All output is tee'd to `release-logs/release-<timestamp>.log` (outside
+`build/`, which step 3 wipes).
 
 With `--validate`, only steps 1–4 run (local validation only — nothing
 is pushed, tagged, or published).

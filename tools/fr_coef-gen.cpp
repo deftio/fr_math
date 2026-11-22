@@ -59,7 +59,7 @@ void gen_coef(const char* name, double x,int prec, int type=MACRO)
 		for (i=15;i>=0; i--)
 			if (n&(1<<i))
 				printf("%d,",16-i);
-		printf("0}; //13.9f\n",x);
+		printf("0}; // %13.9f\n",x);
 	}
 	if (MACRO==type)
 	{
@@ -116,7 +116,7 @@ void gen_Constant_MACRO(const char *name,double val, int prec)
 	printf("%s",name);
 	for (i=0; i<l; i++)
 		printf(" ");
-	printf("(%d)   ",(long)((val*(double(1<<prec)))))	;
+	printf("(%ld)   ",(long)((val*(double(1<<prec)))))	;
 	printf("/* %13.8f   */\n",val);
 }
 
@@ -152,12 +152,12 @@ void gen_trigTable(const char *tabname, double start, double end, double inc, lo
 		if(rad_or_deg == RADIANS)
 		{
 			if (fun == TAN)
-				printf("0x%04x",(long)(y));
+				printf("0x%04lx",(long)(y));
 			else
-				printf("0x%04x",(long)(y));
+				printf("0x%04lx",(long)(y));
 		}
 		else
-			printf("%7d",(long)(y));
+			printf("%7ld",(long)(y));
 		if ((x+inc) <=end)
 			printf(", ");
 		if ((k++)%(b)==(b-1))

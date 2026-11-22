@@ -4,6 +4,15 @@ Release highlights. For the full per-symbol change log, see
 [release_notes.md](https://github.com/deftio/fr_math/blob/master/release_notes.md)
 in the repo.
 
+## v2.0.11 — 2026
+
+Maintenance release: CodeQL code-scanning cleanup. No library or API changes.
+
+- CI workflow now runs with a read-only `GITHUB_TOKEN` (`permissions: contents: read`).
+- `tools/fr_coef-gen.cpp`: fixed printf format specifiers for `long` arguments and a missing `%` that dropped a value from its output.
+
+---
+
 ## v2.0.10 — 2026
 
 Optional s16-safe trig crest. Default sin/cos crest remains exact ±1.0 in s15.16 (±65536).
