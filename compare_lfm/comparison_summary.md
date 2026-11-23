@@ -29,8 +29,8 @@ beyond the Q16.16 range (tan at its poles) a saturated result of the right sign 
 | tan | 823549 | every input in [-2pi, 2pi], poles included | 0.0439 | 0.0048 | 100.0000 | 0.7690 | FR |
 | asin | 131073 | every input in [-1, 1] | 0.0298 | 0.0103 | 1.0179 | 0.3536 | FR |
 | acos | 131073 | every input in [-1, 1] | 0.0433 | 0.0070 | 1.0178 | 0.2421 | FR |
-| atan | 8388609 | every input in [-64, 64] | 0.0963 | 0.0045 | 1.0176 | 0.3703 | FR |
-| atan2 | 3145728 | every (y, x) in [-512, 511]^2 LSB, x 2^0, 2^8, 2^14 | 0.0976 | 0.0144 | 1.0176 | 0.2305 | FR |
+| atan | 8388609 | every input in [-64, 64] | 0.0035 | 0.0005 | 1.0176 | 0.3703 | FR |
+| atan2 | 3145728 | every (y, x) in [-512, 511]^2 LSB, x 2^0, 2^8, 2^14 | 0.0031 | 0.0006 | 1.0176 | 0.2305 | FR |
 | sqrt | 67108865 | every input in [0, 1024] | 0.0008 | 0.0000 | 0.0008 | 0.0000 | tie |
 | exp | 1729954 | every input in [-16, 10.397] | 0.0025 | 0.0006 | 135.7910 | 0.0020 | FR |
 | ln | 67108864 | every input in (0, 1024] | 0.0049 | 0.0003 | 0.0665 | 0.0001 | FR |
@@ -44,25 +44,25 @@ beyond the Q16.16 range (tan at its poles) a saturated result of the right sign 
 
 | Function | FR_math | libfixmath | Speedup | Faster |
 |----------|--------:|-----------:|--------:|--------|
-| sin | 3.1 | 6.2 | 2.02x | FR |
-| cos | 3.9 | 6.4 | 1.63x | FR |
-| tan | 4.4 | 17.9 | 4.04x | FR |
-| asin | 5.1 | 29.6 | 5.76x | FR |
-| acos | 5.2 | 30.3 | 5.82x | FR |
-| atan | 5.3 | 7.7 | 1.47x | FR |
-| atan2 | 10.8 | 6.5 | 0.60x | lfm |
-| sqrt | 13.6 | 13.1 | 0.97x | lfm |
-| exp | 2.3 | 64.1 | 27.81x | FR |
-| ln | 8.0 | 45.1 | 5.67x | FR |
-| log2 | 8.0 | 26.0 | 3.25x | FR |
-| mul | 1.5 | 1.6 | 1.03x | FR |
-| div | 1.5 | 4.1 | 2.66x | FR |
-| hypot | 12.0 | --- | --- | FR only |
-| hypot_fast8 | 2.4 | --- | --- | FR only |
+| sin | 4.4 | 7.3 | 1.65x | FR |
+| cos | 4.0 | 6.3 | 1.56x | FR |
+| tan | 4.1 | 17.1 | 4.17x | FR |
+| asin | 4.9 | 28.3 | 5.76x | FR |
+| acos | 4.8 | 28.0 | 5.79x | FR |
+| atan | 3.3 | 7.4 | 2.26x | FR |
+| atan2 | 3.6 | 6.6 | 1.82x | FR |
+| sqrt | 12.9 | 12.6 | 0.98x | lfm |
+| exp | 2.3 | 58.8 | 25.73x | FR |
+| ln | 7.7 | 42.6 | 5.56x | FR |
+| log2 | 7.9 | 24.7 | 3.13x | FR |
+| mul | 1.5 | 1.7 | 1.11x | FR |
+| div | 1.5 | 4.0 | 2.60x | FR |
+| hypot | 11.5 | --- | --- | FR only |
+| hypot_fast8 | 2.3 | --- | --- | FR only |
 
 ### Summary (13 head-to-head functions)
 
-- **Speed**: FR_math 11 / 13, libfixmath 2 / 13
+- **Speed**: FR_math 12 / 13, libfixmath 1 / 13
 - **Accuracy (max error)**: FR_math 11 / 13, libfixmath 0 / 13, tie 2 / 13
 
 Worst-case inputs (FR / lfm):
@@ -72,8 +72,8 @@ Worst-case inputs (FR / lfm):
 - tan: -1.7486877 / -4.7124176
 - asin: 0.99438477 / -0.11584473
 - acos: 0.99438477 / 0.99259949
-- atan: -1.4934998 / -0.12072754
-- atan2: -1.9609375 / -0.00085449219
+- atan: -0.30488586 / -0.12072754
+- atan2: -0.0065155029 / -0.00085449219
 - sqrt: 0.99998474 / 0.99998474
 - exp: 1.4675598 / -11.090363
 - ln: 1.0398865 / 1.5258789e-05

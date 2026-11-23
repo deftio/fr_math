@@ -15,6 +15,54 @@ A second set of fixes came from testing every input instead of samples
 results are bit-identical to before wherever the old result was valid
 (checked over ~1 billion inputs); what changes is listed here.
 
+One function changes on purpose for every input: `FR_atan2` (and so
+`FR_atan`) has a new algorithm, about 3x faster and 30x more accurate.
+See "FR_atan2 rewrite" below.
+
+### FR_atan2 rewrite (behavior change: results differ by a few LSB)
+
+- **New algorithm.** `FR_atan2` used to normalise `(x, y)` with
+  `FR_hypot_fast8` and then call `FR_asin(|y|/h)` or `FR_acos(|x|/h)`
+  depending on the octant. That cost a binary search through the sine
+  table plus two divides (one of them 64-bit), and the 0.14% error of
+  `hypot_fast8` passed straight into the ratio. It now folds the input
+  into the first octant, computes `t = min(|x|,|y|) / max(|x|,|y|)` with
+  one 32-bit divide (after scaling `max` into [2^15, 2^16), so `t` keeps
+  16 bits for any input size), looks `atan(t)` up in a new 65-entry
+  table with linear interpolation, and unfolds by symmetry (π/2 − a,
+  π − a, −a). `t` is in [0, 1] by construction, so the table cannot be
+  indexed out of range and no clamp is needed.
+- **New table `gFR_ATAN_TAB[65]`** (u16, 130 bytes): `atan(i/64)` in
+  radians at u0.16. The interior entries are tuned by up to 3 LSB to
+  centre the interpolation error, which lowers the peak lookup error
+  from 2.07 to 1.55 LSB at no cost; the end points stay exact (0 and
+  π/4) so the octants meet without a step at 45°. Generator:
+  `tools/gen_atan_table.py` (new).
+- **Accuracy**, every `(y, x)` in [−512, 511]² plus the `s32` extremes,
+  at output radix 16: worst error 2.5 LSB (was about 64 LSB).
+  `FR_atan`, every input at every radix 0..16 in [−64, 64] plus the
+  `s32` domain: 2.3 LSB worst (was about 64). Exhaustive-test budgets
+  tightened from 70 / 71 LSB to 2.6 / 2.8 LSB. In the libfixmath
+  comparison metric: atan2 0.0976% → 0.0031% max, atan 0.0963% →
+  0.0035% (libfixmath: 1.02% for both). README table (clamp metric):
+  atan2 0.26% → 0.049%, atan 0.28% → 0.13%.
+- **Speed** (host, `compare_lfm`, M-series Mac): atan2 10.8 → 3.6 ns
+  (libfixmath 6.6 ns), atan 5.3 → 3.3 ns (libfixmath 7.4 ns). FR_math is
+  now faster than libfixmath on 12 of 13 head-to-head functions; the
+  remaining one is `sqrt` (12.9 vs 12.6 ns), where both libraries run the
+  same digit-by-digit algorithm and return identical results.
+- **Symmetry and rounding**: the output-radix change is now done on the
+  magnitude, rounding to nearest when narrowing, before the sign is
+  applied. So `FR_atan2(-y, x, r) == -FR_atan2(y, x, r)` exactly at every
+  output radix (new regression test `test_atan2_odd_symmetry`). Below
+  radix 16 results are rounded rather than truncated, so they can differ
+  from 2.0.11 by one unit in the last place even where the angle was
+  already accurate. The axis cases (`x == 0` or `y == 0`) return the same
+  constants as before.
+- **Dependencies**: `FR_atan2` no longer calls `FR_hypot_fast8`,
+  `FR_asin` or `FR_acos`. Those functions are unchanged. The API and
+  signatures are unchanged.
+
 ### Fixed
 
 - **`fr_tan_bam`, `fr_tan`**: odd multiples of 45° read one entry past
@@ -104,7 +152,8 @@ results are bit-identical to before wherever the old result was valid
   removed (0.003% at radix 16, 2% at radix 4, 39% at radix 0).
 - `compare_lfm/benchmark.cpp` (FR_math vs libfixmath) now also uses every
   Q16.16 input in each domain, with no skipped regions: FR_math is more
-  accurate on 11 of 13 head-to-head functions (2 ties) and faster on 11.
+  accurate on 11 of 13 head-to-head functions (2 ties: sqrt and mul) and,
+  with the new `FR_atan2`, faster on 12 (all but sqrt).
 
 ### Build and CI
 
@@ -181,12 +230,19 @@ change in proportion):
 
 | Target | 2.0.11 | Now | Change |
 | --- | ---: | ---: | ---: |
-| Cortex-M4 | 5.5 KB | 5.9 KB | +0.4 KB |
-| Cortex-M0 | 5.7 KB | 6.2 KB | +0.5 KB |
+| Cortex-M4 | 5.5 KB | 6.0 KB | +0.5 KB |
+| Cortex-M0 | 5.7 KB | 6.3 KB | +0.6 KB |
 | ESP32-S3 | 6.5 KB | 6.9 KB | +0.4 KB |
 | RISC-V rv32 | 6.8 KB | 7.4 KB | +0.6 KB |
-| AVR ATmega328P | 15.4 KB | 16.7 KB | +1.3 KB |
+| AVR ATmega328P | 15.4 KB | 16.8 KB | +1.4 KB |
 | x86-64 (GCC) | 8.0 KB | 8.9 KB | +0.9 KB |
+
+The `FR_atan2` rewrite on its own is roughly size-neutral (its new
+130-byte table against the old code path): within ±0.1 KB on most
+targets (+0.1 KB on Cortex-M4, M0 and AVR), −0.2 KB on TCC x86 and
+−0.5 KB on 68HC11. An application that calls `FR_atan2` but
+not `FR_asin` / `FR_acos` / `FR_hypot_fast8` can now drop those at link
+time with `-ffunction-sections -Wl,--gc-sections`.
 
 The full table in the README and `docs/building.md` is regenerated
 (`make size-update`). 8- and 16-bit targets grow most because the new
@@ -216,6 +272,18 @@ The full table in the README and `docs/building.md` is regenerated
   rules, the `FR_EXP` low-radix limit, `hypot_fast8` error (~0.14%, was
   given as 0.10%), code size range, the new test targets. `agents.md`:
   code size range.
+- **How the Approximations Work, inverse trig**: rewritten for the new
+  `FR_atan2` (octant fold, `min/max` ratio, tuned table, symmetric
+  unfold), with a note on why the old asin/acos route was dropped. The
+  toolbox section gains "Tuning the entries": why chords of a concave
+  function all fall on one side, and how nudging table entries halves
+  that error.
+- **`tools/README.md`, `CONTRIBUTING.md`**: list `gen_atan_table.py`.
+  `CONTRIBUTING.md` also said `coef-gen.py` generates the trig, atan,
+  log2 and pow2 tables; it finds shift-and-add constants. It now lists
+  each generator and what it makes.
+- **`FR_math.h`**: the inverse-trig comment said `FR_atan2` returns
+  radix 16; it returns `out_radix`.
 - **`CONTRIBUTING.md`**: the test section described four suites from an
   older layout; it now points to the full list and asks for
   `make test-shift` before PRs that touch `src/`.
@@ -226,8 +294,9 @@ The full table in the README and `docs/building.md` is regenerated
 - The fixes, regression tests, verification sweeps and CI changes above,
   the every-input test suite, the shift-overflow checker, the libfixmath
   benchmark rework, the 8/16-bit portability fixes and the `avr-16bit-int`
-  CI job, the new approximations page and the documentation corrections
-  were made with Claude Code (Anthropic).
+  CI job, the `FR_atan2` rewrite and its tuned table generator, the new
+  approximations page and the documentation corrections were made with
+  Claude Code (Anthropic).
 - Correction for 2.0.11: its CodeQL fixes and release-script consistency
   checks were also made with Claude Code; that entry did not say so.
 

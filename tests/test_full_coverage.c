@@ -1256,6 +1256,29 @@ int test_scan_atan2_int32_min() {
     return TEST_PASS;
 }
 
+/* FR_atan2 (table version): odd in y at every output radix, because the
+ * radix change is done on the magnitude before the sign; and monotonic in
+ * y across the 45-degree fold, where the two octants meet. */
+int test_atan2_odd_symmetry() {
+    static const u16 radix[] = { 0, 3, 8, 14, 16, 20, 24 };
+    s32 y, x, prev;
+    int r;
+    for (r = 0; r < 7; r++)
+        for (y = -300; y <= 300; y += 7)
+            for (x = -300; x <= 300; x += 11)
+                if (FR_atan2(-y, x, radix[r]) != -FR_atan2(y, x, radix[r]))
+                    return TEST_FAIL;
+    if (FR_atan2(INT32_MAX, 5, 16) != -FR_atan2(-INT32_MAX, 5, 16)) return TEST_FAIL;
+    prev = FR_atan2(0, 1000, 16);
+    for (y = 1; y <= 3000; y++) {
+        s32 a = FR_atan2(y, 1000, 16);
+        if (a < prev) return TEST_FAIL;
+        prev = a;
+    }
+    if (FR_atan2(1000, 1000, 16) != 51472) return TEST_FAIL;   /* pi/4 exact */
+    return TEST_PASS;
+}
+
 /* #11: 360 << radix overflowed s32 for radix >= 23 (a zero divisor at
  * radix 29-30). High radix must match radix 16 for the same angle, and
  * poles are resolved at the caller's full precision. */
@@ -1582,6 +1605,7 @@ int main() {
     printf("\n--- Code scanning regressions ---\n");
     RUN_TEST(test_scan_tan_octant_boundary);
     RUN_TEST(test_scan_atan2_int32_min);
+    RUN_TEST(test_atan2_odd_symmetry);
     RUN_TEST(test_scan_tan_deg_high_radix);
     RUN_TEST(test_scan_numstr_saturation);
     RUN_TEST(test_scan_int32_min_siblings);

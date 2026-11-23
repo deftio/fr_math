@@ -945,22 +945,45 @@ s32 FR_asin(s32 input, u16 radix, u16 out_radix)
 	return half_pi - FR_acos(input, radix, out_radix);
 }
 
+/* atan(i/64) for i = 0..64, radians in u0.16 (130 bytes).
+ * Seeded with round(atan(i/64) * 65536), then each interior entry was
+ * nudged by up to a few LSB to minimise the peak error of the linear
+ * interpolation below, checked over every one of the 65537 possible
+ * ratios (tools/gen_atan_table.py).  The end points stay exact: entry 0
+ * is atan(0) = 0 and entry 64 is pi/4, so the two octants meet without a
+ * step at 45 degrees.
+ * Peak error of the lookup: 1.55 LSB at radix 16 (2.4e-5 rad). */
+static const u16 gFR_ATAN_TAB[65] = {
+	    0,  1024,  2047,  3070,  4091,  5110,  6126,  7140,
+	 8150,  9156, 10158, 11155, 12147, 13134, 14114, 15088,
+	16055, 17016, 17968, 18913, 19850, 20779, 21699, 22611,
+	23513, 24406, 25290, 26164, 27028, 27883, 28727, 29562,
+	30386, 31200, 32004, 32797, 33581, 34353, 35116, 35867,
+	36609, 37340, 38061, 38772, 39472, 40162, 40843, 41513,
+	42173, 42823, 43464, 44095, 44717, 45329, 45932, 46525,
+	47110, 47685, 48252, 48810, 49359, 49900, 50432, 50956,
+	51472
+};
+
 /* FR_atan2(y, x, out_radix) — full-circle arctangent, returns radians
  * at the specified output radix (s32).
  *
  * Range: [-pi, pi]. Returns 0 for atan2(0,0).
  *
- * Implementation: normalise (x,y) via FR_hypot_fast8, then recover the
- * angle with FR_asin or FR_acos (both use the 129-entry cosine table).
- * To stay in the well-conditioned region of each inverse function we
- * switch at 45°:
- *   |y| <= |x|  →  use asin(y/h)   — asin stable near 0
- *   |y| >  |x|  →  use acos(x/h)   — acos stable near pi/2
- * This keeps the derivative amplification factor below 1.414x everywhere.
+ * Implementation: fold (x, y) into the first octant, so the ratio
+ * t = min(|x|,|y|) / max(|x|,|y|) lies in [0, 1]; one u32 divide gives t
+ * in u0.16; a 65-entry atan table with linear interpolation gives
+ * atan(t); the octant and quadrant are then restored by symmetry:
+ *   |y| > |x|   ->  pi/2 - a
+ *   x < 0       ->  pi   - a
+ *   y < 0       ->  -a
+ * The table domain is exactly [0, 1], so no input can index past it and
+ * no range clamp is needed.  Worst error about 2 LSB at radix 16.
  */
 s32 FR_atan2(s32 y, s32 x, u16 out_radix)
 {
-	s32 ax, ay, h, q1_angle;
+	u32 ux, uy, mx, mn, t, idx, fr;
+	s32 a, lo, hi;
 
 	/* Axis cases — exact angles, no divide. */
 	if (x == 0)
@@ -972,68 +995,42 @@ s32 FR_atan2(s32 y, s32 x, u16 out_radix)
 	if (y == 0)
 		return (x > 0) ? 0 : FR_CHRDX(FR_kPI, FR_kPREC, out_radix);      /* 0 or pi */
 
-	/* Magnitudes are taken in u32 (-INT32_MIN does not fit in s32) and
-	 * normalised below to < 2^16, so they fit back in s32 afterwards. */
-	u32 ux = (x < 0) ? 0u - (u32)x : (u32)x;
-	u32 uy = (y < 0) ? 0u - (u32)y : (u32)y;
+	/* Magnitudes in u32 (-INT32_MIN does not fit in s32). */
+	ux = (x < 0) ? 0u - (u32)x : (u32)x;
+	uy = (y < 0) ? 0u - (u32)y : (u32)y;
+	mx = (ux > uy) ? ux : uy;
+	mn = (ux > uy) ? uy : ux;
 
-	/* Normalise so max(ax,ay) sits in [2^14, 2^15).  This gives
-	 * FR_hypot_fast8 enough integer bits for the shift-only segments
-	 * to produce an accurate ratio — critical when the raw inputs are
-	 * small (e.g. atan2(1,1) at radix 0).  Scaling both by the same
-	 * power of two doesn't change the angle. */
-	{
-		u32 mx = (ux > uy) ? ux : uy;
-		while (mx < (1UL << 14)) { ux <<= 1; uy <<= 1; mx <<= 1; }
-		while (mx >= (1UL << 16)) { ux >>= 1; uy >>= 1; mx >>= 1; }
-	}
-	ax = (s32)ux;
-	ay = (s32)uy;
+	/* Scale both by the same power of two (the angle does not change) so
+	 * mx sits in [2^15, 2^16): the ratio then keeps 16 bits whatever the
+	 * input magnitude, and mn << 16 cannot overflow u32. */
+	while (mx >= ((u32)1 << 16)) { mx >>= 1; mn >>= 1; }
+	while (mx <  ((u32)1 << 15)) { mx <<= 1; mn <<= 1; }
 
-	h = FR_hypot_fast8((s32)ax, (s32)ay);
-	if (h == 0) return 0;  /* degenerate */
-
-	/* Compute the first-quadrant angle (positive, [0..pi/2]).
-	 * Divide produces a value in [0,1] at radix FR_TRIG_PREC (s0.15).
-	 *
-	 * Small-angle fast path: when the minor-axis ratio is small,
-	 * asin(x) ≈ x (error < x³/6).  Below ~5° the cubic term is
-	 * smaller than the table-lookup error, so the direct identity
-	 * is both faster and more accurate.  Threshold 2753 at r15
-	 * corresponds to sin(~4.8°) = 0.084. */
-	#define FR_ATAN2_SMALL  2753
-	if (ay <= ax)
-	{
-		/* angle in [0°..45°]: use asin(ay/h) — well-conditioned near 0 */
-		s32 sin_val = (s32)(((int64_t)ay << FR_TRIG_PREC) / h);
-		if (sin_val < FR_ATAN2_SMALL)
-			q1_angle = FR_CHRDX(sin_val, FR_TRIG_PREC, out_radix);
-		else
-			q1_angle = FR_asin(sin_val, FR_TRIG_PREC, out_radix);
-	}
+	/* t = mn / mx in u0.16, rounded; t is in [0, 65536]. */
+	t   = ((mn << 16) + (mx >> 1)) / mx;
+	idx = t >> 10;                 /* 64 segments of 1024 */
+	fr  = t & 1023u;
+	if (idx >= 64u)
+		a = (s32)gFR_ATAN_TAB[64];  /* t == 1: exactly 45 degrees */
 	else
 	{
-		/* angle in [45°..90°]: use acos(ax/h) — well-conditioned near pi/2 */
-		s32 cos_val = (s32)(((int64_t)ax << FR_TRIG_PREC) / h);
-		if (cos_val < FR_ATAN2_SMALL)
-		{
-			/* angle ≈ pi/2 - cos_val (symmetric small-angle identity) */
-			s32 half_pi = FR_CHRDX(FR_kQ2RAD, FR_kPREC, out_radix);
-			q1_angle = half_pi - FR_CHRDX(cos_val, FR_TRIG_PREC, out_radix);
-		}
-		else
-			q1_angle = FR_acos(cos_val, FR_TRIG_PREC, out_radix);
+		lo = (s32)gFR_ATAN_TAB[idx];
+		hi = (s32)gFR_ATAN_TAB[idx + 1u];
+		a  = lo + (((hi - lo) * (s32)fr + 512) >> 10);
 	}
 
-	/* Apply quadrant from signs of x and y.
-	 * q1_angle is always positive [0..pi/2]. */
-	{
-		s32 pi = FR_CHRDX(FR_kPI, FR_kPREC, out_radix);
-		if (x > 0)
-			return (y > 0) ? q1_angle : -q1_angle;
-		/* x < 0: mirror across y-axis */
-		return (y > 0) ? (pi - q1_angle) : (q1_angle - pi);
-	}
+	/* Restore octant and quadrant (radians at radix 16). */
+	if (uy > ux) a = FR_kQ2RAD - a;     /* pi/2 - a */
+	if (x < 0)   a = FR_kPI - a;        /* pi   - a */
+
+	/* Change radix on the magnitude, rounding when narrowing, so that
+	 * atan2(-y, x) == -atan2(y, x) exactly at every output radix. */
+	if (out_radix < FR_kPREC)
+		a = (a + ((s32)1 << (FR_kPREC - 1 - out_radix))) >> (FR_kPREC - out_radix);
+	else
+		a = FR_CHRDX(a, FR_kPREC, out_radix);
+	return (y < 0) ? -a : a;
 }
 
 /* FR_atan(input, radix, out_radix) — arctangent of a single argument.

@@ -100,6 +100,18 @@ straight line between samples is off by at most</p>
 <p>For the sine table (129 entries over a quarter circle,
 <code>h = (π/2)/128</code>), the bound is <code>h²/8 ≈ 1.9e-5</code>. That is 0.6 LSB in the
 table's s0.15 format, so interpolation adds less than one bit of error.</p>
+<p><strong>Tuning the entries.</strong> The straight line between two samples of a
+curve that bends one way always falls on the same side of it: under a
+concave function like <code>atan</code> on [0, 1], every chord sits below the
+curve. Rounding each entry to the true value therefore wastes half the
+error budget. Nudging the entries by a fraction of an LSB in the other
+direction centres the error on zero. FR_Math does this for the atan
+table: <a href="https://github.com/deftio/fr_math/blob/master/tools/gen_atan_table.py"><code>tools/gen_atan_table.py</code></a> starts
+from the rounded values, tries moving each interior entry by up to
+3 LSB, and keeps any change that lowers the peak error of the exact
+integer interpolation, checked on every possible input. That takes the
+peak from 2.07 to 1.55 LSB for the same 130 bytes. The two end points
+stay exact, so neighbouring regions still meet without a step.</p>
 <h3 id="3-shift-and-add-constants">3. Shift-and-add constants</h3>
 <p>Multiplying by a fixed constant can be written as a sum of powers of
 two. For example, converting radians to BAM (see
@@ -156,11 +168,6 @@ series in those regions:</p>
 <td><code>acos(x) ≈ sqrt(2(1 − x))</code></td>
 <td>≈ <code>(1 − x)/12</code> relative, under 0.03%</td>
 </tr>
-<tr>
-<td>atan2 near the axes</td>
-<td><code>asin(s) ≈ s</code></td>
-<td><code>s³/6</code></td>
-</tr>
 </tbody>
 </table>
 <h3 id="6-piecewise-linear-fits-with-shift-only-coefficients">6. Piecewise-linear fits with shift-only coefficients</h3>
@@ -216,7 +223,8 @@ The radian functions also return the input offset directly within
 256 LSB of each zero crossing, so <code>sin(π)</code> really is close to zero.</p>
 <p><strong>Why a sine table and not cosine?</strong> A sine quadrant is ascending from
 0 to 1, so the same table also serves <code>asin</code> and <code>acos</code> by searching
-it (see <a href="#inverse-trig">Inverse trig</a>). One table, five functions.</p>
+it (see <a href="#inverse-trig">Inverse trig</a>). One table serves sin, cos,
+asin and acos.</p>
 <p><strong>Error budget at radix 16.</strong> The pieces add up:</p>
 <table>
 <thead>
@@ -288,26 +296,42 @@ flat: many angles share almost the same value, so a tiny change in
 <code>x</code> moves the angle a lot. Above <code>x ≈ 0.996</code> the code switches to
 <code>acos(x) ≈ sqrt(2(1 − x))</code>, which is accurate to about <code>(1 − x)/12</code>
 relative, under 0.03% in that window.</p>
-<p><strong><code>atan2(y, x)</code></strong> works on magnitudes and restores the quadrant from
-the signs at the end:</p>
+<p><strong><code>atan2(y, x)</code></strong> folds the input into one octant, looks the angle up
+in its own small table, and unfolds it:</p>
 <ol>
-<li>Scale <code>|x|</code> and <code>|y|</code> by the same power of two so the larger one
-   sits in [2^14, 2^16). That doesn't change the angle, and it gives the
-   next steps enough bits even when the inputs are tiny.</li>
-<li>Compute the length <code>h = hypot_fast8(|x|, |y|)</code> with the shift-only
-   approximation described below.</li>
-<li>Below 45°, <code>angle = asin(|y|/h)</code>; above 45°, <code>angle = acos(|x|/h)</code>.
-   Choosing by octant keeps each inverse function in the region where
-   it is well conditioned: a small error in the ratio never moves the
-   angle by more than about 1.4 times as much.</li>
-<li>Very small ratios (under about 4.8°) skip the table and use
-   <code>asin(s) ≈ s</code> directly.</li>
+<li>Take <code>|x|</code> and <code>|y|</code>, and let <code>max</code> and <code>min</code> be the larger and the
+   smaller. The ratio <code>t = min/max</code> is then always in [0, 1], whatever
+   the quadrant, so the table never needs a range clamp.</li>
+<li>Scale both by the same power of two so <code>max</code> sits in [2^15, 2^16).
+   That doesn't change the angle. It means <code>t</code> keeps 16 bits of
+   precision for tiny inputs as well as huge ones, and <code>min &lt;&lt; 16</code>
+   cannot overflow 32 bits.</li>
+<li>One 32-bit divide gives <code>t</code> in u0.16, rounded.</li>
+<li>A 65-entry table of <code>atan(i/64)</code> (130 bytes, entries tuned as
+   described <a href="#2-a-small-table-plus-linear-interpolation">above</a>)
+   with linear interpolation gives <code>a = atan(t)</code>. On [0, 1], <code>atan</code>
+   bends gently (<code>|f''| ≤ 0.65</code>), so 64 segments are enough for about
+   1.5 LSB.</li>
+<li>Undo the fold by symmetry, all exact in radians at radix 16:
+   if <code>|y| &gt; |x|</code>, <code>a = π/2 − a</code>; if <code>x &lt; 0</code>, <code>a = π − a</code>; if <code>y &lt; 0</code>,
+   negate. The radix change is done on the magnitude, before the sign,
+   so <code>atan2(−y, x)</code> is exactly <code>−atan2(y, x)</code> at every output radix.</li>
 </ol>
+<p>Exact axes (<code>x = 0</code> or <code>y = 0</code>) return the stored constants for 0,
+±π/2 and π without dividing.</p>
 <p><code>atan(x)</code> is <code>atan2(x, 1)</code>.</p>
-<p>This design reuses the sine table and <code>hypot_fast8</code>, so atan2 adds
-almost no ROM. Its error is dominated by <code>hypot_fast8</code>'s 0.14%, which
-passes straight into the ratio: 0.26% worst case. The cost is speed,
-because a search and two divides make it the slowest trig function.</p>
+<p><strong>Measured:</strong> about 2.5 LSB worst case at radix 16 over every
+<code>(y, x)</code> in [−512, 511]², plus the <code>s32</code> extremes, which is 0.003% of
+the angle in the clamp metric used by the libfixmath comparison. It
+costs one divide, so it is among the faster functions in the library
+(about 3.6 ns on an M-series Mac, against 6.6 ns for libfixmath's
+<code>fix16_atan2</code>, which is about 1% accurate).</p>
+<p><strong>Why not reuse <code>asin</code>?</strong> Earlier versions computed
+<code>h = hypot_fast8(|x|, |y|)</code> and then <code>asin(|y|/h)</code> or <code>acos(|x|/h)</code>,
+reusing the sine table and adding almost no ROM. That was slower (a
+search plus two divides) and less accurate (the 0.14% error of
+<code>hypot_fast8</code> passes straight into the ratio). The ratio <code>min/max</code>
+needs no length at all, and the 130-byte table pays for itself.</p>
 <h2 id="logarithms">Logarithms</h2>
 <p><strong><code>log2(x)</code></strong> splits <code>x</code> into exponent and mantissa, like a float:</p>
 <ol>

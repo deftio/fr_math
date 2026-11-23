@@ -56,8 +56,8 @@ for sweeps at radixes 8, 12, 16, and 24.
 | tan (deg) | 0.0022 | 0.0000 | degree input tangent; saturated at poles |
 | tan (rad) | 0.0028 | 0.0000 | radian (traditional) tangent |
 | asin / acos | 0.7771 | 0.0276 | reverse trig, radian output |
-| atan2 | 0.2612 | 0.0234 | reverse tangent, always safe |
-| atan | 0.2838 | 0.0051 | reverse tangent, accepts up to maxint |
+| atan2 | 0.0486 | 0.0010 | reverse tangent, always safe |
+| atan | 0.1300 | 0.0005 | reverse tangent, accepts up to maxint |
 | sqrt | 0.0000 | 0.0000 | Round-to-nearest |
 | log2 | 0.0408 | 0.0003 | shift/add only for speed |
 | pow2 | 0.0021 | 0.0004 | shift/add only for speed |
@@ -223,7 +223,7 @@ explains how the math functions themselves are built.
 | Multiply-free option | No | No | Yes (e.g. `FR_EXP_FAST`, `FR_hypot_fast8`) |
 | Wave generators | No | No | 6 shapes + ADSR |
 | Dependencies | None | ARM only | None |
-| Code size (Cortex-M0, -Os) | 2.4 KB | ~40 KB+ | 3.4 KB lean / 5.7 KB full |
+| Code size (Cortex-M0, -Os) | 2.4 KB | ~40 KB+ | 3.6 KB lean / 6.3 KB full |
 
 Sizes measured with `arm-none-eabi-gcc -mcpu=cortex-m0 -mthumb -Os`.
 libfixmath covers trig/sqrt/exp in Q16.16 only; FR_Math includes

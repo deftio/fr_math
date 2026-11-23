@@ -486,7 +486,8 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 #endif /* FR_LEAN */
 
   /* Inverse trig — output in radians at caller-specified radix (s32).
-   * FR_atan2 returns radians at radix 16 (s15.16).
+   * FR_atan2(y, x, out_radix): y and x share any radix (only their ratio
+   * matters); the result is at out_radix.
    * Range: acos [0, pi], asin [-pi/2, pi/2],
    *        atan [-pi/2, pi/2], atan2 [-pi, pi].
    */

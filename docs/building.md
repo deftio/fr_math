@@ -181,26 +181,26 @@ usage will be smaller.
 <!-- SIZE_TABLE_START -->
 | Target | Lean | Core | Full |
 |--------|-----:|-----:|-----:|
-| AVR ATmega328P | 9.2 KB | 13.7 KB | 16.7 KB |
-| AVR ATtiny85 | 9.5 KB | 14.3 KB | 17.2 KB |
-| 68HC11 | 14.0 KB | 19.7 KB | 24.5 KB |
-| MSP430 | 8.1 KB | 11.8 KB | 14.2 KB |
-| Cortex-M4 (STM32) | 3.4 KB | 4.7 KB | 5.9 KB |
-| Cortex-M0 (RP2040) | 3.5 KB | 4.9 KB | 6.2 KB |
+| AVR ATmega328P | 9.3 KB | 13.9 KB | 16.8 KB |
+| AVR ATtiny85 | 9.6 KB | 14.4 KB | 17.3 KB |
+| 68HC11 | 13.6 KB | 19.3 KB | 24.0 KB |
+| MSP430 | 8.1 KB | 11.7 KB | 14.2 KB |
+| Cortex-M4 (STM32) | 3.4 KB | 4.8 KB | 6.0 KB |
+| Cortex-M0 (RP2040) | 3.6 KB | 5.0 KB | 6.3 KB |
 | ARM Thumb | 3.6 KB | 5.1 KB | 6.5 KB |
 | Xtensa LX7 (ESP32-S3) | 4.0 KB | 5.6 KB | 6.9 KB |
-| RISC-V rv32 | 4.3 KB | 6.0 KB | 7.4 KB |
-| Xtensa LX106 (ESP8266) | 4.3 KB | 6.3 KB | 7.9 KB |
-| ARM32 | 4.5 KB | 6.3 KB | 8.2 KB |
-| m68k | 4.5 KB | 6.7 KB | 8.4 KB |
-| x86-32 | 5.4 KB | 7.7 KB | 9.9 KB |
-| MIPS32 | 5.8 KB | 8.3 KB | 10.6 KB |
-| PowerPC | 6.0 KB | 8.8 KB | 11.4 KB |
-| TCC x86 | 8.4 KB | 12.2 KB | 15.9 KB |
-| RISC-V rv64 | 4.2 KB | 6.0 KB | 7.4 KB |
+| RISC-V rv32 | 4.2 KB | 6.0 KB | 7.4 KB |
+| Xtensa LX106 (ESP8266) | 4.4 KB | 6.3 KB | 8.0 KB |
+| ARM32 | 4.5 KB | 6.3 KB | 8.3 KB |
+| m68k | 4.4 KB | 6.7 KB | 8.4 KB |
+| x86-32 | 5.5 KB | 7.7 KB | 9.9 KB |
+| MIPS32 | 5.8 KB | 8.2 KB | 10.6 KB |
+| PowerPC | 6.0 KB | 8.7 KB | 11.3 KB |
+| TCC x86 | 8.1 KB | 11.9 KB | 15.7 KB |
+| RISC-V rv64 | 4.3 KB | 6.0 KB | 7.5 KB |
 | x86-64 (GCC) | 5.1 KB | 6.9 KB | 8.9 KB |
 | AArch64 (ARM64) | 5.1 KB | 7.3 KB | 9.5 KB |
-| x86-64 (Clang) | 4.8 KB | 7.1 KB | 9.6 KB |
+| x86-64 (Clang) | 4.8 KB | 7.0 KB | 9.5 KB |
 <!-- SIZE_TABLE_END -->
 
 ### Lean build options
@@ -218,7 +218,7 @@ for ROM-constrained targets. Define them before including `FR_math.h`
 
 `FR_LEAN` keeps only radian trig (sin, cos, tan), inverse trig, sqrt,
 log2, ln, exp, pow2, and arithmetic — comparable to libfixmath's API at
-4.7 KB text. `FR_LEAN` implies `FR_NO_WAVES`.
+4.8 KB text (x86-64, clang -Os). `FR_LEAN` implies `FR_NO_WAVES`.
 
 `FR_CORE_ONLY` is a convenience shorthand that defines both
 `FR_NO_PRINT` and `FR_NO_WAVES` in one step.

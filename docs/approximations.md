@@ -97,6 +97,19 @@ For the sine table (129 entries over a quarter circle,
 `h = (π/2)/128`), the bound is `h²/8 ≈ 1.9e-5`. That is 0.6 LSB in the
 table's s0.15 format, so interpolation adds less than one bit of error.
 
+**Tuning the entries.** The straight line between two samples of a
+curve that bends one way always falls on the same side of it: under a
+concave function like `atan` on [0, 1], every chord sits below the
+curve. Rounding each entry to the true value therefore wastes half the
+error budget. Nudging the entries by a fraction of an LSB in the other
+direction centres the error on zero. FR_Math does this for the atan
+table: [`tools/gen_atan_table.py`](https://github.com/deftio/fr_math/blob/master/tools/gen_atan_table.py) starts
+from the rounded values, tries moving each interior entry by up to
+3 LSB, and keeps any change that lowers the peak error of the exact
+integer interpolation, checked on every possible input. That takes the
+peak from 2.07 to 1.55 LSB for the same 130 bytes. The two end points
+stay exact, so neighbouring regions still meet without a step.
+
 ### 3. Shift-and-add constants
 
 Multiplying by a fixed constant can be written as a sum of powers of
@@ -138,7 +151,6 @@ series in those regions:
 | cos near π/2, 3π/2 | `cos(π/2 + δ) ≈ −δ` | same |
 | tan within 10° of a pole | `cot(ε) ≈ 1/ε − ε/3` | `ε⁴/45`, ≈ 2e-5 relative at 10° |
 | acos near ±1 | `acos(x) ≈ sqrt(2(1 − x))` | ≈ `(1 − x)/12` relative, under 0.03% |
-| atan2 near the axes | `asin(s) ≈ s` | `s³/6` |
 
 ### 6. Piecewise-linear fits with shift-only coefficients
 
@@ -205,7 +217,8 @@ The radian functions also return the input offset directly within
 
 **Why a sine table and not cosine?** A sine quadrant is ascending from
 0 to 1, so the same table also serves `asin` and `acos` by searching
-it (see [Inverse trig](#inverse-trig)). One table, five functions.
+it (see [Inverse trig](#inverse-trig)). One table serves sin, cos,
+asin and acos.
 
 **Error budget at radix 16.** The pieces add up:
 
@@ -267,27 +280,45 @@ flat: many angles share almost the same value, so a tiny change in
 `acos(x) ≈ sqrt(2(1 − x))`, which is accurate to about `(1 − x)/12`
 relative, under 0.03% in that window.
 
-**`atan2(y, x)`** works on magnitudes and restores the quadrant from
-the signs at the end:
+**`atan2(y, x)`** folds the input into one octant, looks the angle up
+in its own small table, and unfolds it:
 
-1. Scale `|x|` and `|y|` by the same power of two so the larger one
-   sits in [2^14, 2^16). That doesn't change the angle, and it gives the
-   next steps enough bits even when the inputs are tiny.
-2. Compute the length `h = hypot_fast8(|x|, |y|)` with the shift-only
-   approximation described below.
-3. Below 45°, `angle = asin(|y|/h)`; above 45°, `angle = acos(|x|/h)`.
-   Choosing by octant keeps each inverse function in the region where
-   it is well conditioned: a small error in the ratio never moves the
-   angle by more than about 1.4 times as much.
-4. Very small ratios (under about 4.8°) skip the table and use
-   `asin(s) ≈ s` directly.
+1. Take `|x|` and `|y|`, and let `max` and `min` be the larger and the
+   smaller. The ratio `t = min/max` is then always in [0, 1], whatever
+   the quadrant, so the table never needs a range clamp.
+2. Scale both by the same power of two so `max` sits in [2^15, 2^16).
+   That doesn't change the angle. It means `t` keeps 16 bits of
+   precision for tiny inputs as well as huge ones, and `min << 16`
+   cannot overflow 32 bits.
+3. One 32-bit divide gives `t` in u0.16, rounded.
+4. A 65-entry table of `atan(i/64)` (130 bytes, entries tuned as
+   described [above](#2-a-small-table-plus-linear-interpolation))
+   with linear interpolation gives `a = atan(t)`. On [0, 1], `atan`
+   bends gently (`|f''| ≤ 0.65`), so 64 segments are enough for about
+   1.5 LSB.
+5. Undo the fold by symmetry, all exact in radians at radix 16:
+   if `|y| > |x|`, `a = π/2 − a`; if `x < 0`, `a = π − a`; if `y < 0`,
+   negate. The radix change is done on the magnitude, before the sign,
+   so `atan2(−y, x)` is exactly `−atan2(y, x)` at every output radix.
+
+Exact axes (`x = 0` or `y = 0`) return the stored constants for 0,
+±π/2 and π without dividing.
 
 `atan(x)` is `atan2(x, 1)`.
 
-This design reuses the sine table and `hypot_fast8`, so atan2 adds
-almost no ROM. Its error is dominated by `hypot_fast8`'s 0.14%, which
-passes straight into the ratio: 0.26% worst case. The cost is speed,
-because a search and two divides make it the slowest trig function.
+**Measured:** about 2.5 LSB worst case at radix 16 over every
+`(y, x)` in [−512, 511]², plus the `s32` extremes, which is 0.003% of
+the angle in the clamp metric used by the libfixmath comparison. It
+costs one divide, so it is among the faster functions in the library
+(about 3.6 ns on an M-series Mac, against 6.6 ns for libfixmath's
+`fix16_atan2`, which is about 1% accurate).
+
+**Why not reuse `asin`?** Earlier versions computed
+`h = hypot_fast8(|x|, |y|)` and then `asin(|y|/h)` or `acos(|x|/h)`,
+reusing the sine table and adding almost no ROM. That was slower (a
+search plus two divides) and less accurate (the 0.14% error of
+`hypot_fast8` passes straight into the ratio). The ratio `min/max`
+needs no length at all, and the 130-byte table pays for itself.
 
 ## Logarithms
 
