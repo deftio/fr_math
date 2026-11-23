@@ -137,7 +137,8 @@ static s32 deg_to_bam_full(s32 d)
 }
 #endif
 
-/* Normalize a fixed-radix value to radix 16. */
+/* Normalize a fixed-radix value to radix 16. Below radix 16 the caller
+ * must make sure the shifted value fits (see rad_mag_r16, deg_to_r16). */
 static s32 normalize_to_r16(s32 val, u16 radix)
 {
     return (radix > 16) ? (val >> (radix - 16))
@@ -145,20 +146,124 @@ static s32 normalize_to_r16(s32 val, u16 radix)
          : val;
 }
 
-/* |INT32_MIN| = 2^31 at r16, reduced mod 2*pi: what reduce_to_2pi()
- * returns for 2^31, which -INT32_MIN cannot represent in s32. */
-#define FR_R16_ABS_MIN_MOD_2PI ((s32)(0x80000000u % (u32)FR_TWO_PI(16)))
+/* 2^64 / (2*pi): turns per radian as a u0.64 fraction. (x * this) mod
+ * 2^64 is frac(x / 2*pi) for an integer x; shifted right by the radix it
+ * serves every radix 0..31 with error < 2^-32 turn for |x| < 2^32. */
+#define FR_TURNS_PER_RAD_Q64 0x28BE60DB9391054AULL
+#define FR_TWO_PI_R24        105414357u           /* 2*pi * 2^24 */
 
-/* Reduce non-negative radian (at r16) to [0, 2*pi). */
-static s32 reduce_to_2pi(s32 r)
+/* Exact-period reduction: |angle| (mag, at radix) mod 2*pi, returned at
+ * r16 in [0, 2*pi]. Works for any magnitude, including 2^31 (INT32_MIN)
+ * and inputs whose r16 value does not fit in s32. Two multiplies and no
+ * division; the period is 2*pi to 64 bits, so large angles do not pick
+ * up the drift of an integer period. */
+static u32 rad_to_turns(u32 mag, u16 radix)        /* frac(mag/2pi) * 2^32 */
+{
+    return (u32)(((u64)mag * (FR_TURNS_PER_RAD_Q64 >> radix)) >> 32);
+}
+static s32 turns_to_r16(u32 turns)                 /* [0, 2pi] at r16 */
+{
+    return (s32)(((u64)turns * FR_TWO_PI_R24 + (1ULL << 39)) >> 40);
+}
+
+/* |rad| at radix -> r16 radians reduced to [0, 2*pi].
+ * Inputs whose r16 value is at most 4*pi take the original path
+ * (normalize, |.|, subtract 2*pi once) and give the same result as
+ * before. Larger ones, and those whose r16 value would overflow s32 at
+ * radix < 16, are reduced exactly through rad_to_turns().
+ * If turns is not NULL, *turns also receives |rad| mod 2*pi in 2^-32
+ * turns, reduced exactly from the unreduced value: finer than r16 and
+ * free of the integer-2*pi step (fr_tan uses it near the poles). */
+static s32 rad_mag_r16x(s32 rad, u16 radix, u32 *turns)
 {
     const s32 two_pi = FR_TWO_PI(16);  /* 411775 */
-    if (r > (two_pi << 1))
-        r -= (r / two_pi) * two_pi;
-    else if (r > two_pi)
-        r -= two_pi;
-    return r;
+    u32 m, t;
+    if (radix >= 16) {
+        s32 r = normalize_to_r16(rad, radix);
+        m = (r < 0) ? 0u - (u32)r : (u32)r;
+    } else {
+        u32 a = (rad < 0) ? 0u - (u32)rad : (u32)rad;
+        if (a > ((u32)(two_pi << 1) >> (16 - radix))) {
+            t = rad_to_turns(a, radix);
+            if (turns) *turns = t;
+            return turns_to_r16(t);
+        }
+        m = a << (16 - radix);
+    }
+    if (turns) *turns = rad_to_turns(m, 16);
+    if (m > (u32)(two_pi << 1))
+        return turns_to_r16(rad_to_turns(m, 16));
+    if (m > (u32)two_pi)
+        m -= (u32)two_pi;
+    return (s32)m;
 }
+static s32 rad_mag_r16(s32 rad, u16 radix)
+{
+    return rad_mag_r16x(rad, radix, (u32 *)0);
+}
+
+#ifndef FR_LEAN
+/* Degrees at radix -> r16. Below radix 16 a value whose r16 form would
+ * overflow s32 is first reduced mod 360 at the caller's radix, which is
+ * exact (360 << radix is an integer); other values are unchanged. */
+static s32 deg_to_r16(s32 deg, u16 radix)
+{
+    if (radix < 16) {
+        u32 lim = (u32)1 << (15 + radix);          /* |deg| < lim fits */
+        if ((u32)deg + lim >= (lim << 1))
+            deg %= (s32)360 << radix;
+    }
+    return normalize_to_r16(deg, radix);
+}
+
+/* Integer degrees -> BAM for the radix-0 paths: FR_DEG2BAM_I is exact
+ * for |deg| < 2^18; reduce mod 360 (exact) outside that. */
+static u16 deg_i_to_bam(s32 deg)
+{
+    if (deg >= ((s32)1 << 18) || deg <= -((s32)1 << 18))
+        deg %= 360;
+    return FR_DEG2BAM_I(deg);
+}
+
+/* Degrees at r16 (non-negative, < 2^20) -> 2^-32 turns, rounded. */
+#define FR_TURNS_PER_DEG16_Q32 781874935307ULL     /* 2^48 / 360 */
+static u32 deg16_to_turns(u32 d)
+{
+    return (u32)(((u64)d * FR_TURNS_PER_DEG16_Q32 + ((u64)1 << 31)) >> 32);
+}
+#endif
+
+/* cot(e) as s15.16 for a small angle e > 0 given in 2^-32 turns, i.e.
+ * the distance to a tan pole. cot e = 1/e - e/3 - e^3/45 - ...; the
+ * first two terms leave a relative error under e^4/45 (2e-5 at 10 deg).
+ * 1/e = 2^48 / (2*pi * t) at s15.16 is formed from 2^40 / t' (two u32
+ * divisions, exact) times 2^8/(2*pi), with t' = t scaled below 2^24; no
+ * 64-bit divide. Saturates to FR_TRIG_MAXVAL when the result does not
+ * fit (t <= 20860, ~0.0017 deg). Valid for t < 2^27 (11.25 deg). */
+#define FR_COT_TURNS_K26 2734261102u               /* 2^8/(2pi) * 2^26 */
+static s32 cot_turns(u32 t)
+{
+    u32 k = 0, q, rem, tt;
+    if (t <= 20860u)
+        return FR_TRIG_MAXVAL;
+    while ((t >> k) >= ((u32)1 << 24))
+        k++;
+    tt  = t >> k;
+    q   = 0xFFFFFFFFu / tt;
+    rem = 0xFFFFFFFFu - q * tt + 1u;           /* 2^32 = q*tt + rem    */
+    if (rem >= tt) { q++; rem -= tt; }
+    q = (q << 8) + ((rem << 8) / tt);          /* floor(2^40 / tt)     */
+    q = (u32)(((u64)q * FR_COT_TURNS_K26) >> (26 + k));
+    /* - e/3 at s15.16 = t * 2pi/(3 * 2^16) = (t/2^12) * 34315/2^18 */
+    return (s32)(q - (((t >> 12) * 34315u) >> 18));
+}
+
+/* Near-pole windows for the tan family: inside them tan is computed as
+ * cot of the exact distance to the pole instead of through a u16 BAM,
+ * whose rounding error the reciprocal amplifies by about 1/e. 10 deg. */
+#define FR_TAN_POLE_TURNS 119304647                /* 10 deg in 2^-32 turns */
+#define FR_TAN_POLE_BAM   1820u                    /* 10 deg in BAM      */
+#define FR_TAN_POLE_DEG16 ((s32)10 << 16)          /* 10 deg at r16      */
 
 
 /* rad_r16_to_bam — convert radian (at r16) in [0, 2π) to u16 BAM.
@@ -179,7 +284,7 @@ static u16 rad_r16_to_bam(s32 r)
         r -= two_pi;
         /* r is now in [-π/2, 0), no offset needed (u16 wraps naturally) */
     }
-    return (u16)(offset + (u16)((rad_to_bam_full(r) + (1 << 15)) >> 16));
+    return (u16)(offset + (u16)((rad_to_bam_full(r) + ((s32)1 << 15)) >> 16));
 }
 
 /* (rad_r16_to_bam32 removed — sub-BAM interpolation approach abandoned) */
@@ -188,14 +293,10 @@ static u16 rad_r16_to_bam(s32 r)
  * Normalizes to r16, reduces to [0, 2π), uses quadrant decomposition. */
 u16 fr_rad_to_bam(s32 rad, u16 radix)
 {
-    s32 r = normalize_to_r16(rad, radix);
-    /* Normalize to [0, 2π). % rather than negating, so INT32_MIN is safe
-     * (r % P == r + ((-r) / P) * P for r < 0). */
-    if (r < 0) {
-        r %= FR_TWO_PI(16);
-        if (r < 0) r += FR_TWO_PI(16);
-    }
-    r = reduce_to_2pi(r);
+    /* Reduce |rad| to [0, 2π]; a negative angle maps to 2π - that. */
+    s32 r = rad_mag_r16(rad, radix);
+    if (rad < 0 && r != 0)
+        r = FR_TWO_PI(16) - r;
     return rad_r16_to_bam(r);
 }
 
@@ -204,7 +305,7 @@ u16 fr_rad_to_bam(s32 rad, u16 radix)
  * Normalizes to r16, reduces to [-90, 90) with quadrant offset. */
 u16 fr_deg_to_bam(s32 deg, u16 radix)
 {
-    s32 d = normalize_to_r16(deg, radix);
+    s32 d = deg_to_r16(deg, radix);
 
     /* Reduce to [-180, 180) */
     if (d >= FR_D360_R16 || d < -FR_D360_R16) {
@@ -219,7 +320,7 @@ u16 fr_deg_to_bam(s32 deg, u16 radix)
     if (d >= FR_D90_R16)      { d -= FR_D180_R16; offset = 32768; }
     else if (d < -FR_D90_R16) { d += FR_D180_R16; offset = 32768; }
 
-    return (u16)(offset + (u16)((deg_to_bam_full(d) + (1 << 15)) >> 16));
+    return (u16)(offset + (u16)((deg_to_bam_full(d) + ((s32)1 << 15)) >> 16));
 }
 #endif
 
@@ -285,9 +386,7 @@ s32 fr_cos_bam(u16 bam)
 s32 fr_cos(s32 rad, u16 radix)
 {
 	if (rad == 0) return FR_SIN_PEAK;
-	s32 r = normalize_to_r16(rad, radix);
-	if (r < 0) r = (r == INT32_MIN) ? FR_R16_ABS_MIN_MOD_2PI : -r;
-	r = reduce_to_2pi(r);
+	s32 r = rad_mag_r16(rad, radix);        /* cos is even: |rad| */
 	/* Near π/2 or 3π/2 (cos=0 crossings): cos(π/2+δ) = -sin(δ) ≈ -δ,
 	 * cos(3π/2+δ) = sin(δ) ≈ δ. */
 	s32 delta = r - FR_HALF_PI(16);
@@ -302,10 +401,9 @@ s32 fr_cos(s32 rad, u16 radix)
 s32 fr_sin(s32 rad, u16 radix)
 {
 	if (rad == 0) return 0;
-	s32 r = normalize_to_r16(rad, radix);
-	s32 sign = 1;
-	if (r < 0) { r = (r == INT32_MIN) ? FR_R16_ABS_MIN_MOD_2PI : -r; sign = -1; }
-	r = reduce_to_2pi(r);
+	/* sin is odd: work with |rad| */
+	s32 sign = (rad < 0) ? -1 : 1;
+	s32 r = rad_mag_r16(rad, radix);
 	/* Near 0 after reduction: sin(δ) ≈ δ */
 	if (r < 256) {
 		s32 v = r;
@@ -325,7 +423,7 @@ s32 fr_sin(s32 rad, u16 radix)
 	}
 	/* Main path: reduce to [-π, π], convert to u16 BAM, table lookup */
 	if (r > FR_PI(16)) r -= FR_TWO_PI(16);
-	u16 bam = (u16)((rad_to_bam_full(r) + (1 << 15)) >> 16);
+	u16 bam = (u16)((rad_to_bam_full(r) + ((s32)1 << 15)) >> 16);
 	s32 v = fr_sin_bam(bam);
 	return (sign < 0) ? -v : v;
 }
@@ -336,8 +434,8 @@ s32 fr_sin(s32 rad, u16 radix)
  *
  * Uses a 65-entry octant table (gFR_TAN_TAB_O) for the first octant
  * [0, 45°] and the reciprocal identity tan(x) = 1/tan(90°-x) for the
- * second octant (45°, 90°). Result is s15.16 with saturation at the
- * poles.
+ * second octant (45°, 90°), and cot of the exact distance within 10° of
+ * a pole. Result is s15.16 with saturation at the poles.
  *
  * No 64-bit intermediates. One 32-bit division only in the >45° path.
  */
@@ -390,29 +488,24 @@ s32 fr_tan_bam(u16 bam)
 		 * complement is in (0, 0x2000] = (0°, 45°]. */
 		u32 comp = 0x4000u - inq;
 
-		/* Look up tan(complement) from the table */
-		idx  = comp >> FR_TAN_FRAC_BITS;
-		frac = comp &  FR_TAN_FRAC_MASK;
-		lo = (s32)gFR_TAN_TAB_O[idx];
-		/* comp == 45° gives idx == FR_TAN_TABLE_SIZE - 1 with frac == 0:
-		 * that entry is exact, and idx + 1 would read past the table. */
-		hi = (frac != 0) ? (s32)gFR_TAN_TAB_O[idx + 1] : lo;
-		raw = lo + (((hi - lo) * (s32)frac + FR_TAN_FRAC_HALF) >> FR_TAN_FRAC_BITS);
-
-		if (raw < 0x40) {
-			/* Near pole: redo interpolation with 4 extra bits of
-			 * precision. The reciprocal amplifies small interpolation
-			 * errors, so extra precision significantly helps here.
-			 * Result: (2^31 / raw_hp) << 4 = 2^35 / raw_hp. */
-			s32 lo4 = lo << 4;
-			s32 hi4 = hi << 4;
-			s32 raw_hp = lo4 + (((hi4 - lo4) * (s32)frac + FR_TAN_FRAC_HALF) >> FR_TAN_FRAC_BITS);
-			if (raw_hp < 32) {
-				raw = FR_TRIG_MAXVAL;
-			} else {
-				raw = (s32)((0x80000000u / (u32)raw_hp) << 4);
-			}
+		if (comp <= FR_TAN_POLE_BAM) {
+			/* Within 10° of the pole: cot(e) = 1/e - e/3 with
+			 * e = comp * 2π/65536 exactly, one u32 division:
+			 * 65536/e = 2^32/(2π) / comp; e/3 = comp * 2π/3 at s15.16.
+			 * The table reciprocal would amplify interpolation error
+			 * by 1/e here. */
+			raw = (s32)(683565276u / comp - ((comp * 2145u) >> 10));
 		} else {
+			/* Look up tan(complement) from the table */
+			idx  = comp >> FR_TAN_FRAC_BITS;
+			frac = comp &  FR_TAN_FRAC_MASK;
+			lo = (s32)gFR_TAN_TAB_O[idx];
+			/* comp == 45° gives idx == FR_TAN_TABLE_SIZE - 1 with frac == 0:
+			 * that entry is exact, and idx + 1 would read past the table. */
+			hi = (frac != 0) ? (s32)gFR_TAN_TAB_O[idx + 1] : lo;
+			raw = lo + (((hi - lo) * (s32)frac + FR_TAN_FRAC_HALF) >> FR_TAN_FRAC_BITS);
+			/* comp > 10° keeps raw >= tan(10°) in u0.15 (5778): no
+			 * near-zero divisor. */
 			raw = (s32)(0x80000000u / (u32)raw);
 		}
 	}
@@ -426,17 +519,17 @@ s32 fr_tan_bam(u16 bam)
  * Normalize to [0, 2π], extract quadrant sign, convert rad→u16 BAM,
  * then do direct octant table lookup + interpolation inline.
  * Small-angle bypass at zero crossings: tan(x) ≈ x.
- * Near poles: use radian distance directly (cot(δ) ≈ 1/δ) to avoid
- * BAM quantization error amplified by the reciprocal. */
+ * Within 10° of a pole: cot of the exact distance to the pole
+ * (cot_turns), to avoid BAM quantization error amplified by the
+ * reciprocal. */
 s32 fr_tan(s32 rad, u16 radix)
 {
 	if (rad == 0) return 0;
-	s32 r = normalize_to_r16(rad, radix);
 
-	/* tan(-x) = -tan(x): extract sign, work with |r| */
-	s32 sign = 1;
-	if (r < 0) { r = (r == INT32_MIN) ? FR_R16_ABS_MIN_MOD_2PI : -r; sign = -1; }
-	r = reduce_to_2pi(r);
+	/* tan(-x) = -tan(x): extract sign, work with |rad| */
+	s32 sign = (rad < 0) ? -1 : 1;
+	u32 turns;
+	s32 r = rad_mag_r16x(rad, radix, &turns);
 
 	/* Small-angle bypass at zero crossings: tan(δ) ≈ δ */
 	if (r < 256)
@@ -452,54 +545,18 @@ s32 fr_tan(s32 rad, u16 radix)
 			return (sign < 0) ? delta : -delta;
 	}
 
-	/* Near-pole bypass: within POLE_THRESH r16 of π/2 or 3π/2,
-	 * use cot(δ) ≈ 1/δ from the radian distance directly.
-	 * Compute δ at r24 using precise pole constants (8× less rounding
-	 * error than the r16 FR_HALF_PI/FR_THREE_HALF_PI constants).
-	 * At δ=2048 r16 (1.79°), 1/δ error is ~0.03%. */
+	/* Near-pole bypass: within 10° of π/2 or 3π/2,
+	 * tan(pole ∓ δ) = ±cot(δ). The angle is taken in 2^-32 turns, where
+	 * the poles are exactly 2^30 and 3·2^30 (rad_mag_r16x reduces the
+	 * input to turns exactly). See cot_turns(). */
 	{
-		const s32 pole_thresh = 2048;       /* r16 units (~1.79°) */
-		/* Precise pole positions at r24:
-		 * π/2  × 2^24 = 26353589.76 → 26353590
-		 * 3π/2 × 2^24 = 79060769.28 → 79060769 */
-		const s32 half_pi_r24       = 26353590;
-		const s32 three_half_pi_r24 = 79060769;
-
-		s32 d1 = r - FR_HALF_PI(16);       /* coarse check at r16 */
-		s32 d2 = r - FR_THREE_HALF_PI(16);
-		s32 pole_delta_r24 = 0;
-
-		if (d1 >= -pole_thresh && d1 <= pole_thresh) {
-			s32 r24 = r << 8;
-			s32 dd = r24 - half_pi_r24;
-			pole_delta_r24 = (dd < 0) ? -dd : dd;
-		} else if (d2 >= -pole_thresh && d2 <= pole_thresh) {
-			s32 r24 = r << 8;
-			s32 dd = r24 - three_half_pi_r24;
-			pole_delta_r24 = (dd < 0) ? -dd : dd;
-		}
-
-		if (pole_delta_r24 > 0) {
-			/* Determine sign from radian quadrant */
-			s32 pole_sign;
-			if (r < FR_HALF_PI(16))
-				pole_sign = 1;          /* before π/2: → +∞ */
-			else if (r < FR_PI(16))
-				pole_sign = -1;         /* past π/2: → -∞ */
-			else if (r <= FR_THREE_HALF_PI(16))
-				pole_sign = 1;          /* before 3π/2: → +∞ */
-			else
-				pole_sign = -1;         /* past 3π/2: → -∞ */
-
-			s32 raw;
-			if (pole_delta_r24 < 512) {
-				raw = FR_TRIG_MAXVAL;   /* δ < 2 at r16 → saturate */
-			} else {
-				/* cot(δ) ≈ 1/δ.  In s15.16: (2^40) / δ_r24 */
-				raw = (s32)((1ULL << 40) / (u32)pole_delta_r24);
-				if (raw > FR_TRIG_MAXVAL) raw = FR_TRIG_MAXVAL;
-			}
-			s32 v = (pole_sign < 0) ? -raw : raw;
+		s32 t = (s32)(turns - 0x40000000u);
+		if (t < -FR_TAN_POLE_TURNS || t > FR_TAN_POLE_TURNS)
+			t = (s32)(turns - 0xC0000000u);
+		if (t >= -FR_TAN_POLE_TURNS && t <= FR_TAN_POLE_TURNS) {
+			/* before the pole (t < 0): → +∞; past it: → -∞ */
+			s32 v = cot_turns((t < 0) ? 0u - (u32)t : (u32)t);
+			if (t >= 0) v = -v;
 			return (sign < 0) ? -v : v;
 		}
 	}
@@ -552,18 +609,9 @@ s32 fr_tan(s32 rad, u16 radix)
 		 * that entry is exact, and idx + 1 would read past the table. */
 		s32 hi = (frac != 0) ? (s32)gFR_TAN_TAB_O[idx + 1] : lo;
 		raw = lo + (((hi - lo) * (s32)frac + FR_TAN_FRAC_HALF) >> FR_TAN_FRAC_BITS);
-
-		if (raw < 0x40) {
-			s32 lo4 = lo << 4;
-			s32 hi4 = hi << 4;
-			s32 raw_hp = lo4 + (((hi4 - lo4) * (s32)frac + FR_TAN_FRAC_HALF) >> FR_TAN_FRAC_BITS);
-			if (raw_hp < 32)
-				raw = FR_TRIG_MAXVAL;
-			else
-				raw = (s32)((0x80000000u / (u32)raw_hp) << 4);
-		} else {
-			raw = (s32)(0x80000000u / (u32)raw);
-		}
+		/* Within 10° of a pole returned earlier (cot path), so comp is
+		 * at least ~10° and raw >= tan(10°) in u0.15: no small divisor. */
+		raw = (s32)(0x80000000u / (u32)raw);
 	}
 
 	/* Combine quadrant sign and input sign */
@@ -580,13 +628,13 @@ s32 fr_tan(s32 rad, u16 radix)
 
 s32 fr_cos_deg(s32 deg, u16 radix)
 {
-	if (radix == 0) return fr_cos_bam(FR_DEG2BAM_I(deg));
+	if (radix == 0) return fr_cos_bam(deg_i_to_bam(deg));
 	/* cos is even. INT32_MIN has no positive counterpart in s32; it is
 	 * never a cardinal angle and fr_deg_to_bam() reduces negative input
 	 * itself, so it is evaluated as is. */
-	if (deg < 0 && deg != INT32_MIN) deg = -deg;
+	if (deg < 0 && deg != (s32)(-0x7fffffff - 1)) deg = -deg;
 	/* Exact cardinal angles */
-	s32 frac_mask = (1 << radix) - 1;
+	s32 frac_mask = ((s32)1 << radix) - 1;
 	if ((deg & frac_mask) == 0) {
 		s32 rem = (deg >> radix) % 360;
 		if (rem == 0)   return  FR_SIN_PEAK;
@@ -596,7 +644,7 @@ s32 fr_cos_deg(s32 deg, u16 radix)
 	}
 	/* Near 90° or 270° (cos=0 crossings): cos(90+δ) = -sin(δ) ≈ -δ·π/180,
 	 * cos(270+δ) = sin(δ) ≈ δ·π/180. Avoids BAM rounding error at zero. */
-	s32 d = normalize_to_r16(deg, radix);
+	s32 d = deg_to_r16(deg, radix);
 	/* Reduce to [0, 360°); d < 0 only for deg == INT32_MIN (see above). */
 	d %= FR_D360_R16;
 	if (d < 0) d += FR_D360_R16;
@@ -604,12 +652,12 @@ s32 fr_cos_deg(s32 deg, u16 radix)
 		const s32 DEG_THRESH = 14000; /* ~0.21° at r16 */
 		s32 delta = d - FR_D90_R16;
 		if (delta >= -DEG_THRESH && delta <= DEG_THRESH) {
-			s32 dr = (s32)(((s64)delta * FR_kDEG2RAD + (1 << 15)) >> 16);
+			s32 dr = (s32)(((s64)delta * FR_kDEG2RAD + ((s64)1 << 15)) >> 16);
 			return -dr;
 		}
 		delta = d - (FR_D90_R16 + FR_D180_R16);
 		if (delta >= -DEG_THRESH && delta <= DEG_THRESH) {
-			s32 dr = (s32)(((s64)delta * FR_kDEG2RAD + (1 << 15)) >> 16);
+			s32 dr = (s32)(((s64)delta * FR_kDEG2RAD + ((s64)1 << 15)) >> 16);
 			return dr;
 		}
 	}
@@ -618,14 +666,14 @@ s32 fr_cos_deg(s32 deg, u16 radix)
 
 s32 fr_sin_deg(s32 deg, u16 radix)
 {
-	if (radix == 0) return fr_sin_bam(FR_DEG2BAM_I(deg));
+	if (radix == 0) return fr_sin_bam(deg_i_to_bam(deg));
 	s32 sign = 1;
 	/* sin is odd. INT32_MIN has no positive counterpart in s32; it is
 	 * never a cardinal angle and fr_deg_to_bam() reduces negative input
 	 * itself, so it is evaluated as is (sign included). */
-	if (deg < 0 && deg != INT32_MIN) { deg = -deg; sign = -1; }
+	if (deg < 0 && deg != (s32)(-0x7fffffff - 1)) { deg = -deg; sign = -1; }
 	/* Exact cardinal angles */
-	s32 frac_mask = (1 << radix) - 1;
+	s32 frac_mask = ((s32)1 << radix) - 1;
 	if ((deg & frac_mask) == 0) {
 		s32 rem = (deg >> radix) % 360;
 		if (rem == 0)   return  0;
@@ -643,7 +691,20 @@ s32 FR_TanI(s32 deg)
 	s32 rem = deg % 180;
 	if (rem == 90 || rem == -90)
 		return (deg > 0) ? FR_TRIG_MAXVAL : -FR_TRIG_MAXVAL;
-	return fr_tan_bam(FR_DEG2BAM_I(deg));
+	{
+		/* Within 10° of a pole: ±cot of the exact distance (see
+		 * fr_tan_deg). a in [0, 180), e = a - 90. */
+		s32 a = (rem < 0) ? -rem : rem;
+		s32 e = a - 90;
+		if (e >= -10 && e <= 10) {
+			s32 v = cot_turns(deg16_to_turns((u32)((e < 0) ? -e : e) << 16));
+			if (e > 0) v = -v;                /* past the pole */
+			return (rem < 0) ? -v : v;
+		}
+	}
+	/* tan has period 180°, and FR_DEG2BAM_I(rem) is FR_DEG2BAM_I(deg)
+	 * shifted by a multiple of 0x8000: same result, no overflow. */
+	return fr_tan_bam(FR_DEG2BAM_I(rem));
 }
 
 s32 fr_tan_deg(s32 deg, u16 radix)
@@ -662,7 +723,7 @@ s32 fr_tan_deg(s32 deg, u16 radix)
 		if (deg < 0) deg += d360;
 	}
 	/* Exact cardinal angles */
-	s32 frac_mask = (1 << radix) - 1;
+	s32 frac_mask = ((s32)1 << radix) - 1;
 	if ((deg & frac_mask) == 0) {
 		s32 ideg = deg >> radix;
 		if (ideg < 0) ideg += 360;          /* radix > 22, negative deg */
@@ -694,15 +755,22 @@ s32 fr_tan_deg(s32 deg, u16 radix)
 			return -((FR_DEG2RAD(up) + (1 << 7)) >> 8);
 		}
 	}
-	/* Main path: convert to u16 BAM, table lookup */
-	u16 bam = fr_deg_to_bam(deg, radix);
-	s32 v = fr_tan_bam(bam);
-	/* Near-pole BAM alias: determine sign from normalized angle position */
-	if (bam == 0x4000u || bam == 0xC000u) {
-		s32 pole_d = (bam == 0x4000u) ? FR_D90_R16 : (FR_D90_R16 + FR_D180_R16);
-		v = (d < pole_d) ? FR_TRIG_MAXVAL : -FR_TRIG_MAXVAL;
+	/* Within 10° of 90° or 270°: tan(pole ∓ e) = ±cot(e) from the exact
+	 * degree distance. Through a u16 BAM, the input's BAM rounding
+	 * (up to 0.0027°) is amplified by about 1/e near the pole. An
+	 * exact pole only reaches here at radix > 16 (truncated to r16);
+	 * it saturates with the sign of the side the input is on. */
+	{
+		s32 e = d - FR_D90_R16;
+		if (e < -FR_TAN_POLE_DEG16 || e > FR_TAN_POLE_DEG16)
+			e = d - (FR_D90_R16 + FR_D180_R16);
+		if (e >= -FR_TAN_POLE_DEG16 && e <= FR_TAN_POLE_DEG16) {
+			s32 v = cot_turns(deg16_to_turns((e < 0) ? 0u - (u32)e : (u32)e));
+			return (e < 0) ? v : -v;
+		}
 	}
-	return v;
+	/* Main path: convert to u16 BAM, table lookup */
+	return fr_tan_bam(fr_deg_to_bam(deg, radix));
 }
 #endif /* FR_LEAN */
 
@@ -785,13 +853,14 @@ s32 FR_acos(s32 input, u16 radix, u16 out_radix)
 
 	/* Work with absolute value at the caller's radix */
 	sign = (s16)((input < 0) ? 1 : 0);
-	input_abs = sign ? -input : input;
 
 	/* Clamp at the caller's radix */
 	{
-		s32 one = (s32)1 << radix;
-		if (input_abs >= one)
+		/* |input| in u32: -INT32_MIN does not fit in s32. */
+		u32 mag = sign ? 0u - (u32)input : (u32)input;
+		if (mag >= ((u32)1 << radix))
 			return sign ? FR_CHRDX(FR_kPI, FR_kPREC, out_radix) : 0;
+		input_abs = (s32)mag;
 	}
 
 	v = FR_CHRDX(input_abs, radix, FR_TRIG_PREC); /* |input| at s0.15 */
@@ -1060,11 +1129,17 @@ s32 FR_pow2(s32 input, u16 radix)
 	 */
 	if (flr >= 0)
 	{
-		/* result = mant << flr, then re-radix to caller's radix. */
-		if (flr >= 30)
+		/* mant (s.16, < 2^17) * 2^flr, straight to the caller's radix in
+		 * one shift: going through r16 first overflowed s32 once
+		 * 2^flr >= 2^15 even when the result fits at a lower radix
+		 * (FR_pow2(20, 0) returned 0). Same value wherever that did not
+		 * overflow. The result saturates when it does not fit in s32. */
+		s32 sh = flr + (s32)radix - 16;
+		if (sh < 0)
+			return mant >> -sh;
+		if (sh > 30 || mant > (FR_OVERFLOW_POS >> sh))
 			return FR_OVERFLOW_POS;
-		result = mant << flr;
-		return FR_CHRDX(result, 16, radix);
+		return mant << sh;
 	}
 	else
 	{
@@ -1148,9 +1223,9 @@ s32 FR_log2(s32 input, u16 radix, u16 output_radix)
 	 * (m_frac in [0, 2^30)). Index into the 64-entry table is the top 6
 	 * bits of m_frac; the lower 24 bits are the interpolation fraction.
 	 */
-	m -= (1u << 30);
+	m -= ((u32)1 << 30);
 	idx  = (s32)(m >> 24);                    /* 6 bits  */
-	frac = (s32)(m & ((1u << 24) - 1));       /* 24 bits */
+	frac = (s32)(m & (((u32)1 << 24) - 1));       /* 24 bits */
 	lo = (s32)gFR_LOG2_MANT_TAB[idx];
 	hi = (s32)gFR_LOG2_MANT_TAB[idx + 1];
 	mant_log2 = lo + (s32)(((int64_t)(hi - lo) * frac) >> 24);
@@ -1165,15 +1240,17 @@ s32 FR_log2(s32 input, u16 radix, u16 output_radix)
 
 s32 FR_ln(s32 input, u16 radix, u16 output_radix)
 {
-	s32 r = FR_log2(input, radix, output_radix);
-	return FR_MULK28(r, FR_krLOG2E_28);
+	if (input <= 0)
+		return FR_LOG2MIN;      /* as FR_log2 (scaling it gave a non-sentinel) */
+	return FR_MULK28(FR_log2(input, radix, output_radix), FR_krLOG2E_28);
 }
 
 #ifndef FR_LEAN
 s32 FR_log10(s32 input, u16 radix, u16 output_radix)
 {
-	s32 r = FR_log2(input, radix, output_radix);
-	return FR_MULK28(r, FR_krLOG2_10_28);
+	if (input <= 0)
+		return FR_LOG2MIN;      /* as FR_log2 */
+	return FR_MULK28(FR_log2(input, radix, output_radix), FR_krLOG2_10_28);
 }
 #endif
 
@@ -1546,8 +1623,11 @@ s32 FR_hypot(s32 x, s32 y, u16 radix)
 {
 	uint64_t xx = (uint64_t)((int64_t)x * (int64_t)x);
 	uint64_t yy = (uint64_t)((int64_t)y * (int64_t)y);
+	u32 d;
 	(void)radix; /* the 2*radix in xx+yy cancels with isqrt's halving */
-	return (s32)fr_isqrt64(xx + yy);
+	d = fr_isqrt64(xx + yy);
+	/* up to ~1.42 * 2^31: saturate what does not fit (it wrapped) */
+	return (d > 0x7FFFFFFFu) ? FR_OVERFLOW_POS : (s32)d;
 }
 #endif
 
@@ -1560,15 +1640,17 @@ s32 FR_hypot(s32 x, s32 y, u16 radix)
  */
 s32 FR_hypot_fast8(s32 x, s32 y)
 {
-    s32 hi, lo;
-
-    /* absolute values (clamp INT32_MIN to INT32_MAX to avoid UB) */
-    if (x < 0) x = (x == (s32)0x80000000) ? 0x7FFFFFFF : -x;
-    if (y < 0) y = (y == (s32)0x80000000) ? 0x7FFFFFFF : -y;
+    /* Magnitudes and the segment sums in u32: |INT32_MIN| = 2^31 fits,
+     * and the sums (at most ~1.42 * 2^31) cannot wrap. Results that fit
+     * in s32 are unchanged; larger ones saturate to FR_OVERFLOW_POS (they
+     * used to wrap negative). */
+    u32 ax = (x < 0) ? 0u - (u32)x : (u32)x;
+    u32 ay = (y < 0) ? 0u - (u32)y : (u32)y;
+    u32 hi, lo, d;
 
     /* hi = max(|x|,|y|), lo = min(|x|,|y|) */
-    if (x > y) { hi = x; lo = y; }
-    else       { hi = y; lo = x; }
+    if (ax > ay) { hi = ax; lo = ay; }
+    else         { hi = ay; lo = ax; }
 
     if (hi == 0) return 0;
 
@@ -1580,21 +1662,21 @@ s32 FR_hypot_fast8(s32 x, s32 y)
             /* β in (0.75, 1.0] */
             if (lo > hi - (hi >> 3))                   /* β > 0.875 */
                 /* a≈0.7305, b≈0.6836 */
-                return hi - (hi >> 2) - (hi >> 6) - (hi >> 8)
+                d = hi - (hi >> 2) - (hi >> 6) - (hi >> 8)
                      + lo - (lo >> 2) - (lo >> 4) - (lo >> 8);
             else                                        /* β in (0.75, 0.875] */
                 /* a≈0.7803, b≈0.6262 */
-                return hi - (hi >> 2) + (hi >> 5) - (hi >> 10)
+                d = hi - (hi >> 2) + (hi >> 5) - (hi >> 10)
                      + (lo >> 1) + (lo >> 3) + (lo >> 10) + (lo >> 12);
         } else {
             /* β in (0.5, 0.75] */
             if (lo > hi - (hi >> 1) + (hi >> 3))       /* β > 0.625 */
                 /* a≈0.8281, b≈0.5630 */
-                return hi - (hi >> 2) + (hi >> 4) + (hi >> 6)
+                d = hi - (hi >> 2) + (hi >> 4) + (hi >> 6)
                      + (lo >> 1) + (lo >> 4) + (lo >> 11);
             else                                        /* β in (0.5, 0.625] */
                 /* a≈0.8728, b≈0.4893 */
-                return hi - (hi >> 3) - (hi >> 9) - (hi >> 12)
+                d = hi - (hi >> 3) - (hi >> 9) - (hi >> 12)
                      + (lo >> 1) - (lo >> 6) + (lo >> 8) + (lo >> 10);
         }
     } else {
@@ -1603,24 +1685,26 @@ s32 FR_hypot_fast8(s32 x, s32 y)
             /* β in (0.25, 0.5] */
             if ((hi >> 1) - (hi >> 3) < lo)             /* β > 0.375 */
                 /* a≈0.9180, b≈0.3984 */
-                return hi - (hi >> 4) - (hi >> 6) - (hi >> 8)
+                d = hi - (hi >> 4) - (hi >> 6) - (hi >> 8)
                      + (lo >> 1) - (lo >> 3) + (lo >> 5) - (lo >> 7);
             else                                        /* β in (0.25, 0.375] */
                 /* a≈0.9551, b≈0.2988 */
-                return hi - (hi >> 4) + (hi >> 6) + (hi >> 9)
+                d = hi - (hi >> 4) + (hi >> 6) + (hi >> 9)
                      + (lo >> 2) + (lo >> 4) - (lo >> 6) + (lo >> 9);
         } else {
             /* β in [0, 0.25] */
             if ((hi >> 3) < lo)                         /* β in (0.125, 0.25] */
                 /* a≈0.9839, b≈0.1838 */
-                return hi - (hi >> 6) - (hi >> 11)
+                d = hi - (hi >> 6) - (hi >> 11)
                      + (lo >> 2) - (lo >> 4) - (lo >> 8) + (lo >> 12);
             else                                        /* β in [0, 0.125] */
                 /* a≈0.9990, b≈0.0620 */
-                return hi - (hi >> 10)
+                d = hi - (hi >> 10)
                      + (lo >> 4) - (lo >> 11);
         }
     }
+
+    return (d > 0x7FFFFFFFu) ? FR_OVERFLOW_POS : (s32)d;
 }
 
 #ifndef FR_NO_WAVES

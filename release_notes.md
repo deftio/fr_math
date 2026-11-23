@@ -10,6 +10,11 @@ every affected function at 11-31 radices; `FR_atan2` grids; ~160k
 `FR_numstr` strings), and exhaustively for `FR_RAD2BAM`. Only inputs that
 hit undefined behavior change.
 
+A second set of fixes came from testing every input instead of samples
+(new `tests/test_exhaustive.c`, below). Outside the tan pole windows,
+results are bit-identical to before wherever the old result was valid
+(checked over ~1 billion inputs); what changes is listed here.
+
 ### Fixed
 
 - **`fr_tan_bam`, `fr_tan`**: odd multiples of 45° read one entry past
@@ -36,6 +41,70 @@ hit undefined behavior change.
   reordered as in `rad_to_bam_full` (bit-identical results for every
   input). Header comment corrected: the valid range is |x| <= pi at
   s15.16, not "~4 rad".
+- **Large angles** (`fr_sin`, `fr_cos`, `fr_tan`, `fr_rad_to_bam`,
+  `fr_sin_deg`, `fr_cos_deg`, `fr_deg_to_bam`): below radix 16, angles
+  whose radix-16 form does not fit in `s32` overflowed and gave wrong
+  answers (e.g. `fr_cos_deg(40000, 0)`); radian angles beyond ±4π also
+  drifted, because they were reduced with the integer 2π at r16 (up to
+  ~160 LSB at |x| ≈ 32768 rad). Degrees are now reduced mod 360 exactly at
+  the caller's radix, radians with 2π to 64 bits (two multiplies, no
+  divide). Every `s32` input at every radix 0..16 is now accurate.
+- **Integer degrees**: `FR_DEG2BAM_I` (used by `FR_SinI`, `FR_CosI`,
+  `FR_TanI` and the radix-0 paths) overflowed for |deg| >= 32768. It is
+  now written as `deg * 8192 / 45`, the same result, valid to 2^18; the
+  library's own integer-degree paths reduce larger values first, so
+  `FR_TanI` and `fr_*_deg(deg, 0)` take any `s32`.
+- **tan near its poles** (behavior change: more accurate): `fr_tan_deg`
+  was up to 70% off within 0.05° of 90° / 270° (the input's BAM rounding
+  amplified by 1/ε), and `fr_tan_bam` up to 0.58%. Within 10° of a pole,
+  `fr_tan`, `fr_tan_deg`, `FR_TanI` and `fr_tan_bam` now return cot of the
+  exact distance to the pole (1/ε − ε/3), computed with 32-bit divisions
+  only (`fr_tan` previously used a 64-bit divide there). Worst error over
+  every input at radix 0..16: tan (rad) 0.048%, tan (deg) 0.041%, tan
+  (BAM) 0.015%. Also fixed: `fr_tan`'s pole constants at r24 were off by
+  ~1 unit (π/2·2^24 = 26353589.27, the code had 26353590).
+- **`FR_pow2`** at low radix: the result went through radix 16, so
+  anything ≥ 2^15 overflowed even when it fits at the caller's radix
+  (`FR_pow2(20, 0)` returned 0, `FR_pow2(30, 0)` returned
+  `FR_OVERFLOW_POS`), and at radix 16 `FR_pow2(15.0)` wrapped to
+  `INT32_MIN`. The result is now shifted once to the caller's radix and
+  saturates only when it does not fit in `s32`.
+- **`FR_EXP`, `FR_POW10`, `FR_EXP_FAST`, `FR_POW10_FAST`**: for very large
+  |input| the base-2 exponent wrapped (`FR_EXP(INT32_MIN, 0)` returned
+  `FR_OVERFLOW_POS`). It is now held to the `s32` range, which gives 0 or
+  `FR_OVERFLOW_POS` exactly at radix <= 26.
+- **`FR_acos`, `FR_asin`**: `INT32_MIN` overflowed on negation and returned
+  π/2 instead of π (acos) / −π/2 (asin).
+- **`FR_ln`, `FR_log10`** (behavior change for input <= 0): returned a
+  scaled copy of `FR_LOG2MIN` (e.g. −22712.7 at radix 16) instead of the
+  sentinel. They now return `FR_LOG2MIN`, as `FR_log2` does.
+- **`FR_hypot`, `FR_hypot_fast8`**: results above 2^31 − 1 wrapped
+  negative. They now saturate to `FR_OVERFLOW_POS` (as the docs already
+  said for `FR_hypot`); `FR_hypot_fast8` works in `u32`, so `INT32_MIN`
+  is taken as 2^31 instead of being clamped.
+
+### Accuracy, measured on every input
+
+- New `tests/test_exhaustive.c` (part of `make test`, ~20 s): every
+  function at every radix 0..16 on every input in its domain (all u16 BAM
+  angles; every raw value in the s16 range and in one to two full periods;
+  the 65536 values at each end of `s32`; a stride across all of `s32`),
+  against a double reference, with per-function error budgets. Nothing is
+  skipped: zero crossings, poles, saturation and domain edges are checked
+  against their documented conventions. `make test-exhaustive-s32` adds
+  every one of the 2^32 inputs at radix 16 for the six angle functions.
+- The published accuracy table (README, docs, site) is now measured on
+  every s15.16 input in each domain, with no skipped regions (the atan2
+  rows used to skip small inputs and the ±π branch cut). Some maxima rose
+  because the old samples missed them, e.g. sin/cos (rad, deg) 0.15% →
+  0.61% near zero crossings; others fell with the fixes, e.g. tan (deg)
+  0.53% → 0.002%.
+- Known limit, unchanged: `FR_EXP` / `FR_POW10` compute the base-2
+  exponent at the input radix, so their error doubles for each radix bit
+  removed (0.003% at radix 16, 2% at radix 4, 39% at radix 0).
+- `compare_lfm/benchmark.cpp` (FR_math vs libfixmath) now also uses every
+  Q16.16 input in each domain, with no skipped regions: FR_math is more
+  accurate on 11 of 13 head-to-head functions (2 ties) and faster on 11.
 
 ### Build and CI
 
@@ -50,11 +119,114 @@ hit undefined behavior change.
 - **Tests**: five regression tests in `test_full_coverage.c`
   (`test_scan_*`). `test_tdd.cpp` no longer executes `FR_ABS(INT32_MIN)`
   (undefined) for its report row; the printed value is unchanged.
+- **Shift overflow check**: the sanitizer job cannot use UBSan's
+  shift-base check, because the library left-shifts negative values by
+  design, and UBSan reports only the first problem per source line, so a
+  negative shift hid a real overflow on the same line. New
+  `tests/ubsan_shift_check.c` replaces the UBSan shift handler: in-range
+  shifts of negative values pass, any shift that overflows aborts. `make
+  test-shift` runs every suite with it; CI runs it after the sanitizer
+  step. It catches the old radix-normalization overflow at once.
+- **Tests**: four more regression tests (`test_angle_range_reduction`,
+  `test_tan_near_pole`, `test_pow_range`, `test_edge_sentinels`) that
+  fail on the previous code. `test_tdd.cpp` no longer runs `FR_DIV32` on
+  inputs where its shift overflows; that row now says so.
+- **Docs**: `FR_RAD2BAM` / `FR_BAM2RAD` take one argument (the reference
+  showed two, and its worked example did not compile); the reference also
+  described `fr_tan` as `(sin << 16) / cos`, said `FR_log2` returns
+  `FR_DOMAIN_ERROR` for input <= 0 (it returns `FR_LOG2MIN`), and gave
+  `FR_TanI` an `s16` argument (it is `s32`). All corrected, plus the
+  changed behaviors above.
+
+### Portability: 8- and 16-bit targets
+
+- **Fixed (affects 2.0.11 on AVR, MSP430, 68HC11)**: where `int` is 16
+  bits, constants written as `1 << n` or `1u << n` overflow for n >= 15
+  (n >= 16 for `1u`). avr-gcc folds `1u << 30` to 0 (with a warning), so on
+  an Arduino Uno or Nano:
+  - `FR_log2`, `FR_ln` and `FR_log10` took the table index from the wrong
+    bits of the mantissa and **read past the end of their 65-entry
+    table** (up to entry 128), returning wrong results;
+  - `FR_LOG2MIN` (`-(32767 << 16)`) evaluated to 0, so log of 0 or a
+    negative number returned 0 instead of the sentinel;
+  - `FR_MULK28` (used by `FR_ln`, `FR_log10`, `FR_EXP`, `FR_POW10`) lost
+    its rounding term;
+  - the BAM rounding term `1 << 15` in the radian and degree trig paths
+    became -32768, so angles rounded the wrong way (up to 1 BAM off);
+  - the degree functions' `(1 << radix) - 1` masks, and the header macros
+    `FR_FRAC`, `FR_FLOOR`, `FR_CEIL`, `FR_INTERPI`, `FR_TRIG_MASK`,
+    `FR2D` and `D2FR`, were wrong at radix 15 and above.
+
+  Every such constant is now cast to `s32`, `u32` or `s64` before the
+  shift. On targets with a 32-bit `int` the generated code is
+  byte-identical (checked with clang -O2 for the full, core and lean
+  builds of `FR_math.c` and `FR_math_2D.cpp`). There is no AVR runtime
+  in the test setup, so the 16-bit fix is verified by compiling with
+  avr-gcc, msp430-gcc, m68hc11-gcc and `clang --target=avr`, which now
+  report no shift or overflow warnings (2.0.11 reports several).
+- **Fixed (this cycle only, not in 2.0.11)**: builds with `FR_NO_STDINT`
+  failed to compile, because `fr_cos_deg` and `fr_sin_deg` used
+  `INT32_MIN`, which `FR_defs.h` does not define without `<stdint.h>`.
+  This broke the AVR, MSP430, 68HC11, RISC-V rv32 and ESP8266 rows of the
+  size report.
+- **CI**: new `avr-16bit-int` job compiles every build variant with
+  avr-gcc and fails on any shift or overflow warning. It fails on 2.0.11
+  and passes now.
+
+### Code size
+
+The exact angle reduction, the cot paths near the tan poles and the
+overflow fixes add code. `.text` at `-Os`, Full build (Lean / Core
+change in proportion):
+
+| Target | 2.0.11 | Now | Change |
+| --- | ---: | ---: | ---: |
+| Cortex-M4 | 5.5 KB | 5.9 KB | +0.4 KB |
+| Cortex-M0 | 5.7 KB | 6.2 KB | +0.5 KB |
+| ESP32-S3 | 6.5 KB | 6.9 KB | +0.4 KB |
+| RISC-V rv32 | 6.8 KB | 7.4 KB | +0.6 KB |
+| AVR ATmega328P | 15.4 KB | 16.7 KB | +1.3 KB |
+| x86-64 (GCC) | 8.0 KB | 8.9 KB | +0.9 KB |
+
+The full table in the README and `docs/building.md` is regenerated
+(`make size-update`). 8- and 16-bit targets grow most because the new
+64-bit multiplies, most likely, expand to library calls there.
+
+### Documentation
+
+- **New page: How the Approximations Work** (`docs/approximations.md`,
+  `pages/guide/approximations.html`, in the site nav). A companion to the
+  Fixed-Point Primer: the toolbox (range reduction, small tables with
+  linear interpolation and the `h²/8 × max|f''|` error bound,
+  shift-and-add constants, digit-by-digit algorithms, series near
+  singularities, piecewise-linear fits), then each function family (angles
+  and BAM, sin/cos, tan and its poles, inverse trig, logs, powers and exp,
+  sqrt and hypot, waves), with where each error comes from and how big it
+  is, how the published figures are measured, and which variant to pick.
+  Linked from the primer, getting started, API reference, examples, the
+  docs index and the README.
+- **README, docs, site**: coverage 99% (was 98%), size tables regenerated,
+  accuracy table from every input (above).
+- **Build & Test page**: lists `make test-exhaustive`,
+  `make test-exhaustive-s32`, `make test-shift`, the `test_exhaustive`
+  binary and every CI job.
+- **`llms.txt`**: degree functions take `s32` (was shown as
+  `s16`), `FR_RAD2BAM` / `FR_BAM2RAD` take one argument, `FR_TanI` and
+  `fr_rad_to_bam` / `fr_deg_to_bam` listed, sentinels and saturation
+  rules, the `FR_EXP` low-radix limit, `hypot_fast8` error (~0.14%, was
+  given as 0.10%), code size range, the new test targets. `agents.md`:
+  code size range.
+- **`CONTRIBUTING.md`**: the test section described four suites from an
+  older layout; it now points to the full list and asks for
+  `make test-shift` before PRs that touch `src/`.
 
 ### Contributors
 
 - Alerts #9-#12 were reported by GitHub Code Security (AI Scan).
-- The fixes, regression tests, verification sweeps and CI changes above
+- The fixes, regression tests, verification sweeps and CI changes above,
+  the every-input test suite, the shift-overflow checker, the libfixmath
+  benchmark rework, the 8/16-bit portability fixes and the `avr-16bit-int`
+  CI job, the new approximations page and the documentation corrections
   were made with Claude Code (Anthropic).
 - Correction for 2.0.11: its CodeQL fixes and release-script consistency
   checks were also made with Claude Code; that entry did not say so.

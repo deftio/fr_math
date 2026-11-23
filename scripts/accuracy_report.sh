@@ -92,7 +92,7 @@ patch_markdown() {
     replacement+="| Function | Max err (%)*| Avg err (%) | Note |"$'\n'
     replacement+="|---|---:|---:|---|"$'\n'
     replacement+="$DATA_ROWS"$'\n'
-    replacement+=$'\n'"*Relative error; reference clamped to 1% of full-scale output."$'\n'
+    replacement+=$'\n'"*Relative error; reference clamped to 1% of full-scale output. Every s15.16 input in each function's domain, nothing skipped (tests/test_tdd.cpp section 14)."$'\n'
     replacement+="<!-- ACCURACY_TABLE_END -->"
 
     # Use perl to replace between sentinels
@@ -143,7 +143,7 @@ patch_html() {
     replacement+="$html_rows"$'\n'
     replacement+="</tbody>"$'\n'
     replacement+="</table>"$'\n'
-    replacement+="<p><em>*Relative error; reference clamped to 1% of full-scale output.</em></p>"$'\n'
+    replacement+="<p><em>*Relative error; reference clamped to 1% of full-scale output. Every s15.16 input in each function's domain, nothing skipped (tests/test_tdd.cpp section 14).</em></p>"$'\n'
     replacement+="<!-- ACCURACY_TABLE_END -->"
 
     perl -0777 -i -pe "

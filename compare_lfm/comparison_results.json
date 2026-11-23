@@ -1,479 +1,128 @@
 {
-  "description": "FR_math vs libfixmath benchmark — both measured against math.h double precision (IEEE 754)",
-  "gold_standard": "<cmath> IEEE 754 double precision (~15 significant digits)",
+  "description": "FR_math vs libfixmath, every Q16.16 input in each domain, vs IEEE 754 double",
   "fixed_point_format": "Q16.16 (s15.16), 1 LSB = 1.52587890625000e-05",
-  "accuracy_points": 65536,
-  "timing_iterations": 100000,
-  "rel_error_threshold": 0.01,
-  "platform": "macOS ARM (Apple Silicon)",
-  "optimization": "-O2",
+  "error_measure": "|got - exact| / max(|exact|, 1.0) in %; saturated results beyond the Q16.16 range count as exact",
+  "timing": "mean ns/call over the whole input set, min of 3 passes",
   "results": [
     {
       "function": "sin",
       "double_reference": "std::sin",
-      "sweep": "65536-pt, [-pi, +pi]",
-      "speed": {
-        "fr_math_ns_per_call": 7.4,
-        "libfixmath_ns_per_call": 12.7,
-        "fr_math_speedup": 1.72,
-        "faster": "fr_math"
-      },
-      "accuracy_vs_double": {
-        "fr_math": {
-          "max_abs_error": 7.40851348e-05,
-          "mean_abs_error": 1.88938357e-05,
-          "max_error_lsb": 4.9,
-          "mean_error_lsb": 1.2,
-          "max_rel_error_pct": 0.4816,
-          "mean_rel_error_pct": 0.0081
-        },
-        "libfixmath": {
-          "max_abs_error": 7.74511497e-03,
-          "mean_abs_error": 5.34549003e-04,
-          "max_error_lsb": 507.6,
-          "mean_error_lsb": 35.0,
-          "max_rel_error_pct": 74.5513,
-          "mean_rel_error_pct": 0.6105
-        },
-        "closer_to_double": "fr_math"
-      }
+      "sweep": "every input in [-2pi, 2pi]",
+      "inputs": 823549,
+      "fr_math": { "ns_per_call": 3.05, "max_err_pct": 0.007648, "mean_err_pct": 0.001960, "max_err_lsb": 5.0, "worst_input": -3.92109680, "saturated_points": 0 },
+      "libfixmath": { "ns_per_call": 6.16, "max_err_pct": 0.775781, "mean_err_pct": 0.053610, "max_err_lsb": 508.4, "worst_input": -3.14199829, "saturated_points": 0 }
     },
     {
       "function": "cos",
       "double_reference": "std::cos",
-      "sweep": "65536-pt, [-pi, +pi]",
-      "speed": {
-        "fr_math_ns_per_call": 9.9,
-        "libfixmath_ns_per_call": 13.2,
-        "fr_math_speedup": 1.34,
-        "faster": "fr_math"
-      },
-      "accuracy_vs_double": {
-        "fr_math": {
-          "max_abs_error": 6.76591807e-05,
-          "mean_abs_error": 2.03740409e-05,
-          "max_error_lsb": 4.4,
-          "mean_error_lsb": 1.3,
-          "max_rel_error_pct": 0.3282,
-          "mean_rel_error_pct": 0.0077
-        },
-        "libfixmath": {
-          "max_abs_error": 7.75591931e-03,
-          "mean_abs_error": 5.36939114e-04,
-          "max_error_lsb": 508.3,
-          "mean_error_lsb": 35.2,
-          "max_rel_error_pct": 74.4001,
-          "mean_rel_error_pct": 0.6121
-        },
-        "closer_to_double": "fr_math"
-      }
+      "sweep": "every input in [-2pi, 2pi]",
+      "inputs": 823549,
+      "fr_math": { "ns_per_call": 3.95, "max_err_pct": 0.008167, "mean_err_pct": 0.001985, "max_err_lsb": 5.4, "worst_input": -1.72990417, "saturated_points": 0 },
+      "libfixmath": { "ns_per_call": 6.45, "max_err_pct": 0.776862, "mean_err_pct": 0.053664, "max_err_lsb": 509.1, "worst_input": -4.71278381, "saturated_points": 0 }
     },
     {
       "function": "tan",
       "double_reference": "std::tan",
-      "sweep": "65536-pt, [-1.2, 1.2] rad",
-      "speed": {
-        "fr_math_ns_per_call": 14.1,
-        "libfixmath_ns_per_call": 37.2,
-        "fr_math_speedup": 2.64,
-        "faster": "fr_math"
-      },
-      "accuracy_vs_double": {
-        "fr_math": {
-          "max_abs_error": 5.06554437e-04,
-          "mean_abs_error": 5.84009618e-05,
-          "max_error_lsb": 33.2,
-          "mean_error_lsb": 3.8,
-          "max_rel_error_pct": 0.5850,
-          "mean_rel_error_pct": 0.0122
-        },
-        "libfixmath": {
-          "max_abs_error": 1.82495961e-02,
-          "mean_abs_error": 8.01092905e-04,
-          "max_error_lsb": 1196.0,
-          "mean_error_lsb": 52.5,
-          "max_rel_error_pct": 0.7099,
-          "mean_rel_error_pct": 0.0410
-        },
-        "closer_to_double": "fr_math"
-      },
-      "note": "Skip near pi/2"
+      "sweep": "every input in [-2pi, 2pi], poles included",
+      "inputs": 823549,
+      "fr_math": { "ns_per_call": 4.43, "max_err_pct": 0.043946, "mean_err_pct": 0.004850, "max_err_lsb": 54547.5, "worst_input": -1.74868774, "saturated_points": 16 },
+      "libfixmath": { "ns_per_call": 17.90, "max_err_pct": 100.000000, "mean_err_pct": 0.769039, "max_err_lsb": 2011220512.5, "worst_input": -4.71241760, "saturated_points": 16 }
     },
     {
       "function": "asin",
       "double_reference": "std::asin",
-      "sweep": "65536-pt, [-0.999, 0.999]",
-      "speed": {
-        "fr_math_ns_per_call": 11.9,
-        "libfixmath_ns_per_call": 64.0,
-        "fr_math_speedup": 5.38,
-        "faster": "fr_math"
-      },
-      "accuracy_vs_double": {
-        "fr_math": {
-          "max_abs_error": 3.79872462e-04,
-          "mean_abs_error": 1.04994412e-04,
-          "max_error_lsb": 24.9,
-          "mean_error_lsb": 6.9,
-          "max_rel_error_pct": 1.9776,
-          "mean_rel_error_pct": 0.0477
-        },
-        "libfixmath": {
-          "max_abs_error": 1.01788963e-02,
-          "mean_abs_error": 3.64421558e-03,
-          "max_error_lsb": 667.1,
-          "mean_error_lsb": 238.8,
-          "max_rel_error_pct": 20.1233,
-          "mean_rel_error_pct": 2.4452
-        },
-        "closer_to_double": "fr_math"
-      }
+      "sweep": "every input in [-1, 1]",
+      "inputs": 131073,
+      "fr_math": { "ns_per_call": 5.13, "max_err_pct": 0.029847, "mean_err_pct": 0.010259, "max_err_lsb": 28.7, "worst_input": 0.99438477, "saturated_points": 0 },
+      "libfixmath": { "ns_per_call": 29.56, "max_err_pct": 1.017890, "mean_err_pct": 0.353633, "max_err_lsb": 667.1, "worst_input": -0.11584473, "saturated_points": 0 }
     },
     {
       "function": "acos",
       "double_reference": "std::acos",
-      "sweep": "65536-pt, [-0.999, 0.999]",
-      "speed": {
-        "fr_math_ns_per_call": 11.1,
-        "libfixmath_ns_per_call": 65.0,
-        "fr_math_speedup": 5.88,
-        "faster": "fr_math"
-      },
-      "accuracy_vs_double": {
-        "fr_math": {
-          "max_abs_error": 3.75418007e-04,
-          "mean_abs_error": 1.00708880e-04,
-          "max_error_lsb": 24.6,
-          "mean_error_lsb": 6.6,
-          "max_rel_error_pct": 0.2724,
-          "mean_rel_error_pct": 0.0093
-        },
-        "libfixmath": {
-          "max_abs_error": 1.01897006e-02,
-          "mean_abs_error": 3.64422377e-03,
-          "max_error_lsb": 667.8,
-          "mean_error_lsb": 238.8,
-          "max_rel_error_pct": 15.3142,
-          "mean_rel_error_pct": 0.3475
-        },
-        "closer_to_double": "fr_math"
-      }
+      "sweep": "every input in [-1, 1]",
+      "inputs": 131073,
+      "fr_math": { "ns_per_call": 5.20, "max_err_pct": 0.043274, "mean_err_pct": 0.006955, "max_err_lsb": 28.4, "worst_input": 0.99438477, "saturated_points": 0 },
+      "libfixmath": { "ns_per_call": 30.25, "max_err_pct": 1.017761, "mean_err_pct": 0.242145, "max_err_lsb": 667.8, "worst_input": 0.99259949, "saturated_points": 0 }
     },
     {
       "function": "atan",
       "double_reference": "std::atan",
-      "sweep": "65536-pt, [-50, 50]",
-      "speed": {
-        "fr_math_ns_per_call": 10.8,
-        "libfixmath_ns_per_call": 14.8,
-        "fr_math_speedup": 1.36,
-        "faster": "fr_math"
-      },
-      "accuracy_vs_double": {
-        "fr_math": {
-          "max_abs_error": 9.14677954e-04,
-          "mean_abs_error": 7.43583969e-05,
-          "max_error_lsb": 59.9,
-          "mean_error_lsb": 4.9,
-          "max_rel_error_pct": 0.2149,
-          "mean_rel_error_pct": 0.0061
-        },
-        "libfixmath": {
-          "max_abs_error": 1.01676134e-02,
-          "mean_abs_error": 6.15802358e-03,
-          "max_error_lsb": 666.3,
-          "mean_error_lsb": 403.6,
-          "max_rel_error_pct": 19.8632,
-          "mean_rel_error_pct": 0.4571
-        },
-        "closer_to_double": "fr_math"
-      }
+      "sweep": "every input in [-64, 64]",
+      "inputs": 8388609,
+      "fr_math": { "ns_per_call": 5.28, "max_err_pct": 0.096286, "mean_err_pct": 0.004484, "max_err_lsb": 63.1, "worst_input": -1.49349976, "saturated_points": 0 },
+      "libfixmath": { "ns_per_call": 7.74, "max_err_pct": 1.017598, "mean_err_pct": 0.370277, "max_err_lsb": 666.9, "worst_input": -0.12072754, "saturated_points": 0 }
     },
     {
       "function": "atan2",
       "double_reference": "std::atan2",
-      "sweep": "65536-pt, 5 radii x 360 deg",
-      "speed": {
-        "fr_math_ns_per_call": 20.8,
-        "libfixmath_ns_per_call": 13.7,
-        "fr_math_speedup": 0.66,
-        "faster": "libfixmath"
-      },
-      "accuracy_vs_double": {
-        "fr_math": {
-          "max_abs_error": 9.53437855e-04,
-          "mean_abs_error": 1.91371871e-04,
-          "max_error_lsb": 62.5,
-          "mean_error_lsb": 12.5,
-          "max_rel_error_pct": 0.4122,
-          "mean_rel_error_pct": 0.0239
-        },
-        "libfixmath": {
-          "max_abs_error": 1.01728729e-02,
-          "mean_abs_error": 3.88005371e-03,
-          "max_error_lsb": 666.7,
-          "mean_error_lsb": 254.3,
-          "max_rel_error_pct": 20.0045,
-          "mean_rel_error_pct": 0.9267
-        },
-        "closer_to_double": "fr_math"
-      },
-      "note": "All 4 quadrants"
+      "sweep": "every (y, x) in [-512, 511]^2 LSB, x 2^0, 2^8, 2^14",
+      "inputs": 3145728,
+      "fr_math": { "ns_per_call": 10.80, "max_err_pct": 0.097642, "mean_err_pct": 0.014430, "max_err_lsb": 64.4, "worst_input": -1.96093750, "saturated_points": 0 },
+      "libfixmath": { "ns_per_call": 6.52, "max_err_pct": 1.017616, "mean_err_pct": 0.230524, "max_err_lsb": 666.9, "worst_input": -0.00085449, "saturated_points": 0 }
     },
     {
       "function": "sqrt",
       "double_reference": "std::sqrt",
-      "sweep": "65536-pt, [0.01, 100]",
-      "speed": {
-        "fr_math_ns_per_call": 24.8,
-        "libfixmath_ns_per_call": 26.2,
-        "fr_math_speedup": 1.05,
-        "faster": "fr_math"
-      },
-      "accuracy_vs_double": {
-        "fr_math": {
-          "max_abs_error": 7.62924903e-06,
-          "mean_abs_error": 3.80582266e-06,
-          "max_error_lsb": 0.5,
-          "mean_error_lsb": 0.2,
-          "max_rel_error_pct": 0.0062,
-          "mean_rel_error_pct": 0.0001
-        },
-        "libfixmath": {
-          "max_abs_error": 7.62924903e-06,
-          "mean_abs_error": 3.80582266e-06,
-          "max_error_lsb": 0.5,
-          "mean_error_lsb": 0.2,
-          "max_rel_error_pct": 0.0062,
-          "mean_rel_error_pct": 0.0001
-        },
-        "closer_to_double": "tie"
-      }
+      "sweep": "every input in [0, 1024]",
+      "inputs": 67108865,
+      "fr_math": { "ns_per_call": 13.57, "max_err_pct": 0.000763, "mean_err_pct": 0.000023, "max_err_lsb": 0.5, "worst_input": 0.99998474, "saturated_points": 0 },
+      "libfixmath": { "ns_per_call": 13.12, "max_err_pct": 0.000763, "mean_err_pct": 0.000023, "max_err_lsb": 0.5, "worst_input": 0.99998474, "saturated_points": 0 }
     },
     {
       "function": "exp",
       "double_reference": "std::exp",
-      "sweep": "65536-pt, [-5, 5]",
-      "speed": {
-        "fr_math_ns_per_call": 4.0,
-        "libfixmath_ns_per_call": 84.6,
-        "fr_math_speedup": 21.04,
-        "faster": "fr_math"
-      },
-      "accuracy_vs_double": {
-        "fr_math": {
-          "max_abs_error": 3.17909587e-03,
-          "mean_abs_error": 1.03218909e-04,
-          "max_error_lsb": 208.3,
-          "mean_error_lsb": 6.8,
-          "max_rel_error_pct": 0.1486,
-          "mean_rel_error_pct": 0.0078
-        },
-        "libfixmath": {
-          "max_abs_error": 3.30095957e-03,
-          "mean_abs_error": 9.38398029e-05,
-          "max_error_lsb": 216.3,
-          "mean_error_lsb": 6.1,
-          "max_rel_error_pct": 0.0756,
-          "mean_rel_error_pct": 0.0042
-        },
-        "closer_to_double": "fr_math"
-      }
+      "sweep": "every input in [-16, 10.397]",
+      "inputs": 1729954,
+      "fr_math": { "ns_per_call": 2.31, "max_err_pct": 0.002535, "mean_err_pct": 0.000617, "max_err_lsb": 42792.6, "worst_input": 1.46755981, "saturated_points": 0 },
+      "libfixmath": { "ns_per_call": 64.10, "max_err_pct": 135.791016, "mean_err_pct": 0.002044, "max_err_lsb": 88992.0, "worst_input": -11.09036255, "saturated_points": 0 }
     },
     {
       "function": "ln",
       "double_reference": "std::log",
-      "sweep": "65536-pt, [0.01, 100]",
-      "speed": {
-        "fr_math_ns_per_call": 11.2,
-        "libfixmath_ns_per_call": 583.3,
-        "fr_math_speedup": 51.87,
-        "faster": "fr_math"
-      },
-      "accuracy_vs_double": {
-        "fr_math": {
-          "max_abs_error": 4.93278555e-05,
-          "mean_abs_error": 1.61117669e-05,
-          "max_error_lsb": 3.2,
-          "mean_error_lsb": 1.1,
-          "max_rel_error_pct": 0.3012,
-          "mean_rel_error_pct": 0.0006
-        },
-        "libfixmath": {
-          "max_abs_error": 3.40447818e-05,
-          "mean_abs_error": 5.14211182e-06,
-          "max_error_lsb": 2.2,
-          "mean_error_lsb": 0.3,
-          "max_rel_error_pct": 0.0557,
-          "mean_rel_error_pct": 0.0002
-        },
-        "closer_to_double": "libfixmath"
-      }
+      "sweep": "every input in (0, 1024]",
+      "inputs": 67108864,
+      "fr_math": { "ns_per_call": 7.95, "max_err_pct": 0.004905, "mean_err_pct": 0.000271, "max_err_lsb": 3.3, "worst_input": 1.03988647, "saturated_points": 0 },
+      "libfixmath": { "ns_per_call": 45.07, "max_err_pct": 0.066523, "mean_err_pct": 0.000097, "max_err_lsb": 483.5, "worst_input": 0.00001526, "saturated_points": 0 }
     },
     {
       "function": "log2",
       "double_reference": "std::log2",
-      "sweep": "65536-pt, [0.01, 100]",
-      "speed": {
-        "fr_math_ns_per_call": 11.3,
-        "libfixmath_ns_per_call": 51.1,
-        "fr_math_speedup": 4.53,
-        "faster": "fr_math"
-      },
-      "accuracy_vs_double": {
-        "fr_math": {
-          "max_abs_error": 6.06739329e-05,
-          "mean_abs_error": 2.30368713e-05,
-          "max_error_lsb": 4.0,
-          "mean_error_lsb": 1.5,
-          "max_rel_error_pct": 0.4945,
-          "mean_rel_error_pct": 0.0006
-        },
-        "libfixmath": {
-          "max_abs_error": 3.56826644e-05,
-          "mean_abs_error": 9.96190621e-06,
-          "max_error_lsb": 2.3,
-          "mean_error_lsb": 0.7,
-          "max_rel_error_pct": 0.1758,
-          "mean_rel_error_pct": 0.0002
-        },
-        "closer_to_double": "libfixmath"
-      }
+      "sweep": "every input in (0, 1024]",
+      "inputs": 67108864,
+      "fr_math": { "ns_per_call": 8.01, "max_err_pct": 0.006071, "mean_err_pct": 0.000270, "max_err_lsb": 4.0, "worst_input": 1.03933716, "saturated_points": 0 },
+      "libfixmath": { "ns_per_call": 26.04, "max_err_pct": 100.000000, "mean_err_pct": 0.000126, "max_err_lsb": 983040.0, "worst_input": 0.00003052, "saturated_points": 0 }
     },
     {
       "function": "mul",
       "double_reference": "double a*b",
-      "sweep": "65536-pt, a in [-50,50], b in [-2,2]",
-      "speed": {
-        "fr_math_ns_per_call": 1.2,
-        "libfixmath_ns_per_call": 1.6,
-        "fr_math_speedup": 1.33,
-        "faster": "fr_math"
-      },
-      "accuracy_vs_double": {
-        "fr_math": {
-          "max_abs_error": 7.62939453e-06,
-          "mean_abs_error": 3.81535541e-06,
-          "max_error_lsb": 0.5,
-          "mean_error_lsb": 0.3,
-          "max_rel_error_pct": 0.0692,
-          "mean_rel_error_pct": 0.0004
-        },
-        "libfixmath": {
-          "max_abs_error": 7.62939453e-06,
-          "mean_abs_error": 3.81535541e-06,
-          "max_error_lsb": 0.5,
-          "mean_error_lsb": 0.3,
-          "max_rel_error_pct": 0.0692,
-          "mean_rel_error_pct": 0.0004
-        },
-        "closer_to_double": "tie"
-      }
+      "sweep": "2048x2048 grid, a in [-50,50], b in [-2,2]",
+      "inputs": 4194304,
+      "fr_math": { "ns_per_call": 1.53, "max_err_pct": 0.000763, "mean_err_pct": 0.000062, "max_err_lsb": 0.5, "worst_input": -22.00781250, "saturated_points": 0 },
+      "libfixmath": { "ns_per_call": 1.58, "max_err_pct": 0.000763, "mean_err_pct": 0.000062, "max_err_lsb": 0.5, "worst_input": -22.00781250, "saturated_points": 0 }
     },
     {
       "function": "div",
       "double_reference": "double a/b",
-      "sweep": "65536-pt, a/b in [-50,50]/[0.5,50]",
-      "speed": {
-        "fr_math_ns_per_call": 1.2,
-        "libfixmath_ns_per_call": 6.9,
-        "fr_math_speedup": 5.96,
-        "faster": "fr_math"
-      },
-      "accuracy_vs_double": {
-        "fr_math": {
-          "max_abs_error": 7.62927377e-06,
-          "mean_abs_error": 3.82182808e-06,
-          "max_error_lsb": 0.5,
-          "mean_error_lsb": 0.3,
-          "max_rel_error_pct": 0.0727,
-          "mean_rel_error_pct": 0.0010
-        },
-        "libfixmath": {
-          "max_abs_error": 8.37162948e-06,
-          "mean_abs_error": 3.82625614e-06,
-          "max_error_lsb": 0.5,
-          "mean_error_lsb": 0.3,
-          "max_rel_error_pct": 0.0727,
-          "mean_rel_error_pct": 0.0010
-        },
-        "closer_to_double": "fr_math"
-      },
-      "note": "Both use 64-bit intermediate"
+      "sweep": "2048x2048 grid, a in [-50,50], b in [0.5,50]",
+      "inputs": 4194304,
+      "fr_math": { "ns_per_call": 1.53, "max_err_pct": 0.000763, "mean_err_pct": 0.000289, "max_err_lsb": 0.5, "worst_input": -49.21836853, "saturated_points": 0 },
+      "libfixmath": { "ns_per_call": 4.07, "max_err_pct": 0.000854, "mean_err_pct": 0.000289, "max_err_lsb": 0.6, "worst_input": -2.32046509, "saturated_points": 0 }
     },
     {
       "function": "hypot",
       "double_reference": "std::hypot",
-      "sweep": "65536-pt, 5 radii x 360 deg",
-      "speed": {
-        "fr_math_ns_per_call": 26.2
-      },
-      "accuracy_vs_double": {
-        "fr_math": {
-          "max_abs_error": 7.62930188e-06,
-          "mean_abs_error": 3.67171926e-06,
-          "max_error_lsb": 0.5,
-          "mean_error_lsb": 0.2,
-          "max_rel_error_pct": 0.0076,
-          "mean_rel_error_pct": 0.0009
-        }
-      },
+      "sweep": "every (x, y) in [-512, 511]^2 LSB, x 2^0, 2^8, 2^14",
+      "inputs": 3145728,
+      "fr_math": { "ns_per_call": 12.02, "max_err_pct": 0.000763, "mean_err_pct": 0.000213, "max_err_lsb": 0.5, "worst_input": -1.00000000, "saturated_points": 0 },
       "note": "FR_math only (libfixmath has no hypot)"
     },
     {
       "function": "hypot_fast8",
       "double_reference": "std::hypot",
-      "sweep": "65536-pt, 5 radii x 360 deg",
-      "speed": {
-        "fr_math_ns_per_call": 3.2
-      },
-      "accuracy_vs_double": {
-        "fr_math": {
-          "max_abs_error": 1.37244198e+00,
-          "mean_abs_error": 1.13634634e-01,
-          "max_error_lsb": 89944.4,
-          "mean_error_lsb": 7447.2,
-          "max_rel_error_pct": 0.1372,
-          "mean_rel_error_pct": 0.0516
-        }
-      },
+      "sweep": "every (x, y) in [-512, 511]^2 LSB, x 2^0, 2^8, 2^14",
+      "inputs": 3145728,
+      "fr_math": { "ns_per_call": 2.38, "max_err_pct": 0.137247, "mean_err_pct": 0.032979, "max_err_lsb": 13925.7, "worst_input": -120.25000000, "saturated_points": 0 },
       "note": "FR_math only; shift-only, no multiply"
     }
-  ],
-  "summary": {
-    "head_to_head_functions": 13,
-    "faster_wins": { "fr_math": 12, "libfixmath": 1 },
-    "accuracy_wins": { "fr_math": 9, "libfixmath": 2, "tie": 2 },
-    "total_functions_tested": 15
-  },
-  "notes": [
-    "All accuracy measured vs IEEE 754 double. Lower = closer to perfect.",
-    "LSB = Q16.16 least-significant-bit = 1.53e-5. Best possible = 0.5 LSB.",
-    "Percent errors skip |ref| < 0.01 to avoid near-zero division spikes.",
-    "Both libraries use Q16.16 (s15.16): 1.0 = 65536.",
-    "FR_math trig: BAM + 129-entry LUT + linear interpolation.",
-    "libfixmath trig: parabolic approximation + 5th-order correction.",
-    "Timing: min of 3 passes x 100000 calls; cache-warm.",
-    "Speedup > 1.0 means FR_math is faster by that factor."
-  ],
-  "compiled_size_note": "Run 'make size' in .compare/ for live numbers. The values below are representative.",
-  "compiled_size": {
-    "compiler": "clang -O2 (macOS ARM)",
-    "fr_math": {
-      "files": "FR_math.c (single file)",
-      "functions": "trig(6), inv-trig(4), log/ln/log10, exp/pow2/pow10, exp_fast/pow10_fast, sqrt, hypot(2), waves(6), ADSR(4), print(4), format",
-      "rom_bytes": 7470,
-      "ram_bss_bytes": 0,
-      "note": "All tables in const ROM. Zero runtime allocation."
-    },
-    "libfixmath": {
-      "files": "fix16.c, fix16_sqrt.c, fix16_exp.c, fix16_trig.c, fix16_str.c, uint32.c, fract32.c",
-      "functions": "trig(6), inv-trig(4), log/log2, exp, sqrt, mul/div, str",
-      "rom_bytes": 4912,
-      "ram_bss_bytes": 114688,
-      "rom_bytes_no_cache": 5476,
-      "ram_bss_bytes_no_cache": 0,
-      "note": "Default mode caches 112 KB of sin/exp LUTs in BSS. FIXMATH_NO_CACHE eliminates RAM but recomputes per call."
-    }
-  }
+  ]
 }

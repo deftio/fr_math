@@ -1,4 +1,4 @@
-Running benchmarks (65536 accuracy pts, 100000 timing iters)...
+Running benchmarks (every input per domain)...
   sin done
   cos done
   tan done
@@ -13,69 +13,74 @@ Running benchmarks (65536 accuracy pts, 100000 timing iters)...
   mul done
   div done
   hypot done
-  hypot_fast8 done
 
 ## FR_math vs libfixmath — Q16.16 comparison
 
-All errors measured vs IEEE 754 double. Pct errors skip |ref| < 0.01.
+Every Q16.16 input in each domain (2-input functions: every pair on the stated grid),
+vs IEEE 754 double. Nothing is skipped. Error = |got - exact| / max(|exact|, 1.0);
+beyond the Q16.16 range (tan at its poles) a saturated result of the right sign counts as exact.
 
 ### Accuracy
 
-| Function | FR max LSB | FR max %% | FR avg %% | lfm max LSB | lfm max %% | lfm avg %% | Winner |
-|----------|----------:|---------:|---------:|----------:|---------:|---------:|--------|
-| sin             |     4.9 |  0.4816 |  0.0081 |     507.6 | 74.5513 |  0.6105 | FR       |
-| cos             |     4.4 |  0.3282 |  0.0077 |     508.3 | 74.4001 |  0.6121 | FR       |
-| tan             |    33.2 |  0.5850 |  0.0122 |    1196.0 |  0.7099 |  0.0410 | FR       |
-| asin            |    24.9 |  1.9776 |  0.0477 |     667.1 | 20.1233 |  2.4452 | FR       |
-| acos            |    24.6 |  0.2724 |  0.0093 |     667.8 | 15.3142 |  0.3475 | FR       |
-| atan            |    59.9 |  0.2149 |  0.0061 |     666.3 | 19.8632 |  0.4571 | FR       |
-| atan2           |    62.5 |  0.4122 |  0.0239 |     666.7 | 20.0045 |  0.9267 | FR       |
-| sqrt            |     0.5 |  0.0062 |  0.0001 |       0.5 |  0.0062 |  0.0001 | tie      |
-| exp             |   208.3 |  0.1486 |  0.0078 |     216.3 |  0.0756 |  0.0042 | FR       |
-| ln              |     3.2 |  0.3012 |  0.0006 |       2.2 |  0.0557 |  0.0002 | lfm      |
-| log2            |     4.0 |  0.4945 |  0.0006 |       2.3 |  0.1758 |  0.0002 | lfm      |
-| mul             |     0.5 |  0.0692 |  0.0004 |       0.5 |  0.0692 |  0.0004 | tie      |
-| div             |     0.5 |  0.0727 |  0.0010 |       0.5 |  0.0727 |  0.0010 | FR       |
-| hypot           |     0.5 |  0.0076 |  0.0009 |       --- |      --- |      --- | FR only  |
-| hypot_fast8     | 89944.4 |  0.1372 |  0.0516 |       --- |      --- |      --- | FR only  |
+| Function | Inputs | Sweep | FR max % | FR avg % | lfm max % | lfm avg % | More accurate |
+|----------|-------:|-------|---------:|---------:|----------:|----------:|---------------|
+| sin | 823549 | every input in [-2pi, 2pi] | 0.0076 | 0.0020 | 0.7758 | 0.0536 | FR |
+| cos | 823549 | every input in [-2pi, 2pi] | 0.0082 | 0.0020 | 0.7769 | 0.0537 | FR |
+| tan | 823549 | every input in [-2pi, 2pi], poles included | 0.0439 | 0.0048 | 100.0000 | 0.7690 | FR |
+| asin | 131073 | every input in [-1, 1] | 0.0298 | 0.0103 | 1.0179 | 0.3536 | FR |
+| acos | 131073 | every input in [-1, 1] | 0.0433 | 0.0070 | 1.0178 | 0.2421 | FR |
+| atan | 8388609 | every input in [-64, 64] | 0.0963 | 0.0045 | 1.0176 | 0.3703 | FR |
+| atan2 | 3145728 | every (y, x) in [-512, 511]^2 LSB, x 2^0, 2^8, 2^14 | 0.0976 | 0.0144 | 1.0176 | 0.2305 | FR |
+| sqrt | 67108865 | every input in [0, 1024] | 0.0008 | 0.0000 | 0.0008 | 0.0000 | tie |
+| exp | 1729954 | every input in [-16, 10.397] | 0.0025 | 0.0006 | 135.7910 | 0.0020 | FR |
+| ln | 67108864 | every input in (0, 1024] | 0.0049 | 0.0003 | 0.0665 | 0.0001 | FR |
+| log2 | 67108864 | every input in (0, 1024] | 0.0061 | 0.0003 | 100.0000 | 0.0001 | FR |
+| mul | 4194304 | 2048x2048 grid, a in [-50,50], b in [-2,2] | 0.0008 | 0.0001 | 0.0008 | 0.0001 | tie |
+| div | 4194304 | 2048x2048 grid, a in [-50,50], b in [0.5,50] | 0.0008 | 0.0003 | 0.0009 | 0.0003 | FR |
+| hypot | 3145728 | every (x, y) in [-512, 511]^2 LSB, x 2^0, 2^8, 2^14 | 0.0008 | 0.0002 | --- | --- | FR only |
+| hypot_fast8 | 3145728 | every (x, y) in [-512, 511]^2 LSB, x 2^0, 2^8, 2^14 | 0.1372 | 0.0330 | --- | --- | FR only |
 
-### Speed (ns/call, lower is better)
+### Speed (mean ns/call over the input set, lower is better)
 
 | Function | FR_math | libfixmath | Speedup | Faster |
 |----------|--------:|-----------:|--------:|--------|
-| sin             |    7.4 |       12.7 |   1.72x | FR      |
-| cos             |    9.9 |       13.2 |   1.34x | FR      |
-| tan             |   14.1 |       37.2 |   2.64x | FR      |
-| asin            |   11.9 |       64.0 |   5.38x | FR      |
-| acos            |   11.1 |       65.0 |   5.88x | FR      |
-| atan            |   10.8 |       14.8 |   1.36x | FR      |
-| atan2           |   20.8 |       13.7 |   0.66x | lfm     |
-| sqrt            |   24.8 |       26.2 |   1.05x | FR      |
-| exp             |    4.0 |       84.6 |  21.04x | FR      |
-| ln              |   11.2 |      583.3 |  51.87x | FR      |
-| log2            |   11.3 |       51.1 |   4.53x | FR      |
-| mul             |    1.2 |        1.6 |   1.33x | FR      |
-| div             |    1.2 |        6.9 |   5.96x | FR      |
-| hypot           |   26.2 |        --- |     --- | FR only |
-| hypot_fast8     |    3.2 |        --- |     --- | FR only |
+| sin | 3.1 | 6.2 | 2.02x | FR |
+| cos | 3.9 | 6.4 | 1.63x | FR |
+| tan | 4.4 | 17.9 | 4.04x | FR |
+| asin | 5.1 | 29.6 | 5.76x | FR |
+| acos | 5.2 | 30.3 | 5.82x | FR |
+| atan | 5.3 | 7.7 | 1.47x | FR |
+| atan2 | 10.8 | 6.5 | 0.60x | lfm |
+| sqrt | 13.6 | 13.1 | 0.97x | lfm |
+| exp | 2.3 | 64.1 | 27.81x | FR |
+| ln | 8.0 | 45.1 | 5.67x | FR |
+| log2 | 8.0 | 26.0 | 3.25x | FR |
+| mul | 1.5 | 1.6 | 1.03x | FR |
+| div | 1.5 | 4.1 | 2.66x | FR |
+| hypot | 12.0 | --- | --- | FR only |
+| hypot_fast8 | 2.4 | --- | --- | FR only |
 
 ### Summary (13 head-to-head functions)
 
-- **Speed**: FR_math 12 / 13, libfixmath 1 / 13
-- **Accuracy**: FR_math 9 / 13, libfixmath 2 / 13, tie 2 / 13
-- Accuracy = 65536-pt sweep at Q16.16; timing = min of 3 x 100k calls
+- **Speed**: FR_math 11 / 13, libfixmath 2 / 13
+- **Accuracy (max error)**: FR_math 11 / 13, libfixmath 0 / 13, tie 2 / 13
 
-### Compiled size (clang -O2, macOS ARM)
+Worst-case inputs (FR / lfm):
 
-| | FR_math | libfixmath | lfm (no cache) |
-|---|---:|---:|---:|
-| Code (text) | 6,652 B | 4,880 B | 5,444 B |
-| Tables (ROM) | 818 B | 32 B | 32 B |
-| **ROM total** | **7,470 B** | **4,912 B** | **5,476 B** |
-| BSS / RAM | **0 B** | **112 KB** | **0 B** |
+- sin: -3.9210968 / -3.1419983
+- cos: -1.7299042 / -4.7127838
+- tan: -1.7486877 / -4.7124176
+- asin: 0.99438477 / -0.11584473
+- acos: 0.99438477 / 0.99259949
+- atan: -1.4934998 / -0.12072754
+- atan2: -1.9609375 / -0.00085449219
+- sqrt: 0.99998474 / 0.99998474
+- exp: 1.4675598 / -11.090363
+- ln: 1.0398865 / 1.5258789e-05
+- log2: 1.0393372 / 3.0517578e-05
+- mul: -22.007812 / -22.007812
+- div: -49.218369 / -2.3204651
+- hypot: -1
+- hypot_fast8: -120.25
 
-FR_math packs trig, inv-trig, log/ln/log10, exp/pow2/pow10, sqrt, hypot(2),
-waves(6), ADSR, print into 7.3 KB ROM with zero RAM overhead.
-libfixmath (trig, inv-trig, log/log2, exp, sqrt, mul/div, str) is 4.8 KB ROM
-but caches 112 KB of sin/exp LUTs in BSS at runtime.
-
+Compiled size: run `make size` in this directory.

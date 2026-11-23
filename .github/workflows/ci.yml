@@ -96,6 +96,42 @@ jobs:
         ls -lh build/*.o >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
 
+  # 16-bit int: on AVR (Arduino Uno/Nano), MSP430 and 68HC11 a plain int
+  # is 16 bits, so a constant like `1 << 15` or `1u << 30` overflows
+  # unless it is cast to s32/u32 first (2.0.11 shipped such bugs in
+  # FR_log2 and FR_LOG2MIN). There is no AVR runtime here, so this job
+  # compiles every build variant with avr-gcc and fails on any shift or
+  # overflow warning.
+  avr-16bit-int:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
+
+    - name: Install avr-gcc
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-avr avr-libc
+
+    - name: Compile for ATmega328P and check shift warnings
+      run: |
+        EXTRA=""
+        if echo 'int x;' | avr-gcc -Wshift-overflow=2 -x c -c -o /dev/null - 2>/dev/null; then
+          EXTRA="-Wshift-overflow=2"
+        fi
+        status=0
+        for defs in "" "-DFR_CORE_ONLY" "-DFR_LEAN -DFR_NO_PRINT" "-DFR_NO_STDINT"; do
+          echo "== avr-gcc $defs"
+          out=$(avr-gcc -mmcu=atmega328p -Os -Wall $EXTRA $defs -Isrc \
+                -c src/FR_math.c -o build-avr.o 2>&1) || status=1
+          echo "$out"
+          if echo "$out" | grep -E "shift|overflow"; then status=1; fi
+          avr-size build-avr.o || true
+        done
+        exit $status
+
   test-32bit:
     runs-on: ubuntu-latest
 
@@ -135,7 +171,7 @@ jobs:
     #  - shift-base is off: the library deliberately left-shifts negative
     #    values (arithmetic shift on every supported compiler). All other
     #    UB checks (signed overflow, bounds, shift exponent, divide by
-    #    zero, ...) are on.
+    #    zero, ...) are on. Shift overflow is checked by the next step.
     - name: Build and test with sanitizers
       env:
         CC: clang
@@ -145,3 +181,10 @@ jobs:
       run: |
         make clean
         make test
+
+    # Shift overflow: every suite rebuilt with -fsanitize=shift and the
+    # handler in tests/ubsan_shift_check.c, which accepts in-range shifts
+    # of negative values and aborts on any shift that overflows (see the
+    # makefile's test-shift target).
+    - name: Build and test with the shift-overflow checker
+      run: make test-shift

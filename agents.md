@@ -110,7 +110,7 @@ leave off for exact ±1.0. See `examples/trig-crest/`.
 ## Platform targets
 
 The library compiles on: AVR (Arduino), ARM Cortex-M0/M4, ESP32,
-RISC-V, x86/x64, MSP430, m68k, PowerPC, MIPS32, 68HC11. Code is 3–9 KB at `-Os` on
+RISC-V, x86/x64, MSP430, m68k, PowerPC, MIPS32, 68HC11. Code is about 3.4–10 KB at `-Os` on
 32-bit targets.
 
 ## Library publishing

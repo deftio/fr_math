@@ -47,7 +47,7 @@ cd fr_math
 
 `build.sh` wipes `build/`, rebuilds the
 library, examples, and tests, and runs the full test suite. On success
-the output shows all tests passing (98% line coverage, 100% of reachable branches).
+the output shows all tests passing (99% line coverage, 100% of reachable branches).
 
 ## A first program
 
@@ -293,7 +293,7 @@ make coverage       # coverage report (requires gcov)
 ```
 
 Run `make test` for a full pass. With `make coverage`, line coverage of
-the library sources is about **98%**, with every mathematically reachable branch exercised. See [Building & Testing](building.md)
+the library sources is about **99%**, with every mathematically reachable branch exercised. See [Building & Testing](building.md)
 for targets, cross-compilation, and CI.
 
 ## Next steps
@@ -301,6 +301,8 @@ for targets, cross-compilation, and CI.
 - **[Fixed-Point Primer](fixed-point-primer.md)**
   — how the radix notation and the library's naming
   conventions work.
+- **[How the Approximations Work](approximations.md)**
+  — how each function is computed and where its error comes from.
 - **[API Reference](api-reference.md)**
   — per-symbol inputs, outputs, precision, and saturation
   behavior.

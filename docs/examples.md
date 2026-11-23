@@ -599,5 +599,7 @@ make run-csv         # CSV output
   symbol table.
 - [Fixed-Point Primer](fixed-point-primer.md)
   — background on why the code looks this way.
+- [How the Approximations Work](approximations.md)
+  — how each function is computed, and its error budget.
 - [Building & Testing](building.md) — how
   to compile, test, and cross-compile.

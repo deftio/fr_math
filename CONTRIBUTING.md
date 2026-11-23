@@ -144,18 +144,26 @@ Avoid: `update stuff`, `fix`, `wip`, `clean up code`.
 make test
 ```
 
-This builds and runs four test suites:
+This builds and runs every test suite (see
+[docs/building.md](docs/building.md#the-test-suite) for the full list). The
+ones you will touch most:
 
-1. **Basic tests** (`tests/fr_math_test.c`) — original smoke tests
-2. **Comprehensive** (`tests/test_comprehensive.c`) — adds coverage
-   for all public functions
-3. **2D complete** (`tests/test_2d_complete.cpp`) — matrix transforms
-4. **TDD characterization** (`tests/test_tdd.cpp`) — the behavior
-   contract; emits `build/test_tdd_report.md` with detailed numeric
-   comparisons against `libm` for every function
+1. **TDD characterization** (`tests/test_tdd.cpp`): the behavior
+   contract. It emits `build/test_tdd_report.md` with numeric comparisons
+   against `libm` for every function, including the published accuracy
+   table.
+2. **Every-input sweeps** (`tests/test_exhaustive.c`): every function at
+   every radix 0..16 on every input in its domain, with per-function
+   error budgets. If your change makes any input worse than its budget,
+   this fails.
+3. **Full coverage** (`tests/test_full_coverage.c`): dark corners and
+   regression tests for past bugs.
 
-All four must pass. The TDD report is your friend: if you're
-wondering whether a change hurt precision somewhere, diff the
+All of them must pass. Before a PR that touches `src/`, also run
+`make test-shift` (clang, shift-overflow checker).
+
+The TDD report is your friend: if you're wondering whether a
+change hurt precision somewhere, diff the
 report before and after your change.
 
 ### Coverage

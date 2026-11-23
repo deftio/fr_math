@@ -1188,7 +1188,7 @@ int test_cov_pow2_print_numstr() {
     return TEST_PASS;
 }
 
-/* FR_hypot_fast8 INT32_MIN mirror clamps */
+/* FR_hypot_fast8 with INT32_MIN: |x| = 2^31, the result saturates */
 int test_cov_hypot_intmin() {
     if (FR_hypot_fast8((s32)0x80000000, 100) < 2140000000) return TEST_FAIL;
     if (FR_hypot_fast8(100, (s32)0x80000000) < 2140000000) return TEST_FAIL;
@@ -1323,6 +1323,99 @@ int test_scan_int32_min_siblings() {
     if (FR_pow2(INT32_MIN, 30) != (s32)1 << 28) return TEST_FAIL;
     /* -29.5: integer part 29 passes the early return, then sh = 30 underflows */
     if (FR_pow2(-(29 * 65536 + 32768), 16) != 0) return TEST_FAIL;
+    return TEST_PASS;
+}
+
+/*-----------------------------------------------------------------------
+ * Regression tests for the range and accuracy fixes found by the
+ * every-input sweeps (tests/test_exhaustive.c). Expected values are
+ * round(exact * 65536) computed in 40-digit arithmetic.
+ */
+static int near_rel(s32 got, double want, double rel)
+{
+    double d = (double)got - want;
+    if (d < 0) d = -d;
+    return d <= rel * (want < 0 ? -want : want);
+}
+
+/* Angles whose r16 form does not fit in s32 (radix < 16), and large
+ * angles at r16, are reduced exactly (2*pi to 64 bits / 360 exactly). */
+int test_angle_range_reduction() {
+    if (!near_s32(fr_sin(32767, 0), 12288, 8)) return TEST_FAIL;           /* sin(32767 rad) */
+    if (!near_s32(fr_sin(INT32_MAX, 0), -47508, 8)) return TEST_FAIL;      /* sin(2^31-1 rad) */
+    if (!near_s32(fr_sin(-32767, 0), -12288, 8)) return TEST_FAIL;
+    if (!near_s32(fr_cos(INT32_MAX, 16), 24442, 8)) return TEST_FAIL;      /* drift-free at r16 */
+    if (fr_rad_to_bam(INT32_MAX, 0) != fr_rad_to_bam(INT32_MAX - 1, 0) &&
+        (u16)(fr_rad_to_bam(INT32_MAX, 0) - fr_rad_to_bam(INT32_MAX - 1, 0)) > 10431u)
+        return TEST_FAIL;
+    /* degrees, radix 1..15: reduced mod 360 at the caller's radix */
+    if (fr_cos_deg(40000 << 3, 3) != fr_cos_deg(40 << 3, 3)) return TEST_FAIL;
+    if (fr_sin_deg(-(40000 << 3), 3) != fr_sin_deg(-(40 << 3), 3)) return TEST_FAIL;
+    if (fr_deg_to_bam(INT32_MAX, 15) != fr_deg_to_bam(INT32_MAX % (360 << 15), 15)) return TEST_FAIL;
+    /* radix 0 (integer degrees), beyond the FR_DEG2BAM_I range */
+    if (fr_cos_deg(40000, 0) != fr_cos_deg(40, 0)) return TEST_FAIL;
+    if (!near_s32(fr_cos_deg(40000, 0), 50203, 8)) return TEST_FAIL;
+    if (fr_sin_deg(INT32_MIN, 0) != fr_sin_deg(INT32_MIN % 360, 0)) return TEST_FAIL;
+    if (FR_TanI(INT32_MAX) != FR_TanI(INT32_MAX % 180)) return TEST_FAIL;
+    /* FR_DEG2BAM_I: same result as before for |deg| < 2^15, valid to 2^18 */
+    if (FR_DEG2BAM_I(45) != 0x2000 || FR_DEG2BAM_I(-90) != 0xC000) return TEST_FAIL;
+    if (FR_DEG2BAM_I(262143) != FR_DEG2BAM_I(262143 % 360)) return TEST_FAIL;
+    return TEST_PASS;
+}
+
+/* tan near its poles: cot of the exact distance (was up to 70% off in
+ * fr_tan_deg, 0.58% in fr_tan_bam). */
+int test_tan_near_pole() {
+    if (!near_rel(fr_tan_deg(5897585, 16), 375699995.0, 5e-4)) return TEST_FAIL;  /* 89.99 deg */
+    if (!near_rel(fr_tan_deg(-5897585, 16), -375699995.0, 5e-4)) return TEST_FAIL;
+    if (!near_rel(FR_TanI(89), 3754555.0, 5e-4)) return TEST_FAIL;
+    if (!near_rel(FR_TanI(-89), -3754555.0, 5e-4)) return TEST_FAIL;
+    if (!near_rel(FR_TanI(91), -3754555.0, 5e-4)) return TEST_FAIL;               /* past the pole */
+    if (!near_rel(fr_tan_bam(0x3FFF), 683565273.0, 5e-4)) return TEST_FAIL;
+    if (!near_rel(fr_tan(102937, 16), 640268433.0, 5e-4)) return TEST_FAIL;        /* 1.5707 rad */
+    if (fr_tan(102944, 16) >= 0) return TEST_FAIL;          /* just past pi/2: -> -inf */
+    if (fr_tan_deg(90 << 16, 16) != FR_TRIG_MAXVAL) return TEST_FAIL;
+    if (fr_tan_deg(((s32)90 << 16) + 1, 16) >= -(s32)(1 << 28)) return TEST_FAIL;
+    return TEST_PASS;
+}
+
+/* pow2/exp at low radix (the result used to go through r16 and overflow),
+ * and exponents that do not fit in s32. */
+int test_pow_range() {
+    if (FR_pow2(20, 0) != 1048576) return TEST_FAIL;          /* was 0 */
+    if (FR_pow2(30, 0) != (s32)1 << 30) return TEST_FAIL;     /* was FR_OVERFLOW_POS */
+    if (FR_pow2(31, 0) != FR_OVERFLOW_POS) return TEST_FAIL;
+    if (FR_pow2(15 << 4, 4) != (s32)1 << 19) return TEST_FAIL;
+    if (FR_pow2((s32)15 << 16, 16) != FR_OVERFLOW_POS) return TEST_FAIL;   /* was INT32_MIN */
+    if (FR_pow2((s32)14 << 17, 17) != FR_OVERFLOW_POS) return TEST_FAIL;
+    if (FR_EXP(INT32_MIN, 0) != 0) return TEST_FAIL;          /* was FR_OVERFLOW_POS */
+    if (FR_EXP(INT32_MAX, 0) != FR_OVERFLOW_POS) return TEST_FAIL;
+    if (FR_POW10(INT32_MIN, 4) != 0) return TEST_FAIL;
+    if (FR_EXP_FAST(INT32_MIN, 0) != 0) return TEST_FAIL;
+    if (FR_EXP_FAST(INT32_MAX, 0) != FR_OVERFLOW_POS) return TEST_FAIL;
+    if (FR_POW10_FAST(-0x30000000, 0) != 0) return TEST_FAIL;
+    if (FR_POW10_FAST(0x30000000, 0) != FR_OVERFLOW_POS) return TEST_FAIL;
+    if (FR_EXP(65536, 16) != FR_pow2(fr_pow2_arg_k28(65536, FR_kLOG2E_28), 16)) return TEST_FAIL;
+    if (fr_pow2_arg_k28(65536, FR_kLOG2E_28) != FR_MULK28(65536, FR_kLOG2E_28)) return TEST_FAIL;
+    return TEST_PASS;
+}
+
+/* Sentinels and edges: acos/asin at INT32_MIN, ln/log10 of x <= 0,
+ * hypot results beyond s32. */
+int test_edge_sentinels() {
+    if (FR_acos(INT32_MIN, 16, 16) != FR_acos(-65536, 16, 16)) return TEST_FAIL;  /* pi */
+    if (FR_asin(INT32_MIN, 16, 16) != FR_asin(-65536, 16, 16)) return TEST_FAIL;  /* -pi/2 */
+    if (FR_acos(INT32_MIN, 0, 16) != FR_acos(-1, 0, 16)) return TEST_FAIL;
+    if (FR_ln(0, 16, 16) != FR_LOG2MIN) return TEST_FAIL;
+    if (FR_ln(-5, 16, 16) != FR_LOG2MIN) return TEST_FAIL;
+    if (FR_log10(0, 16, 16) != FR_LOG2MIN) return TEST_FAIL;
+    if (FR_log10(INT32_MIN, 8, 16) != FR_LOG2MIN) return TEST_FAIL;
+    if (FR_hypot(INT32_MAX, INT32_MAX, 16) != FR_OVERFLOW_POS) return TEST_FAIL;
+    if (FR_hypot(INT32_MIN, 0, 16) != FR_OVERFLOW_POS) return TEST_FAIL;       /* 2^31 */
+    if (FR_hypot(INT32_MAX, 0, 16) != INT32_MAX) return TEST_FAIL;
+    if (FR_hypot_fast8(INT32_MIN, INT32_MIN) != FR_OVERFLOW_POS) return TEST_FAIL;
+    if (FR_hypot_fast8(INT32_MAX, 0) < 2140000000) return TEST_FAIL;
+    if (!near_rel(FR_hypot_fast8(3 << 16, 4 << 16), 5 << 16, 0.0015)) return TEST_FAIL;
     return TEST_PASS;
 }
 
@@ -1492,6 +1585,12 @@ int main() {
     RUN_TEST(test_scan_tan_deg_high_radix);
     RUN_TEST(test_scan_numstr_saturation);
     RUN_TEST(test_scan_int32_min_siblings);
+
+    printf("\n--- Every-input sweep regressions ---\n");
+    RUN_TEST(test_angle_range_reduction);
+    RUN_TEST(test_tan_near_pole);
+    RUN_TEST(test_pow_range);
+    RUN_TEST(test_edge_sentinels);
 
     printf("\n=== Test Summary ===\n");
     printf("Total: %d, Passed: %d, Failed: %d\n", 

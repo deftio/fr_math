@@ -37,6 +37,7 @@
         ['index.html',                    'Home',            'index.html'],
         ['guide/getting-started.html',    'Getting Started', 'getting-started.html'],
         ['guide/fixed-point-primer.html', 'Primer',          'fixed-point-primer.html'],
+        ['guide/approximations.html',     'Approximations',  'approximations.html'],
         ['guide/api-reference.html',      'API',             'api-reference.html'],
         ['guide/examples.html',           'Examples',        'examples.html'],
         ['guide/building.html',           'Build &amp; Test','building.html'],
