@@ -4,6 +4,17 @@
 # Compiler configuration
 CC ?= gcc
 CXX ?= g++
+
+# Flags passed in by the caller (environment or command line), e.g.
+#   CFLAGS="-m32" CXXFLAGS="-m32" make test         (32-bit build)
+#   CFLAGS="-fsanitize=address,undefined" ...       (sanitizers)
+# The CFLAGS/CXXFLAGS assignments below used to override these silently,
+# and the library objects never used CFLAGS at all. They are captured
+# here and added to every compile and link line via CC/CXX.
+USER_CFLAGS   := $(CFLAGS)
+USER_CXXFLAGS := $(CXXFLAGS)
+override CC  := $(CC) $(USER_CFLAGS)
+override CXX := $(CXX) $(USER_CXXFLAGS)
 AR = ar
 SIZE = size
 
@@ -18,8 +29,9 @@ COV_DIR = coverage
 # LIB_WARN: strictest for library source (includes -Wconversion -Wpedantic)
 # CFLAGS:   for tests/examples (no -Wconversion/-Wpedantic — macro casts are intentional)
 LIB_WARN = -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Werror
-CFLAGS   = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Werror -Os
-CXXFLAGS = $(CFLAGS)
+# (override: caller flags are in USER_CFLAGS/USER_CXXFLAGS, see above)
+override CFLAGS   = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Werror -Os
+override CXXFLAGS = $(CFLAGS)
 TEST_FLAGS = -ftest-coverage -fprofile-arcs
 LDFLAGS = -lm
 

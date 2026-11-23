@@ -145,6 +145,10 @@ static s32 normalize_to_r16(s32 val, u16 radix)
          : val;
 }
 
+/* |INT32_MIN| = 2^31 at r16, reduced mod 2*pi: what reduce_to_2pi()
+ * returns for 2^31, which -INT32_MIN cannot represent in s32. */
+#define FR_R16_ABS_MIN_MOD_2PI ((s32)(0x80000000u % (u32)FR_TWO_PI(16)))
+
 /* Reduce non-negative radian (at r16) to [0, 2*pi). */
 static s32 reduce_to_2pi(s32 r)
 {
@@ -185,9 +189,10 @@ static u16 rad_r16_to_bam(s32 r)
 u16 fr_rad_to_bam(s32 rad, u16 radix)
 {
     s32 r = normalize_to_r16(rad, radix);
-    /* Normalize to [0, 2π) */
+    /* Normalize to [0, 2π). % rather than negating, so INT32_MIN is safe
+     * (r % P == r + ((-r) / P) * P for r < 0). */
     if (r < 0) {
-        r += ((-r) / FR_TWO_PI(16)) * FR_TWO_PI(16);
+        r %= FR_TWO_PI(16);
         if (r < 0) r += FR_TWO_PI(16);
     }
     r = reduce_to_2pi(r);
@@ -281,7 +286,7 @@ s32 fr_cos(s32 rad, u16 radix)
 {
 	if (rad == 0) return FR_SIN_PEAK;
 	s32 r = normalize_to_r16(rad, radix);
-	if (r < 0) r = -r;
+	if (r < 0) r = (r == INT32_MIN) ? FR_R16_ABS_MIN_MOD_2PI : -r;
 	r = reduce_to_2pi(r);
 	/* Near π/2 or 3π/2 (cos=0 crossings): cos(π/2+δ) = -sin(δ) ≈ -δ,
 	 * cos(3π/2+δ) = sin(δ) ≈ δ. */
@@ -299,7 +304,7 @@ s32 fr_sin(s32 rad, u16 radix)
 	if (rad == 0) return 0;
 	s32 r = normalize_to_r16(rad, radix);
 	s32 sign = 1;
-	if (r < 0) { r = -r; sign = -1; }
+	if (r < 0) { r = (r == INT32_MIN) ? FR_R16_ABS_MIN_MOD_2PI : -r; sign = -1; }
 	r = reduce_to_2pi(r);
 	/* Near 0 after reduction: sin(δ) ≈ δ */
 	if (r < 256) {
@@ -389,7 +394,9 @@ s32 fr_tan_bam(u16 bam)
 		idx  = comp >> FR_TAN_FRAC_BITS;
 		frac = comp &  FR_TAN_FRAC_MASK;
 		lo = (s32)gFR_TAN_TAB_O[idx];
-		hi = (s32)gFR_TAN_TAB_O[idx + 1];
+		/* comp == 45° gives idx == FR_TAN_TABLE_SIZE - 1 with frac == 0:
+		 * that entry is exact, and idx + 1 would read past the table. */
+		hi = (frac != 0) ? (s32)gFR_TAN_TAB_O[idx + 1] : lo;
 		raw = lo + (((hi - lo) * (s32)frac + FR_TAN_FRAC_HALF) >> FR_TAN_FRAC_BITS);
 
 		if (raw < 0x40) {
@@ -397,8 +404,8 @@ s32 fr_tan_bam(u16 bam)
 			 * precision. The reciprocal amplifies small interpolation
 			 * errors, so extra precision significantly helps here.
 			 * Result: (2^31 / raw_hp) << 4 = 2^35 / raw_hp. */
-			s32 lo4 = (s32)gFR_TAN_TAB_O[idx] << 4;
-			s32 hi4 = (s32)gFR_TAN_TAB_O[idx + 1] << 4;
+			s32 lo4 = lo << 4;
+			s32 hi4 = hi << 4;
 			s32 raw_hp = lo4 + (((hi4 - lo4) * (s32)frac + FR_TAN_FRAC_HALF) >> FR_TAN_FRAC_BITS);
 			if (raw_hp < 32) {
 				raw = FR_TRIG_MAXVAL;
@@ -428,7 +435,7 @@ s32 fr_tan(s32 rad, u16 radix)
 
 	/* tan(-x) = -tan(x): extract sign, work with |r| */
 	s32 sign = 1;
-	if (r < 0) { r = -r; sign = -1; }
+	if (r < 0) { r = (r == INT32_MIN) ? FR_R16_ABS_MIN_MOD_2PI : -r; sign = -1; }
 	r = reduce_to_2pi(r);
 
 	/* Small-angle bypass at zero crossings: tan(δ) ≈ δ */
@@ -541,7 +548,9 @@ s32 fr_tan(s32 rad, u16 radix)
 		idx  = comp >> FR_TAN_FRAC_BITS;
 		frac = comp &  FR_TAN_FRAC_MASK;
 		s32 lo = (s32)gFR_TAN_TAB_O[idx];
-		s32 hi = (s32)gFR_TAN_TAB_O[idx + 1];
+		/* comp == 45° gives idx == FR_TAN_TABLE_SIZE - 1 with frac == 0:
+		 * that entry is exact, and idx + 1 would read past the table. */
+		s32 hi = (frac != 0) ? (s32)gFR_TAN_TAB_O[idx + 1] : lo;
 		raw = lo + (((hi - lo) * (s32)frac + FR_TAN_FRAC_HALF) >> FR_TAN_FRAC_BITS);
 
 		if (raw < 0x40) {
@@ -572,7 +581,10 @@ s32 fr_tan(s32 rad, u16 radix)
 s32 fr_cos_deg(s32 deg, u16 radix)
 {
 	if (radix == 0) return fr_cos_bam(FR_DEG2BAM_I(deg));
-	if (deg < 0) deg = -deg;
+	/* cos is even. INT32_MIN has no positive counterpart in s32; it is
+	 * never a cardinal angle and fr_deg_to_bam() reduces negative input
+	 * itself, so it is evaluated as is. */
+	if (deg < 0 && deg != INT32_MIN) deg = -deg;
 	/* Exact cardinal angles */
 	s32 frac_mask = (1 << radix) - 1;
 	if ((deg & frac_mask) == 0) {
@@ -585,7 +597,9 @@ s32 fr_cos_deg(s32 deg, u16 radix)
 	/* Near 90° or 270° (cos=0 crossings): cos(90+δ) = -sin(δ) ≈ -δ·π/180,
 	 * cos(270+δ) = sin(δ) ≈ δ·π/180. Avoids BAM rounding error at zero. */
 	s32 d = normalize_to_r16(deg, radix);
-	if (d >= FR_D360_R16) { s32 n = d / FR_D360_R16; d -= n * FR_D360_R16; }
+	/* Reduce to [0, 360°); d < 0 only for deg == INT32_MIN (see above). */
+	d %= FR_D360_R16;
+	if (d < 0) d += FR_D360_R16;
 	{
 		const s32 DEG_THRESH = 14000; /* ~0.21° at r16 */
 		s32 delta = d - FR_D90_R16;
@@ -606,7 +620,10 @@ s32 fr_sin_deg(s32 deg, u16 radix)
 {
 	if (radix == 0) return fr_sin_bam(FR_DEG2BAM_I(deg));
 	s32 sign = 1;
-	if (deg < 0) { deg = -deg; sign = -1; }
+	/* sin is odd. INT32_MIN has no positive counterpart in s32; it is
+	 * never a cardinal angle and fr_deg_to_bam() reduces negative input
+	 * itself, so it is evaluated as is (sign included). */
+	if (deg < 0 && deg != INT32_MIN) { deg = -deg; sign = -1; }
 	/* Exact cardinal angles */
 	s32 frac_mask = (1 << radix) - 1;
 	if ((deg & frac_mask) == 0) {
@@ -633,25 +650,29 @@ s32 fr_tan_deg(s32 deg, u16 radix)
 {
 	if (radix == 0) return FR_TanI(deg);
 	s32 deg_orig = deg;
-	/* Normalize to [0, 360°) at caller radix */
-	s32 d360 = 360 << radix;
-	if (deg < 0) {
-		deg += ((-deg) / d360) * d360;
+	/* Normalize to [0, 360°) at caller radix. 360 << radix fits in s32
+	 * only up to radix 22. Above that |deg| < 256° already, so only a
+	 * negative angle needs +360°, which the caller radix cannot hold: it
+	 * is applied to the integer degrees of the cardinal check and to d at
+	 * r16 below instead, and fr_deg_to_bam() reduces negative input
+	 * itself. (% rather than negating, so INT32_MIN is safe.) */
+	if (radix <= 22) {
+		s32 d360 = 360 << radix;
+		deg %= d360;
 		if (deg < 0) deg += d360;
-	}
-	if (deg >= d360) {
-		deg -= (deg / d360) * d360;
 	}
 	/* Exact cardinal angles */
 	s32 frac_mask = (1 << radix) - 1;
 	if ((deg & frac_mask) == 0) {
 		s32 ideg = deg >> radix;
+		if (ideg < 0) ideg += 360;          /* radix > 22, negative deg */
 		if (ideg == 0 || ideg == 180) return 0;
 		if (ideg == 90 || ideg == 270)
 			return (deg_orig >= 0) ? FR_TRIG_MAXVAL : -FR_TRIG_MAXVAL;
 	}
 	/* Near 0° or 180° (tan=0 crossings): tan(δ) ≈ δ in radians */
 	s32 d = normalize_to_r16(deg, radix);
+	if (d < 0) d += FR_D360_R16;          /* radix > 22, negative deg */
 	{
 		const s32 DEG_THRESH = 14000; /* ~0.21° at r16 */
 		s32 delta;
@@ -882,8 +903,10 @@ s32 FR_atan2(s32 y, s32 x, u16 out_radix)
 	if (y == 0)
 		return (x > 0) ? 0 : FR_CHRDX(FR_kPI, FR_kPREC, out_radix);      /* 0 or pi */
 
-	ax = (x < 0) ? -x : x;
-	ay = (y < 0) ? -y : y;
+	/* Magnitudes are taken in u32 (-INT32_MIN does not fit in s32) and
+	 * normalised below to < 2^16, so they fit back in s32 afterwards. */
+	u32 ux = (x < 0) ? 0u - (u32)x : (u32)x;
+	u32 uy = (y < 0) ? 0u - (u32)y : (u32)y;
 
 	/* Normalise so max(ax,ay) sits in [2^14, 2^15).  This gives
 	 * FR_hypot_fast8 enough integer bits for the shift-only segments
@@ -891,10 +914,12 @@ s32 FR_atan2(s32 y, s32 x, u16 out_radix)
 	 * small (e.g. atan2(1,1) at radix 0).  Scaling both by the same
 	 * power of two doesn't change the angle. */
 	{
-		s32 mx = (ax > ay) ? ax : ay;
-		while (mx < (1L << 14)) { ax <<= 1; ay <<= 1; mx <<= 1; }
-		while (mx >= (1L << 16)) { ax >>= 1; ay >>= 1; mx >>= 1; }
+		u32 mx = (ux > uy) ? ux : uy;
+		while (mx < (1UL << 14)) { ux <<= 1; uy <<= 1; mx <<= 1; }
+		while (mx >= (1UL << 16)) { ux >>= 1; uy >>= 1; mx >>= 1; }
 	}
+	ax = (s32)ux;
+	ay = (s32)uy;
 
 	h = FR_hypot_fast8((s32)ax, (s32)ay);
 	if (h == 0) return 0;  /* degenerate */
@@ -995,9 +1020,14 @@ s32 FR_pow2(s32 input, u16 radix)
 	}
 	else
 	{
-		s32 neg = -input;
-		s32 nflr = (s32)((u32)neg >> radix);
-		s32 nfrc = (s32)((u32)neg & mask);
+		/* Negate in u32: -INT32_MIN does not fit in s32. */
+		u32 neg = 0u - (u32)input;
+		/* 2^-n underflows to 0 once n >= 30 (the sh >= 30 check below);
+		 * returning here also keeps -nflr in range for INT32_MIN. */
+		if ((neg >> radix) >= 30u)
+			return 0;
+		s32 nflr = (s32)(neg >> radix);
+		s32 nfrc = (s32)(neg & mask);
 		if (nfrc == 0)
 		{
 			flr = -nflr;
@@ -1384,9 +1414,9 @@ s32 FR_numstr(const char *s, u16 radix)
         1L, 10L, 100L, 1000L, 10000L,
         100000L, 1000000L, 10000000L, 100000000L, 1000000000L
     };
-    s32 int_part = 0, frac_part = 0;
+    u64 int_part = 0, mag;
+    s32 frac_part = 0;
     int frac_digits = 0, neg = 0;
-    s32 result;
 
     if (!s || !*s) return 0;
 
@@ -1394,8 +1424,13 @@ s32 FR_numstr(const char *s, u16 radix)
     if (*s == '-') { neg = 1; s++; }              /* sign            */
     else if (*s == '+') { s++; }
 
-    while (*s >= '0' && *s <= '9')                /* integer part    */
-        { int_part = int_part * 10 + (*s - '0'); s++; }
+    while (*s >= '0' && *s <= '9') {              /* integer part    */
+        /* Past 2^31 the value overflows s32 at any radix: stop growing
+         * (no u64 wrap) but keep consuming digits. */
+        if (int_part <= 0x80000000u)
+            int_part = int_part * 10u + (u64)(*s - '0');
+        s++;
+    }
 
     if (*s == '.') {                              /* fractional part */
         s++;
@@ -1406,11 +1441,18 @@ s32 FR_numstr(const char *s, u16 radix)
         }
     }
 
-    result = int_part << radix;
+    /* Saturate out-of-range input, like FR_FixMulSat: the magnitude
+     * limit is 2^31 - 1, or 2^31 for a negative value. int_part <= 2^31
+     * and radix <= 31 keep the u64 arithmetic below from overflowing. */
+    if (int_part > 0x80000000u)
+        return neg ? FR_OVERFLOW_NEG : FR_OVERFLOW_POS;
+    mag = int_part << radix;
     if (frac_digits > 0)
-        result += (s32)(((int64_t)frac_part << radix) / pow10[frac_digits]);
+        mag += ((u64)frac_part << radix) / (u64)pow10[frac_digits];
 
-    return neg ? -result : result;
+    if (neg)
+        return (mag >= 0x80000000u) ? FR_OVERFLOW_NEG : -(s32)mag;
+    return (mag > 0x7fffffffu) ? FR_OVERFLOW_POS : (s32)mag;
 }
 #endif /* FR_NO_PRINT */
 

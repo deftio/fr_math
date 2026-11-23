@@ -260,8 +260,11 @@ static void section_macros_basic(void) {
     printf("| 0 | %d | zero |\n", FR_ABS(0));
     {
         s32 mn = (s32)0x80000000;
+        /* FR_ABS(INT32_MIN) is UB (-INT_MIN overflows), so it is not
+         * executed here (the sanitizer CI job would abort). The row shows
+         * what it yields on two's-complement targets: INT32_MIN itself. */
         printf("| INT32_MIN (0x80000000) | %ld | UB on 2s-complement: -INT_MIN overflows |\n",
-               (long)FR_ABS(mn));
+               (long)(s32)(0u - (u32)mn));
     }
 
     md_h3("2.2 FR_SGN");

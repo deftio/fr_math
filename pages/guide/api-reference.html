@@ -176,7 +176,7 @@ so call sites read as intent:</p>
   <td><code>FR_numstr(s, r)</code></td>
   <td><code>s</code>: null-terminated decimal string (e.g. <code>"3.14159"</code>); <code>r</code>: target radix</td>
   <td><code>s32</code> at radix <code>r</code></td>
-  <td>Runtime string-to-fixed-point parser (inverse of <code>FR_printNumF</code>). Handles signs, leading whitespace, and leading-zero fractions like <code>"0.05"</code>. Up to 9 fractional digits. No malloc, no strtod, no libm. Returns 0 for NULL or empty input.</td>
+  <td>Runtime string-to-fixed-point parser (inverse of <code>FR_printNumF</code>). Handles signs, leading whitespace, and leading-zero fractions like <code>"0.05"</code>. Up to 9 fractional digits. No malloc, no strtod, no libm. Returns 0 for NULL or empty input. Out-of-range values saturate to <code>FR_OVERFLOW_POS</code> / <code>FR_OVERFLOW_NEG</code> (as <code>FR_FixMulSat</code> does); <code>"-32768"</code> at radix 16 is exactly <code>INT32_MIN</code>.</td>
 </tr>
 <tr>
   <td><code>FR2D(x, r)</code></td>

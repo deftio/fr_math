@@ -1,5 +1,64 @@
 # FR_Math Release Notes
 
+## Unreleased
+
+Correctness fixes from GitHub code scanning (AI Scan alerts #9-#12), plus
+the same bug class found elsewhere by the sanitizer. Results are unchanged
+for every input that was already well defined: checked against 2.0.11 over
+~72M inputs (all 65536 `fr_tan_bam` angles; strided full-range sweeps of
+every affected function at 11-31 radices; `FR_atan2` grids; ~160k
+`FR_numstr` strings), and exhaustively for `FR_RAD2BAM`. Only inputs that
+hit undefined behavior change.
+
+### Fixed
+
+- **`fr_tan_bam`, `fr_tan`**: odd multiples of 45° read one entry past
+  the 65-entry tan table (#9). Results were already correct; the
+  out-of-bounds read is gone.
+- **`FR_atan2`**: `INT32_MIN` in either argument overflowed when taking
+  the magnitude; depending on the compiler the call hung or returned an
+  angle outside [-pi, pi] (#10). It now returns the correct angle, e.g.
+  `FR_atan2(INT32_MIN, INT32_MIN, r)` = -3pi/4.
+- **`fr_tan_deg`**: radix 23-30 overflowed computing `360 << radix` (a
+  zero divisor at radix 29-30) (#11). High radix now gives the same result
+  as radix 16 for the same angle, with poles resolved at the caller's full
+  precision.
+- **`FR_numstr`** (behavior change for out-of-range input only): values
+  that overflow `s32` wrapped, e.g. `"65536"` at radix 16 parsed as 0
+  (#12). They now saturate to `FR_OVERFLOW_POS` / `FR_OVERFLOW_NEG`, as
+  `FR_FixMulSat` does. Exact boundaries such as `"-32768"` at radix 16
+  (= `INT32_MIN`) are still exact.
+- **`INT32_MIN` input** to `fr_sin`, `fr_cos`, `fr_tan`, `fr_sin_deg`,
+  `fr_cos_deg`, `fr_rad_to_bam` and `FR_pow2` overflowed on negation.
+  `fr_sin_deg(INT32_MIN, 16)` returned the wrong sign (+0.139 for
+  sin(-8°)); the others were right only by two's-complement accident.
+- **`FR_RAD2BAM`**: the intermediate sum overflowed at -pi; terms are
+  reordered as in `rad_to_bam_full` (bit-identical results for every
+  input). Header comment corrected: the valid range is |x| <= pi at
+  s15.16, not "~4 rad".
+
+### Build and CI
+
+- **makefile**: `CFLAGS` / `CXXFLAGS` from the environment or command line
+  were silently overridden, and library objects never used them. They now
+  apply to every compile and link line.
+- **CI**: because of that, the `test-32bit` job was building 64-bit and the
+  `overflow-tests` job never applied its sanitizers (and could not fail:
+  `make test || true`). `test-32bit` now really builds with `-m32`;
+  `overflow-tests` runs the full suite under AddressSanitizer +
+  UndefinedBehaviorSanitizer (clang) and fails on any report.
+- **Tests**: five regression tests in `test_full_coverage.c`
+  (`test_scan_*`). `test_tdd.cpp` no longer executes `FR_ABS(INT32_MIN)`
+  (undefined) for its report row; the printed value is unchanged.
+
+### Contributors
+
+- Alerts #9-#12 were reported by GitHub Code Security (AI Scan).
+- The fixes, regression tests, verification sweeps and CI changes above
+  were made with Claude Code (Anthropic).
+- Correction for 2.0.11: its CodeQL fixes and release-script consistency
+  checks were also made with Claude Code; that entry did not say so.
+
 ## Version 2.0.11 (2026)
 
 Maintenance release: GitHub code-scanning (CodeQL) cleanup. No library

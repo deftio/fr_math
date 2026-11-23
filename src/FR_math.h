@@ -336,11 +336,14 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 /* FR_BAM2DEG(x): multiply by 360/65536 = 0.00549316 (4 terms, exact) */
 #define FR_BAM2DEG(x) (((x)>>8)+((x)>>9)-((x)>>12)-((x)>>13))
 
-/* FR_RAD2BAM(x): multiply by 65536/(2*pi) ≈ 10430.378 (7 terms, ~21 bits).
- * CAUTION: overflows s32 when |x| > ~4 rad at s15.16 (x<<13 term).
+/* FR_RAD2BAM(x): multiply by 65536/(2*pi) ≈ 10430.378 (10 terms, ~21 bits).
+ * x is radians at s15.16; the result is full s32 BAM (upper 16 bits are
+ * the u16 BAM). Valid for |x| <= pi (a half turn is 2^31): beyond that the
+ * result itself overflows s32. Terms are ordered (as in rad_to_bam_full)
+ * so the intermediate sums stay within s32 over that whole range.
  * For safe conversion at any radix, use fr_rad_to_bam() instead. 
  * #define FR_RAD2BAM(x) (((x)<<13)+((x)<<11)+((x)<<7)+((x)<<6)-((x)<<1)+((x)>>1)-((x)>>3)) */
-#define FR_RAD2BAM(x) (((x)<<13)+((x)<<11)+((x)<<7)+((x)<<6)-((x)<<1)+((x)>>1)-((x)>>3)+((x)>>8)-((x)>>11)-((x)>>14))
+#define FR_RAD2BAM(x) (((x)<<13)-((x)<<1)+((x)<<11)-((x)>>3)+((x)<<7)+((x)<<6)+((x)>>1)+((x)>>8)-((x)>>11)-((x)>>14))
 /* ── Overflow-safe rad/deg to BAM conversion functions ─────────────
  *
  * These replace the FR_RAD2BAM / FR_DEG2BAM macros for callers that
@@ -526,7 +529,8 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
   int FR_printNumD(int (*f)(char), int n, int pad);                      /* print decimal number with optional padding e.g. " 12" */
   int FR_printNumH(int (*f)(char), int n, int showPrefix);               /* print num as a hexidecimal e.g. "0x12ab"              */
 
-  /* string-to-fixed-point parser (inverse of FR_printNumF) */
+  /* string-to-fixed-point parser (inverse of FR_printNumF); out-of-range
+   * input saturates to FR_OVERFLOW_POS / FR_OVERFLOW_NEG */
   s32 FR_numstr(const char *s, u16 radix);
 
 #endif /* FR_NO_PRINT */

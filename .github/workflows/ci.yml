@@ -127,14 +127,21 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Build with sanitizers
+    # Full test suite under AddressSanitizer + UndefinedBehaviorSanitizer.
+    # Any report fails the job (-fno-sanitize-recover=all). Notes:
+    #  - clang: the old -fsanitize=integer flag is clang-only.
+    #  - -fsanitize=integer is not used: it flags unsigned wraparound, which
+    #    the library relies on (BAM phase accumulators wrap at 65536).
+    #  - shift-base is off: the library deliberately left-shifts negative
+    #    values (arithmetic shift on every supported compiler). All other
+    #    UB checks (signed overflow, bounds, shift exponent, divide by
+    #    zero, ...) are on.
+    - name: Build and test with sanitizers
+      env:
+        CC: clang
+        CXX: clang++
+        CFLAGS: -fsanitize=address,undefined -fno-sanitize=shift-base -fno-sanitize-recover=all -g
+        CXXFLAGS: -fsanitize=address,undefined -fno-sanitize=shift-base -fno-sanitize-recover=all -g
       run: |
-        export CFLAGS="-fsanitize=undefined -fsanitize=integer -fno-sanitize-recover=all"
-        export CXXFLAGS="-fsanitize=undefined -fsanitize=integer -fno-sanitize-recover=all"
         make clean
-        make test || true  # Allow failure to see all issues
-
-    - name: Run overflow edge case tests
-      run: |
-        echo "Testing overflow and saturation behavior..."
-        # This will be expanded when we enhance the test suite
+        make test
