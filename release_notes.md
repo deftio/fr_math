@@ -1,25 +1,86 @@
 # FR_Math Release Notes
 
-## Unreleased
+## Version 2.0.12 (2026)
 
-Correctness fixes from GitHub code scanning (AI Scan alerts #9-#12), plus
-the same bug class found elsewhere by the sanitizer. Results are unchanged
-for every input that was already well defined: checked against 2.0.11 over
-~72M inputs (all 65536 `fr_tan_bam` angles; strided full-range sweeps of
-every affected function at 11-31 radices; `FR_atan2` grids; ~160k
-`FR_numstr` strings), and exhaustively for `FR_RAD2BAM`. Only inputs that
-hit undefined behavior change.
+Correctness and performance release. Every function was tested on every
+input in its test domain at every radix 0..16 against a double-precision
+reference, and every failure found was fixed. `FR_atan2` has a new
+algorithm: about 3x faster and 30x more accurate. On 8- and 16-bit
+targets (AVR / Arduino Uno and Nano, MSP430, 68HC11), 2.0.11 computed
+wrong logarithms and read past a table; that is fixed. No API or
+signature changes.
 
-A second set of fixes came from testing every input instead of samples
-(new `tests/test_exhaustive.c`, below). Outside the tan pole windows,
-results are bit-identical to before wherever the old result was valid
-(checked over ~1 billion inputs); what changes is listed here.
+### Highlights
 
-One function changes on purpose for every input: `FR_atan2` (and so
-`FR_atan`) has a new algorithm, about 3x faster and 30x more accurate.
-See "FR_atan2 rewrite" below.
+- **`FR_atan2` / `FR_atan` rewrite**: octant fold, one 32-bit divide and a
+  130-byte tuned table. Worst error 2.5 LSB at radix 16 (was ~64 LSB);
+  3.6 ns per call on the host (was 10.8 ns; libfixmath 6.6 ns at ~1%
+  error).
+- **8/16-bit targets fixed**: `1 << n` constants overflowed a 16-bit `int`,
+  breaking `FR_log2` / `FR_ln` / `FR_log10` and `FR_LOG2MIN` on AVR, MSP430
+  and 68HC11. A new CI job builds with avr-gcc and fails on any such
+  warning.
+- **Lookup tables stay in flash on AVR**: avr-gcc used to copy them into
+  RAM at startup (1,078 bytes, half an ATmega328P's 2 KB). They are now in
+  the `__flash` address space, so they use no RAM.
+- **Any `s32` angle works** in the radian and degree trig functions at
+  every radix; tan is accurate up to its poles (`fr_tan_deg` was up to 70%
+  off near 90°, now 0.041% worst case).
+- **Overflow and undefined-behavior fixes** across `FR_pow2`, `FR_EXP`,
+  `FR_POW10`, `FR_hypot`, `FR_numstr`, `FR_acos` / `FR_asin` and
+  `INT32_MIN` inputs, four of them reported by GitHub code scanning
+  (alerts #9-#12).
+- **Every-input test suite** (`tests/test_exhaustive.c`, part of
+  `make test`), a shift-overflow checker (`make test-shift`), and
+  sanitizer and `-m32` CI jobs that now really run.
+- **Security policy and hardened workflows**: `SECURITY.md`, a code of
+  conduct, issue and PR templates, CI and release actions pinned to commit
+  SHAs with least-privilege tokens, OpenSSF Scorecard, and `make codeql`
+  to run GitHub's CodeQL checks locally.
+- **New guide page: How the Approximations Work**, explaining how each
+  function family is computed and where its error comes from.
 
-### FR_atan2 rewrite (behavior change: results differ by a few LSB)
+### Upgrading from 2.0.11
+
+No source changes are needed. Results are bit-identical to 2.0.11 for
+every input where 2.0.11 was already correct (checked over ~1 billion
+inputs), except for these intended changes:
+
+- **`FR_atan2`, `FR_atan`**: new algorithm, so results differ by a few
+  LSB everywhere (they are closer to the true angle). Below output radix
+  16 results are now rounded rather than truncated, and
+  `FR_atan2(-y, x, r) == -FR_atan2(y, x, r)` holds exactly.
+- **tan within 10° of a pole** (`fr_tan`, `fr_tan_deg`, `fr_tan_bam`,
+  `FR_TanI`): more accurate values, from a different formula.
+- **`FR_ln`, `FR_log10` of input <= 0**: return `FR_LOG2MIN`, as `FR_log2`
+  does (they returned a scaled copy of it).
+- **`FR_numstr`**: out-of-range values saturate to `FR_OVERFLOW_POS` /
+  `FR_OVERFLOW_NEG` instead of wrapping.
+- **`FR_hypot`, `FR_hypot_fast8`**: results above 2^31 − 1 saturate to
+  `FR_OVERFLOW_POS` instead of wrapping negative.
+- Inputs that used to overflow now return the correct value: large angles
+  below radix 16, `FR_pow2` at low radix, `FR_EXP` / `FR_POW10` for huge
+  inputs, `INT32_MIN` anywhere, and every log function on 8/16-bit
+  targets. See Fixed and Portability below.
+
+### Security-relevant fixes
+
+None of these is reachable through a network interface by itself, but an
+application that passes untrusted values to the library could hit them.
+Users of 2.0.11 on AVR, MSP430 or 68HC11 should upgrade.
+
+- **Out-of-bounds reads**: `FR_log2` / `FR_ln` / `FR_log10` on
+  16-bit-`int` targets read up to 64 entries past their 65-entry table
+  (found in 2.0.11; older releases were not checked); `fr_tan_bam` /
+  `fr_tan` read one entry past the tan table at odd multiples of 45°
+  (alert #9, CWE-125).
+- **Hang**: `FR_atan2` with `INT32_MIN` could loop forever, depending on
+  the compiler (alert #10, CWE-835).
+- **Divide by zero**: `fr_tan_deg` at radix 29-30 (alert #11, CWE-369).
+- **Integer overflow**: `FR_numstr` wrapped out-of-range input (alert #12,
+  CWE-190), plus the signed-overflow cases listed under Fixed.
+
+### FR_atan2 rewrite
 
 - **New algorithm.** `FR_atan2` used to normalise `(x, y)` with
   `FR_hypot_fast8` and then call `FR_asin(|y|/h)` or `FR_acos(|x|/h)`
@@ -131,7 +192,7 @@ See "FR_atan2 rewrite" below.
   said for `FR_hypot`); `FR_hypot_fast8` works in `u32`, so `INT32_MIN`
   is taken as 2^31 instead of being clamped.
 
-### Accuracy, measured on every input
+### Testing and accuracy
 
 - New `tests/test_exhaustive.c` (part of `make test`, ~20 s): every
   function at every radix 0..16 on every input in its domain (all u16 BAM
@@ -155,7 +216,7 @@ See "FR_atan2 rewrite" below.
   accurate on 11 of 13 head-to-head functions (2 ties: sqrt and mul) and,
   with the new `FR_atan2`, faster on 12 (all but sqrt).
 
-### Build and CI
+### Build, tests and CI
 
 - **makefile**: `CFLAGS` / `CXXFLAGS` from the environment or command line
   were silently overridden, and library objects never used them. They now
@@ -165,9 +226,13 @@ See "FR_atan2 rewrite" below.
   `make test || true`). `test-32bit` now really builds with `-m32`;
   `overflow-tests` runs the full suite under AddressSanitizer +
   UndefinedBehaviorSanitizer (clang) and fails on any report.
-- **Tests**: five regression tests in `test_full_coverage.c`
-  (`test_scan_*`). `test_tdd.cpp` no longer executes `FR_ABS(INT32_MIN)`
-  (undefined) for its report row; the printed value is unchanged.
+- **Regression tests** in `test_full_coverage.c`: five for the code
+  scanning alerts and their siblings (`test_scan_*`), four that fail on
+  2.0.11 (`test_angle_range_reduction`, `test_tan_near_pole`,
+  `test_pow_range`, `test_edge_sentinels`), and `test_atan2_odd_symmetry`
+  for the new `FR_atan2`. `test_tdd.cpp` no longer executes
+  `FR_ABS(INT32_MIN)` (undefined) for its report row, and no longer runs
+  `FR_DIV32` on inputs where its shift overflows (that row now says so).
 - **Shift overflow check**: the sanitizer job cannot use UBSan's
   shift-base check, because the library left-shifts negative values by
   design, and UBSan reports only the first problem per source line, so a
@@ -176,16 +241,6 @@ See "FR_atan2 rewrite" below.
   shifts of negative values pass, any shift that overflows aborts. `make
   test-shift` runs every suite with it; CI runs it after the sanitizer
   step. It catches the old radix-normalization overflow at once.
-- **Tests**: four more regression tests (`test_angle_range_reduction`,
-  `test_tan_near_pole`, `test_pow_range`, `test_edge_sentinels`) that
-  fail on the previous code. `test_tdd.cpp` no longer runs `FR_DIV32` on
-  inputs where its shift overflows; that row now says so.
-- **Docs**: `FR_RAD2BAM` / `FR_BAM2RAD` take one argument (the reference
-  showed two, and its worked example did not compile); the reference also
-  described `fr_tan` as `(sin << 16) / cos`, said `FR_log2` returns
-  `FR_DOMAIN_ERROR` for input <= 0 (it returns `FR_LOG2MIN`), and gave
-  `FR_TanI` an `s16` argument (it is `s32`). All corrected, plus the
-  changed behaviors above.
 
 ### Portability: 8- and 16-bit targets
 
@@ -213,14 +268,25 @@ See "FR_atan2 rewrite" below.
   in the test setup, so the 16-bit fix is verified by compiling with
   avr-gcc, msp430-gcc, m68hc11-gcc and `clang --target=avr`, which now
   report no shift or overflow warnings (2.0.11 reports several).
-- **Fixed (this cycle only, not in 2.0.11)**: builds with `FR_NO_STDINT`
-  failed to compile, because `fr_cos_deg` and `fr_sin_deg` used
-  `INT32_MIN`, which `FR_defs.h` does not define without `<stdint.h>`.
-  This broke the AVR, MSP430, 68HC11, RISC-V rv32 and ESP8266 rows of the
-  size report.
 - **CI**: new `avr-16bit-int` job compiles every build variant with
   avr-gcc and fails on any shift or overflow warning. It fails on 2.0.11
   and passes now.
+- **Lookup tables in flash on classic AVR** (ATmega, ATtiny): avr-gcc
+  copies plain `const` data into RAM at startup, so in 2.0.11 the tables
+  (sin 258, tan 130, log2 260, pow2 260, print 40 bytes; atan 130 is new)
+  took up to 1,078 bytes of RAM. They are now declared with `FR_PGM`,
+  which is `__flash` on avr-gcc: the tables go to `.progmem.data`, the
+  compiler emits the `LPM` reads for ordinary indexing, and no read site
+  changed. Flash use is the same or slightly smaller (−10 to −28 bytes on
+  ATmega328P, unchanged on ATtiny85). `__flash` needs avr-gcc's default
+  GNU C mode, which Arduino and PlatformIO use. Under `-std=c99` / `c11`,
+  in a C++ build of `FR_math.c`, and with `clang --target=avr`, `FR_PGM`
+  is empty and the tables are copied to RAM as before. On every other
+  target `FR_PGM` is empty and the object code is byte-identical (checked
+  for the full, core and lean builds, as C and as C++).
+- **CI**: the `avr-16bit-int` job now also fails if any table lands in
+  `.data` or `.rodata` (RAM) instead of flash. It is a compile-time check
+  of section sizes, with no simulator. It fails on 2.0.11 and passes now.
 
 ### Code size
 
@@ -245,24 +311,139 @@ not `FR_asin` / `FR_acos` / `FR_hypot_fast8` can now drop those at link
 time with `-ffunction-sections -Wl,--gc-sections`.
 
 The full table in the README and `docs/building.md` is regenerated
-(`make size-update`). 8- and 16-bit targets grow most because the new
-64-bit multiplies, most likely, expand to library calls there.
+(`make size-update`). 8- and 16-bit targets grow most, probably because
+the new 64-bit multiplies expand to library calls there.
+
+### Project and security housekeeping
+
+Community and security files that GitHub's community standards and
+code-quality checks look for, hardened CI and release workflows, and a
+local CodeQL target. No effect on the library.
+
+#### Security policy and community files
+
+- **Added `SECURITY.md`**:
+  - **How to report**: privately, through GitHub's "Report a
+    vulnerability" button (private vulnerability reporting is enabled on
+    the repository), or by email to the address in `LICENSE.txt`. It asks
+    reporters not to open public issues, and says what a useful report
+    contains (version, function, arguments and radix, compiler and target,
+    a minimal reproducer).
+  - **Supported versions**: the latest 2.0.x release only; no backports.
+  - **Response targets** for a one-person project: acknowledgement within
+    7 days, assessment within 14, a fixed release within 90. Coordinated
+    disclosure, a GitHub Security Advisory (and a CVE where it applies),
+    and credit for the reporter in the advisory and in this file.
+  - **Scope** for a math library: out-of-bounds table reads or writes,
+    undefined behavior (signed overflow, out-of-range shifts, division by
+    zero) for any documented input, unbounded run time, and the print and
+    parse helpers. Out of scope: accuracy within the published budgets
+    (accuracy bugs are normal issues), code not shipped in the library
+    (`examples/`, `tests/`, `tools/`, `dev/`, `docker/`, `compare_lfm/`,
+    `pages/`), and compiler or runtime bugs.
+- **Added `CODE_OF_CONDUCT.md`**: Contributor Covenant 2.1, unmodified
+  except for the enforcement contact (the maintainer address in
+  `LICENSE.txt`).
+- **Added `.github/CODEOWNERS`**: every path is owned by `@deftio`, so
+  pull requests request the maintainer's review automatically (and
+  require it once branch protection asks for code-owner review).
+- **Added issue forms** (`.github/ISSUE_TEMPLATE/`): a bug report that
+  asks for the version, compiler and target, a minimal C reproducer, and
+  the expected value with its source; a feature request that asks whether
+  existing functions can already do the job. `config.yml` adds a link that
+  sends security reports to the private advisory form instead.
+- **Added `.github/PULL_REQUEST_TEMPLATE.md`**: a checklist that matches
+  `CONTRIBUTING.md` (tests pass with no warnings, a failing-then-passing
+  test for behavior changes, measured precision changes, no new
+  dependencies or `long` or float in `src/`, `docs/` and `pages/` updated
+  together, a `release_notes.md` entry).
+- **`CONTRIBUTING.md`**: links the code of conduct and asks for security
+  problems to go through `SECURITY.md`.
+
+#### CI and release workflow hardening
+
+- **Actions pinned to commit SHAs**: every `uses:` in `ci.yml`,
+  `release.yml` and the new `scorecard.yml` names a full 40-character
+  commit SHA with the version in a comment (for example
+  `actions/checkout@11d5960... # v4.4.0`). A tag can be moved to point at
+  different code; a SHA cannot. The existing Dependabot configuration for
+  `github-actions` updates SHA pins and their comments. The pins keep the
+  major versions already in use (`checkout` v4, `action-gh-release` v3).
+  New pins were chosen from releases at least two weeks old where one
+  existed, and every SHA was checked against the action's repository.
+- **No token left on disk**: every `actions/checkout` step sets
+  `persist-credentials: false`, so the `GITHUB_TOKEN` is not written to
+  `.git/config` where later steps (build scripts, `pip install`) could
+  read it. No workflow pushes with git, so nothing needs it.
+- **Least-privilege release workflow**: `release.yml` used to grant
+  `contents: write` to every job, including the two that run
+  `pip install` and publish to PlatformIO and the ESP Component Registry.
+  The workflow default is now `contents: read`, and only the job that
+  creates the GitHub Release gets `contents: write`.
+- **New `scorecard.yml`**: runs the OpenSSF Scorecard weekly, on push to
+  master and when branch protection changes. Results appear under
+  Security > Code scanning, and are published to the public Scorecard API
+  (which allows a README badge); set `publish_results: false` to keep them
+  private.
+- All three workflows pass `actionlint`.
+
+#### Local static analysis
+
+- **New `make codeql` / `make codeql-extended`** (`scripts/codeql_local.sh`):
+  runs the same CodeQL analysis as GitHub code scanning's default setup
+  (c-cpp, actions, python, javascript; the default `code-scanning` query
+  suite, or `security-extended`; build mode none) on a copy of the files
+  git would push, so untracked local trees such as `dist/` and the
+  third-party checkouts under `compare_lfm/` are left out. About a minute;
+  exits non-zero on any finding; SARIF in `build/codeql/`. Needs the
+  CodeQL CLI; GitHub's query packs (`codeql/<lang>-queries`) are
+  downloaded on first use.
+- **Checked against history**: on the commit before the CodeQL fixes
+  (`c103673`, 2.0.10) it reports exactly the eight alerts GitHub raised
+  (#1-#4 `actions/missing-workflow-permissions` in `ci.yml`, #5-#8
+  `cpp/wrong-type-format-argument` in `tools/fr_coef-gen.cpp`). On the
+  current tree both suites report nothing.
+- **Not covered**: alerts #9-#12 came from GitHub's AI Scan, which has no
+  local equivalent. They are fixed elsewhere in this release, where the
+  sanitizer, shift-check and every-input test targets found the same bug
+  class in other functions.
+- `CONTRIBUTING.md` documents it and asks for a run before PRs that touch
+  `src/`, `tools/` or the workflows.
+
+#### Repository settings to review (not changed by this release)
+
+- Private vulnerability reporting: already enabled.
+- Code scanning (CodeQL default setup): already enabled, weekly and on
+  push.
+- Secret scanning and push protection: currently off; free for public
+  repositories.
+- Branch protection for `master` (required reviews, required status
+  checks): Scorecard scores it, and `CODEOWNERS` is enforced only with it.
 
 ### Documentation
 
+- **API reference corrections**: `FR_RAD2BAM` / `FR_BAM2RAD` take one
+  argument (the reference showed two, and its worked example did not
+  compile); the reference also described `fr_tan` as `(sin << 16) / cos`,
+  said `FR_log2` returns `FR_DOMAIN_ERROR` for input <= 0 (it returns
+  `FR_LOG2MIN`), and gave `FR_TanI` an `s16` argument (it is `s32`). All
+  corrected, plus the changed behaviors above.
 - **New page: How the Approximations Work** (`docs/approximations.md`,
-  `pages/guide/approximations.html`, in the site nav). A companion to the
-  Fixed-Point Primer: the toolbox (range reduction, small tables with
-  linear interpolation and the `h²/8 × max|f''|` error bound,
-  shift-and-add constants, digit-by-digit algorithms, series near
-  singularities, piecewise-linear fits), then each function family (angles
-  and BAM, sin/cos, tan and its poles, inverse trig, logs, powers and exp,
-  sqrt and hypot, waves), with where each error comes from and how big it
-  is, how the published figures are measured, and which variant to pick.
-  Linked from the primer, getting started, API reference, examples, the
-  docs index and the README.
+  `pages/guide/approximations.html`, in the site nav). A companion to
+  the Fixed-Point Primer: the toolbox (range reduction, small tables
+  with linear interpolation and the `h²/8 × max|f''|` error bound,
+  tuning table entries to centre the error, shift-and-add constants,
+  digit-by-digit algorithms, series near singularities, piecewise-linear
+  fits), then each function family (angles and BAM, sin/cos, tan and its
+  poles, inverse trig, logs, powers and exp, sqrt and hypot, waves),
+  with where each error comes from and how big it is, how the published
+  figures are measured, and which variant to pick. Linked from the
+  primer, getting started, API reference, examples, the docs index and
+  the README.
 - **README, docs, site**: coverage 99% (was 98%), size tables regenerated,
   accuracy table from every input (above).
+- **README**: new note on where the lookup tables live on AVR (flash,
+  and when they fall back to RAM).
 - **Build & Test page**: lists `make test-exhaustive`,
   `make test-exhaustive-s32`, `make test-shift`, the `test_exhaustive`
   binary and every CI job.
@@ -272,12 +453,6 @@ The full table in the README and `docs/building.md` is regenerated
   rules, the `FR_EXP` low-radix limit, `hypot_fast8` error (~0.14%, was
   given as 0.10%), code size range, the new test targets. `agents.md`:
   code size range.
-- **How the Approximations Work, inverse trig**: rewritten for the new
-  `FR_atan2` (octant fold, `min/max` ratio, tuned table, symmetric
-  unfold), with a note on why the old asin/acos route was dropped. The
-  toolbox section gains "Tuning the entries": why chords of a concave
-  function all fall on one side, and how nudging table entries halves
-  that error.
 - **`tools/README.md`, `CONTRIBUTING.md`**: list `gen_atan_table.py`.
   `CONTRIBUTING.md` also said `coef-gen.py` generates the trig, atan,
   log2 and pow2 tables; it finds shift-and-add constants. It now lists
@@ -297,6 +472,9 @@ The full table in the README and `docs/building.md` is regenerated
   CI job, the `FR_atan2` rewrite and its tuned table generator, the new
   approximations page and the documentation corrections were made with
   Claude Code (Anthropic).
+- Claude Code (Anthropic) drafted the security policy, community files and
+  workflow hardening and the local CodeQL target, and checked each pinned
+  action SHA against its repository; reviewed by the maintainer.
 - Correction for 2.0.11: its CodeQL fixes and release-script consistency
   checks were also made with Claude Code; that entry did not say so.
 

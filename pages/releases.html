@@ -21,7 +21,7 @@
 <a href="https://github.com/deftio/fr_math/blob/master/release_notes.md">release_notes.md</a>
 in the repo.</p>
 
-<h2>Unreleased (next release)</h2>
+<h2>v2.0.12 &mdash; 2026</h2>
 <p>Correctness release: every function was tested on every input at every
 radix 0..16, and every failure found was fixed. No API changes. Results
 are bit-identical to 2.0.11 wherever 2.0.11 was correct, except
@@ -31,10 +31,12 @@ are bit-identical to 2.0.11 wherever 2.0.11 was correct, except
 <li><strong>Any <code>s32</code> angle now works</strong> in <code>fr_sin</code>, <code>fr_cos</code>, <code>fr_tan</code>, the degree functions and <code>fr_rad_to_bam</code> / <code>fr_deg_to_bam</code>, at every radix. Below radix 16, large angles used to overflow; large radian angles also drifted by up to ~160 LSB. Radians are now reduced with a 64-bit 1/(2&pi;) multiply, no divide.</li>
 <li><strong>tan near its poles</strong>: within 10&deg; of 90&deg;/270&deg;, all tan variants use the cot series from the exact distance to the pole. <code>fr_tan_deg</code> was up to 70% off there; the worst case is now 0.041% (0.048% radian, 0.015% BAM), with no 64-bit divide.</li>
 <li><strong>8- and 16-bit targets (affects 2.0.11)</strong>: on AVR (Arduino Uno/Nano), MSP430 and 68HC11, <code>1 &lt;&lt; n</code> constants overflowed the 16-bit <code>int</code>. <code>FR_log2</code> / <code>FR_ln</code> / <code>FR_log10</code> read past their table and <code>FR_LOG2MIN</code> was 0. Fixed; code on 32-bit targets is byte-identical, and a new CI job compiles with avr-gcc.</li>
+<li><strong>Lookup tables stay in flash on AVR</strong>: avr-gcc used to copy them into RAM at startup (up to 1,078 bytes, half an ATmega328P&rsquo;s 2 KB). They are now <code>__flash</code>, so they use no RAM, with the same or slightly smaller flash use. Needs <code>FR_math.c</code> built as C in avr-gcc&rsquo;s default GNU mode (Arduino, PlatformIO); otherwise the tables are copied to RAM as before. Other targets are byte-identical.</li>
 <li><strong>Overflow fixes</strong>: <code>FR_pow2</code> at low radix (<code>FR_pow2(20, 0)</code> returned 0), <code>FR_EXP</code> / <code>FR_POW10</code> for huge inputs, <code>INT32_MIN</code> in <code>FR_atan2</code>, <code>FR_acos</code>, <code>FR_asin</code> and the trig functions, <code>FR_hypot</code> / <code>FR_hypot_fast8</code> results above 2^31, <code>FR_numstr</code> overflow (now saturates), an out-of-bounds table read in <code>fr_tan_bam</code>.</li>
 <li><strong>Sentinels</strong>: <code>FR_ln</code> / <code>FR_log10</code> of input &lt;= 0 return <code>FR_LOG2MIN</code>, as <code>FR_log2</code> does.</li>
 <li><strong>Testing</strong>: new every-input suite (<code>make test</code>, ~20 s), every <code>s32</code> at radix 16 for the angle functions (<code>make test-exhaustive-s32</code>), a shift-overflow checker (<code>make test-shift</code>), ASan + UBSan in CI that now really runs, and a real <code>-m32</code> build.</li>
 <li><strong>Accuracy table</strong> is now measured on every input with nothing skipped. Some maxima rose because sampling had missed them (sin/cos 0.15% &rarr; 0.61% near zero crossings); others fell with the fixes (tan deg 0.53% &rarr; 0.002%).</li>
+<li><strong>Security and project files</strong>: <code>SECURITY.md</code> (private vulnerability reporting), code of conduct, issue and PR templates, CI and release actions pinned to commit SHAs with least-privilege tokens, OpenSSF Scorecard, and <code>make codeql</code> to run GitHub&rsquo;s CodeQL checks locally.</li>
 <li><strong>Docs</strong>: new page, <a href="guide/approximations.html">How the Approximations Work</a>. API reference corrections (<code>FR_RAD2BAM</code> takes one argument, <code>FR_log2</code> sentinel, <code>FR_TanI</code> is <code>s32</code>). Code size grows by about 0.5 KB on Cortex-M.</li>
 </ul>
 

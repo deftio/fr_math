@@ -2,7 +2,7 @@
 [![CI](https://github.com/deftio/fr_math/actions/workflows/ci.yml/badge.svg)](https://github.com/deftio/fr_math/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen.svg)](#building-and-testing)
 [![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://deftio.github.io/fr_math/)
-[![Version](https://img.shields.io/badge/version-2.0.11-blue.svg)](release_notes.md)
+[![Version](https://img.shields.io/badge/version-2.0.12-blue.svg)](release_notes.md)
 [![GitHub](https://img.shields.io/badge/GitHub-repo-181717.svg?logo=github)](https://github.com/deftio/fr_math)
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-library-teal.svg)](https://registry.platformio.org/libraries/deftio/fr_math)
@@ -79,7 +79,7 @@ number of fractional bits available.
 <!-- SIZE_TABLE_START -->
 | Target | Lean | Core | Full |
 |--------|-----:|-----:|-----:|
-| AVR ATmega328P | 9.3 KB | 13.9 KB | 16.8 KB |
+| AVR ATmega328P | 9.3 KB | 13.8 KB | 16.8 KB |
 | AVR ATtiny85 | 9.6 KB | 14.4 KB | 17.3 KB |
 | 68HC11 | 13.6 KB | 19.3 KB | 24.0 KB |
 | MSP430 | 8.1 KB | 11.7 KB | 14.2 KB |
@@ -107,6 +107,16 @@ number of fractional bits available.
 Optional C++ 2D module adds ~1 KB.  
 8/16-bit targets expand some 32-bit op to multiple instructions — hence the larger sizes.  
 See [Building & Testing](docs/building.md) for the full cross-compile setup.  
+
+**Tables stay in flash on AVR:** on classic AVR (ATmega, ATtiny) avr-gcc
+normally copies `const` data into RAM at startup. FR_Math marks its lookup
+tables `__flash`, so they stay in program memory and use no RAM (about
+1 KB saved). This needs `FR_math.c` compiled as C in avr-gcc's default GNU
+mode, which is what the Arduino IDE and PlatformIO do. A C++ or
+`-std=c99` build of `FR_math.c` falls back to RAM-copied tables (1,078
+bytes with every table linked; less with `-Wl,--gc-sections`). Cortex-M,
+ESP32, RISC-V and the newer AVRs (ATmega4809, tinyAVR 0/1/2) keep `const`
+tables in flash anyway.
 
 ### Lean build options
 

@@ -76,6 +76,8 @@ help:
 	@echo "  size-report      Multi-architecture size report (Docker)"
 	@echo "  size-update      Size report + patch doc files"
 	@echo "  size-simple      Size report for current platform"
+	@echo "  codeql           CodeQL scan, same queries as GitHub code scanning (needs codeql CLI)"
+	@echo "  codeql-extended  CodeQL with the security-extended suite"
 	@echo ""
 	@echo "Tools:"
 	@echo "  tools            Build diagnostic tools"
@@ -84,6 +86,15 @@ help:
 	@echo "Maintenance:"
 	@echo "  clean            Remove build artifacts"
 	@echo "  cleanall         Remove build artifacts and backups"
+
+# Static analysis: the same CodeQL queries GitHub code scanning runs, on the
+# files git would push. See scripts/codeql_local.sh.
+.PHONY: codeql codeql-extended
+codeql:
+	@scripts/codeql_local.sh
+
+codeql-extended:
+	@scripts/codeql_local.sh --extended
 
 .PHONY: all
 all: dirs lib examples

@@ -35,6 +35,23 @@
 #include <stdint.h>
 #endif
 
+/* FR_PGM: keep the read-only lookup tables in flash on classic AVR.
+ * avr-gcc copies plain const data into RAM at startup (about 1 KB for
+ * these tables). The __flash address space keeps them in program memory,
+ * and the compiler emits the LPM reads for ordinary tab[i] indexing, so no
+ * read site changes. Passing a table address to a plain pointer is a
+ * compile error, not a silent bad read. __flash needs avr-gcc in its
+ * default GNU C mode (it defines __FLASH); under -std=c99/c11, in C++
+ * builds of this file and on every other target FR_PGM is empty and the
+ * tables are ordinary const arrays.
+ */
+#if defined(__AVR__) && defined(__FLASH) && !defined(__cplusplus) \
+    && !defined(__STRICT_ANSI__)
+#define FR_PGM __flash
+#else
+#define FR_PGM
+#endif
+
 /*=======================================================
  * Trig lookup tables (inlined — no separate header needed)
  *
@@ -56,7 +73,7 @@
 #define FR_TRIG_FRAC_HALF   (FR_TRIG_FRAC_MAX >> 1)
 #define FR_TRIG_QUADRANT    (1 << 14)
 
-static const unsigned short gFR_SIN_TAB_Q[FR_TRIG_TABLE_SIZE] = {
+static const FR_PGM unsigned short gFR_SIN_TAB_Q[FR_TRIG_TABLE_SIZE] = {
         0,   402,   804,  1206,  1608,  2009,  2411,  2811,
      3212,  3612,  4011,  4410,  4808,  5205,  5602,  5998,
      6393,  6787,  7180,  7571,  7962,  8351,  8740,  9127,
@@ -93,7 +110,7 @@ static const unsigned short gFR_SIN_TAB_Q[FR_TRIG_TABLE_SIZE] = {
 #define FR_TAN_FRAC_HALF   (FR_TAN_FRAC_MAX >> 1)
 #define FR_TAN_OCTANT      (1 << 13)
 
-static const unsigned short gFR_TAN_TAB_O[FR_TAN_TABLE_SIZE] = {
+static const FR_PGM unsigned short gFR_TAN_TAB_O[FR_TAN_TABLE_SIZE] = {
         0,   402,   804,  1207,  1610,  2013,  2417,  2822,
      3227,  3634,  4042,  4450,  4861,  5272,  5686,  6101,
      6518,  6937,  7358,  7782,  8208,  8637,  9068,  9503,
@@ -953,7 +970,7 @@ s32 FR_asin(s32 input, u16 radix, u16 out_radix)
  * is atan(0) = 0 and entry 64 is pi/4, so the two octants meet without a
  * step at 45 degrees.
  * Peak error of the lookup: 1.55 LSB at radix 16 (2.4e-5 rad). */
-static const u16 gFR_ATAN_TAB[65] = {
+static const FR_PGM u16 gFR_ATAN_TAB[65] = {
 	    0,  1024,  2047,  3070,  4091,  5110,  6126,  7140,
 	 8150,  9156, 10158, 11155, 12147, 13134, 14114, 15088,
 	16055, 17016, 17968, 18913, 19850, 20779, 21699, 22611,
@@ -1047,7 +1064,7 @@ s32 FR_atan(s32 input, u16 radix, u16 out_radix)
  * Used by FR_pow2 to look up the fractional power of 2 with linear
  * interpolation.
  */
-static const u32 gFR_POW2_FRAC_TAB[65] = {
+static const FR_PGM u32 gFR_POW2_FRAC_TAB[65] = {
      65536,  66250,  66971,  67700,  68438,  69183,  69936,  70698,
      71468,  72246,  73032,  73828,  74632,  75444,  76266,  77096,
      77936,  78785,  79642,  80510,  81386,  82273,  83169,  84074,
@@ -1154,7 +1171,7 @@ s32 FR_pow2(s32 input, u16 radix)
  * interpolation between idx and idx+1 never reads out of bounds.
  * Size: 260 bytes.  Entry i = round(log2(1 + i/64) * 65536).
  */
-static const u32 gFR_LOG2_MANT_TAB[65] = {
+static const FR_PGM u32 gFR_LOG2_MANT_TAB[65] = {
         0,  1466,  2909,  4331,  5732,  7112,  8473,  9814,
     11136, 12440, 13727, 14996, 16248, 17484, 18704, 19909,
     21098, 22272, 23433, 24579, 25711, 26830, 27936, 29029,
@@ -1484,7 +1501,7 @@ int FR_printNumH(int (*f)(char), int n, int showPrefix)
  */
 s32 FR_numstr(const char *s, u16 radix)
 {
-    static const s32 pow10[10] = {
+    static const FR_PGM s32 pow10[10] = {
         1L, 10L, 100L, 1000L, 10000L,
         100000L, 1000000L, 10000000L, 100000000L, 1000000000L
     };

@@ -223,6 +223,33 @@ attributed.
 
 Be kind. Assume good faith. Disagree about numerics all you want —
 disagree with precision and sources — but keep it on the code.
+Participation is covered by the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Static analysis (CodeQL)
+
+GitHub runs CodeQL on every push. To see the same findings before you
+push:
+
+```bash
+make codeql            # same query suite as GitHub's default setup
+make codeql-extended   # adds the security-extended queries
+```
+
+This needs the [CodeQL CLI](https://github.com/github/codeql-cli-binaries)
+(macOS: `brew install --cask codeql`); the query packs download on first
+use. It scans c-cpp, actions, python and javascript on a copy of the
+files git would push, takes about a minute, and exits non-zero on any
+finding. SARIF output goes to `build/codeql/`. Please run it before PRs
+that touch `src/`, `tools/` or `.github/workflows/`.
+
+GitHub's "AI Scan" alerts have no local equivalent; the sanitizer and
+every-input test targets are the local check for that class of bug.
+
+## Security issues
+
+Do not open a public issue for a security problem (out-of-bounds
+access, undefined behavior, a hang). Report it privately as described
+in [SECURITY.md](SECURITY.md).
 
 ## Questions?
 

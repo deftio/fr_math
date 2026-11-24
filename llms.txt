@@ -10,7 +10,7 @@ or libraries. Pure C99, zero dependencies beyond `<stdint.h>`.
 - Documentation: https://deftio.github.io/fr_math/
 - How each function is computed, with error budgets: docs/approximations.md
 - License: BSD-2-Clause
-- Version: 2.0.11
+- Version: 2.0.12
 
 ## Installation
 

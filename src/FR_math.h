@@ -32,8 +32,8 @@
 #ifndef __FR_Math_h__
 #define __FR_Math_h__
 
-#define FR_MATH_VERSION     "2.0.11"
-#define FR_MATH_VERSION_HEX  0x02000B  /* major << 16 | minor << 8 | patch */
+#define FR_MATH_VERSION     "2.0.12"
+#define FR_MATH_VERSION_HEX  0x02000C  /* major << 16 | minor << 8 | patch */
 
 #ifdef FR_CORE_ONLY
 #define FR_NO_PRINT

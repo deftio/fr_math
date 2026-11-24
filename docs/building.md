@@ -181,7 +181,7 @@ usage will be smaller.
 <!-- SIZE_TABLE_START -->
 | Target | Lean | Core | Full |
 |--------|-----:|-----:|-----:|
-| AVR ATmega328P | 9.3 KB | 13.9 KB | 16.8 KB |
+| AVR ATmega328P | 9.3 KB | 13.8 KB | 16.8 KB |
 | AVR ATtiny85 | 9.6 KB | 14.4 KB | 17.3 KB |
 | 68HC11 | 13.6 KB | 19.3 KB | 24.0 KB |
 | MSP430 | 8.1 KB | 11.7 KB | 14.2 KB |
@@ -301,11 +301,13 @@ from a clean checkout. Its jobs:
 | --- | --- |
 | `build-and-test` | `make test` with gcc and clang on Linux, clang on macOS, strict warnings; coverage report. |
 | `cross-compile` | Builds the library for ARM and RISC-V Linux. |
-| `avr-16bit-int` | Compiles every build variant with `avr-gcc` (16-bit `int`) and fails on any shift or overflow warning. |
+| `avr-16bit-int` | Compiles every build variant with `avr-gcc` (16-bit `int`) and fails on any shift or overflow warning, or if any lookup table lands in RAM (`.data` / `.rodata`) instead of flash. |
 | `test-32bit` | `make test` built with `-m32`. |
 | `overflow-tests` | `make test` under AddressSanitizer + UndefinedBehaviorSanitizer (clang), then `make test-shift`. Any report fails the job. |
 
-GitHub code scanning (CodeQL) also runs on every push and weekly.
+GitHub code scanning (CodeQL) also runs on every push and weekly. To run
+the same queries locally before pushing, use `make codeql` (needs the
+CodeQL CLI; see `scripts/codeql_local.sh`).
 
 The CI status badge on the README links directly to the latest
 run.

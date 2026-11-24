@@ -203,7 +203,7 @@ usage will be smaller.</p>
 <table>
 <thead><tr><th>Target</th><th>Lean</th><th>Core</th><th>Full</th></tr></thead>
 <tbody>
-<tr><td>AVR ATmega328P</td><td>9.3 KB</td><td>13.9 KB</td><td>16.8 KB</td></tr>
+<tr><td>AVR ATmega328P</td><td>9.3 KB</td><td>13.8 KB</td><td>16.8 KB</td></tr>
 <tr><td>AVR ATtiny85</td><td>9.6 KB</td><td>14.4 KB</td><td>17.3 KB</td></tr>
 <tr><td>68HC11</td><td>13.6 KB</td><td>19.3 KB</td><td>24.0 KB</td></tr>
 <tr><td>MSP430</td><td>8.1 KB</td><td>11.7 KB</td><td>14.2 KB</td></tr>
@@ -319,13 +319,15 @@ starts from a clean checkout. Its jobs:</p>
 <tbody>
 <tr><td><code>build-and-test</code></td><td><code>make test</code> with gcc and clang on Linux, clang on macOS, strict warnings; coverage report.</td></tr>
 <tr><td><code>cross-compile</code></td><td>Builds the library for ARM and RISC-V Linux.</td></tr>
-<tr><td><code>avr-16bit-int</code></td><td>Compiles every build variant with <code>avr-gcc</code> (16-bit <code>int</code>) and fails on any shift or overflow warning.</td></tr>
+<tr><td><code>avr-16bit-int</code></td><td>Compiles every build variant with <code>avr-gcc</code> (16-bit <code>int</code>) and fails on any shift or overflow warning, or if any lookup table lands in RAM (<code>.data</code> / <code>.rodata</code>) instead of flash.</td></tr>
 <tr><td><code>test-32bit</code></td><td><code>make test</code> built with <code>-m32</code>.</td></tr>
 <tr><td><code>overflow-tests</code></td><td><code>make test</code> under AddressSanitizer + UndefinedBehaviorSanitizer (clang), then <code>make test-shift</code>. Any report fails the job.</td></tr>
 </tbody>
 </table>
 
-<p>GitHub code scanning (CodeQL) also runs on every push and weekly.</p>
+<p>GitHub code scanning (CodeQL) also runs on every push and weekly. To run
+the same queries locally before pushing, use <code>make codeql</code> (needs the
+CodeQL CLI; see <code>scripts/codeql_local.sh</code>).</p>
 
 <p>The CI status badge on the README links directly to the latest
 run.</p>
