@@ -241,6 +241,11 @@ Users of 2.0.11 on AVR, MSP430 or 68HC11 should upgrade.
   shifts of negative values pass, any shift that overflows aborts. `make
   test-shift` runs every suite with it; CI runs it after the sanitizer
   step. It catches the old radix-normalization overflow at once.
+- **Release script** (`tools/make_release.sh`): waits until CI has
+  really finished (it treated running jobs as done), squash-merges from
+  the CLI without needing repository auto-merge, sets the squash commit
+  message explicitly, and resumes cleanly if a PR was already merged by
+  hand.
 
 ### Portability: 8- and 16-bit targets
 
