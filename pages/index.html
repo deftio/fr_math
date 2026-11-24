@@ -42,7 +42,7 @@ into a single format.</p>
       <a href="guide/api-reference.html">API reference</a>.</li>
 </ul>
 
-<h2>Measured accuracy</h2>
+<h2 id="measured-accuracy">Measured accuracy</h2>
 
 <p>Errors below are measured at Q16.16 (s15.16). All functions accept any
 radix &mdash; Q16.16 is just the reference point for the table.
@@ -54,27 +54,27 @@ Run <code>make test-tdd</code> to generate the TDD report
 <thead><tr><th>Function</th><th>Max err (%)*</th><th>Avg err (%)</th><th>Note</th></tr></thead>
 <tbody>
 <tr><td>sin/cos (BAM)</td><td>0.1526</td><td>0.0030</td><td>very fast binary angle trig</td></tr>
-<tr><td>sin/cos (deg)</td><td>0.1526</td><td>0.0029</td><td>degree input trig fns</td></tr>
-<tr><td>sin/cos (rad)</td><td>0.1828</td><td>0.0033</td><td>radian (traditional) trig</td></tr>
-<tr><td>tan (BAM)</td><td>0.5823</td><td>0.0008</td><td>binary angle tangent; ±maxint at poles</td></tr>
-<tr><td>tan (deg)</td><td>0.5311</td><td>0.0008</td><td>degree input tangent; saturated at poles</td></tr>
-<tr><td>tan (rad)</td><td>0.0386</td><td>0.0001</td><td>radian (traditional) tangent</td></tr>
-<tr><td>asin / acos</td><td>0.7771</td><td>0.0280</td><td>reverse trig, radian output</td></tr>
-<tr><td>atan2</td><td>0.2564</td><td>0.0237</td><td>reverse tangent, always safe</td></tr>
-<tr><td>atan</td><td>0.2425</td><td>0.0155</td><td>reverse tangent, accepts up to maxint</td></tr>
+<tr><td>sin/cos (deg)</td><td>0.6104</td><td>0.0090</td><td>degree input trig fns</td></tr>
+<tr><td>sin/cos (rad)</td><td>0.6104</td><td>0.0087</td><td>radian (traditional) trig</td></tr>
+<tr><td>tan (BAM)</td><td>0.0003</td><td>0.0000</td><td>binary angle tangent; ±maxint at poles</td></tr>
+<tr><td>tan (deg)</td><td>0.0022</td><td>0.0000</td><td>degree input tangent; saturated at poles</td></tr>
+<tr><td>tan (rad)</td><td>0.0028</td><td>0.0000</td><td>radian (traditional) tangent</td></tr>
+<tr><td>asin / acos</td><td>0.7771</td><td>0.0276</td><td>reverse trig, radian output</td></tr>
+<tr><td>atan2</td><td>0.0486</td><td>0.0010</td><td>reverse tangent, always safe</td></tr>
+<tr><td>atan</td><td>0.1300</td><td>0.0005</td><td>reverse tangent, accepts up to maxint</td></tr>
 <tr><td>sqrt</td><td>0.0000</td><td>0.0000</td><td>Round-to-nearest</td></tr>
-<tr><td>log2</td><td>0.0116</td><td>0.0016</td><td>shift/add only for speed</td></tr>
-<tr><td>pow2</td><td>0.0018</td><td>0.0004</td><td>shift/add only for speed</td></tr>
-<tr><td>ln, log10</td><td>0.0004</td><td>0.0000</td><td>shift/add only for speed</td></tr>
-<tr><td>exp</td><td>0.0003</td><td>0.0000</td><td>shift/add only for speed</td></tr>
-<tr><td>exp_fast</td><td>0.0009</td><td>0.0001</td><td>Shift-only scaling</td></tr>
-<tr><td>pow10</td><td>0.0005</td><td>0.0000</td><td>shift/add only for speed</td></tr>
-<tr><td>pow10_fast</td><td>0.0022</td><td>0.0002</td><td>Shift-only scaling</td></tr>
+<tr><td>log2</td><td>0.0408</td><td>0.0003</td><td>shift/add only for speed</td></tr>
+<tr><td>pow2</td><td>0.0021</td><td>0.0004</td><td>shift/add only for speed</td></tr>
+<tr><td>ln, log10</td><td>0.0677</td><td>0.0003</td><td>shift/add only for speed</td></tr>
+<tr><td>exp</td><td>0.0025</td><td>0.0001</td><td>shift/add only for speed</td></tr>
+<tr><td>exp_fast</td><td>0.0104</td><td>0.0011</td><td>Shift-only scaling</td></tr>
+<tr><td>pow10</td><td>0.0025</td><td>0.0002</td><td>shift/add only for speed</td></tr>
+<tr><td>pow10_fast</td><td>0.0154</td><td>0.0024</td><td>Shift-only scaling</td></tr>
 <tr><td>hypot (exact)</td><td>0.0000</td><td>0.0000</td><td>Uses 64-bit intermediate</td></tr>
-<tr><td>hypot_fast8 (8-seg)</td><td>0.0915</td><td>0.0320</td><td>Shift-only, no multiply</td></tr>
+<tr><td>hypot_fast8 (8-seg)</td><td>0.1373</td><td>0.0185</td><td>Shift-only, no multiply</td></tr>
 </tbody>
 </table>
-<p><em>*Relative error; reference clamped to 1% of full-scale output.</em></p>
+<p><em>*Relative error; reference clamped to 1% of full-scale output. Every s15.16 input in each function's domain, nothing skipped (tests/test_tdd.cpp section 14).</em></p>
 <!-- ACCURACY_TABLE_END -->
 
 <h2>What&rsquo;s in the box</h2>
@@ -117,9 +117,9 @@ for ROM-constrained targets. Define them before including
 
 <p><code>FR_LEAN</code> keeps only radian trig (sin, cos, tan), inverse trig,
 sqrt, log2, ln, exp, pow2, and arithmetic &mdash; comparable to libfixmath&rsquo;s
-API but at 4.7 KB text vs libfixmath&rsquo;s 4.9 KB + 112 KB BSS.
+API but at 4.8 KB text (x86-64, clang -Os) vs libfixmath&rsquo;s 4.9 KB + 112 KB BSS.
 With <code>FR_LEAN</code> + <code>FR_NO_PRINT</code> the library compiles to
-~4.7 KB on x86-64 / clang -Os.</p>
+~4.8 KB on x86-64 / clang -Os.</p>
 
 <pre><code class="language-c">/* Example: headless sensor node &mdash; math only, no print, no audio */
 #define FR_NO_PRINT
@@ -227,7 +227,9 @@ FR_printNumD(my_putchar, FR2I(lg, R), 4); /* prints "   9" (integer)*/</code></p
 <p>See <a href="guide/getting-started.html">Getting Started</a> for a
 complete walkthrough, or jump straight to the
 <a href="guide/fixed-point-primer.html">Fixed-Point Primer</a> if you
-want to understand <em>how</em> the radix notation works first.</p>
+want to understand <em>how</em> the radix notation works first.
+<a href="guide/approximations.html">How the Approximations Work</a>
+explains how the math functions themselves are built.</p>
 
 <h2>Comparison</h2>
 
@@ -240,7 +242,7 @@ want to understand <em>how</em> the radix notation works first.</p>
 <tr><td>Multiply-free option</td><td>No</td><td>No</td><td>Yes (e.g. <code>FR_EXP_FAST</code>, <code>FR_hypot_fast8</code>)</td></tr>
 <tr><td>Wave generators</td><td>No</td><td>No</td><td>6 shapes + ADSR</td></tr>
 <tr><td>Dependencies</td><td>None</td><td>ARM only</td><td>None</td></tr>
-<tr><td>Code size (Cortex-M0, -Os)</td><td>2.4 KB</td><td>~40 KB+</td><td>3.4 KB lean / 5.7 KB full</td></tr>
+<tr><td>Code size (Cortex-M0, -Os)</td><td>2.4 KB</td><td>~40 KB+</td><td>3.6 KB lean / 6.3 KB full</td></tr>
 </tbody>
 </table>
 

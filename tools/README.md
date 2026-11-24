@@ -87,6 +87,19 @@ counts.
 
 ---
 
+## gen_atan_table.py
+
+Generates the `gFR_ATAN_TAB[65]` lookup table used by `FR_atan2()` (and
+`FR_atan()`): `atan(i/64)` in radians at u0.16. Starts from the rounded
+values, then nudges each interior entry by up to ±3 LSB to minimise the
+peak error of the exact integer interpolation in `FR_atan2`, checked on
+all 65537 possible ratios (2.07 → 1.55 LSB). Entries 0 and 64 stay exact.
+Output is a C array suitable for inclusion in FR_math.c.
+
+**Usage:** `python3 tools/gen_atan_table.py`
+
+---
+
 ## gen_pow2_table.py
 
 Generates the `gFR_POW2_FRAC_TAB[65]` lookup table used by `FR_pow2()`.

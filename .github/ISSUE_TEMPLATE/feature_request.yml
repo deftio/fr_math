@@ -1,0 +1,27 @@
+name: Feature request
+description: Propose a new function, platform or improvement.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        FR_Math keeps its API small. Before proposing a new public function,
+        check whether it can be built from existing ones; see CONTRIBUTING.md.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+      description: Signature, input range, output format and accuracy you need.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Can existing functions do this? Why not?

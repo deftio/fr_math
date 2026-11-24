@@ -1,8 +1,8 @@
 [![License](https://img.shields.io/badge/License-BSD%202--Clause-blue.svg)](https://opensource.org/licenses/BSD-2-Clause)
 [![CI](https://github.com/deftio/fr_math/actions/workflows/ci.yml/badge.svg)](https://github.com/deftio/fr_math/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-98%25-brightgreen.svg)](#building-and-testing)
+[![Coverage](https://img.shields.io/badge/coverage-99%25-brightgreen.svg)](#building-and-testing)
 [![Docs](https://img.shields.io/badge/docs-online-blue.svg)](https://deftio.github.io/fr_math/)
-[![Version](https://img.shields.io/badge/version-2.0.11-blue.svg)](release_notes.md)
+[![Version](https://img.shields.io/badge/version-2.0.12-blue.svg)](release_notes.md)
 [![GitHub](https://img.shields.io/badge/GitHub-repo-181717.svg?logo=github)](https://github.com/deftio/fr_math)
 
 [![PlatformIO](https://img.shields.io/badge/PlatformIO-library-teal.svg)](https://registry.platformio.org/libraries/deftio/fr_math)
@@ -34,26 +34,26 @@ number of fractional bits available.
 | Function | Max err (%)*| Avg err (%) | Note |
 |---|---:|---:|---|
 | sin/cos (BAM) | 0.1526 | 0.0030 | very fast binary angle trig |
-| sin/cos (deg) | 0.1526 | 0.0029 | degree input trig fns |
-| sin/cos (rad) | 0.1828 | 0.0033 | radian (traditional) trig |
-| tan (BAM) | 0.5823 | 0.0008 | binary angle tangent; ±maxint at poles |
-| tan (deg) | 0.5311 | 0.0008 | degree input tangent; saturated at poles |
-| tan (rad) | 0.0386 | 0.0001 | radian (traditional) tangent |
-| asin / acos | 0.7771 | 0.0280 | reverse trig, radian output |
-| atan2 | 0.2564 | 0.0237 | reverse tangent, always safe |
-| atan | 0.2425 | 0.0155 | reverse tangent, accepts up to maxint |
+| sin/cos (deg) | 0.6104 | 0.0090 | degree input trig fns |
+| sin/cos (rad) | 0.6104 | 0.0087 | radian (traditional) trig |
+| tan (BAM) | 0.0003 | 0.0000 | binary angle tangent; ±maxint at poles |
+| tan (deg) | 0.0022 | 0.0000 | degree input tangent; saturated at poles |
+| tan (rad) | 0.0028 | 0.0000 | radian (traditional) tangent |
+| asin / acos | 0.7771 | 0.0276 | reverse trig, radian output |
+| atan2 | 0.0486 | 0.0010 | reverse tangent, always safe |
+| atan | 0.1300 | 0.0005 | reverse tangent, accepts up to maxint |
 | sqrt | 0.0000 | 0.0000 | Round-to-nearest |
-| log2 | 0.0116 | 0.0016 | shift/add only for speed |
-| pow2 | 0.0018 | 0.0004 | shift/add only for speed |
-| ln, log10 | 0.0004 | 0.0000 | shift/add only for speed |
-| exp | 0.0003 | 0.0000 | shift/add only for speed |
-| exp_fast | 0.0009 | 0.0001 | Shift-only scaling |
-| pow10 | 0.0005 | 0.0000 | shift/add only for speed |
-| pow10_fast | 0.0022 | 0.0002 | Shift-only scaling |
+| log2 | 0.0408 | 0.0003 | shift/add only for speed |
+| pow2 | 0.0021 | 0.0004 | shift/add only for speed |
+| ln, log10 | 0.0677 | 0.0003 | shift/add only for speed |
+| exp | 0.0025 | 0.0001 | shift/add only for speed |
+| exp_fast | 0.0104 | 0.0011 | Shift-only scaling |
+| pow10 | 0.0025 | 0.0002 | shift/add only for speed |
+| pow10_fast | 0.0154 | 0.0024 | Shift-only scaling |
 | hypot (exact) | 0.0000 | 0.0000 | Uses 64-bit intermediate |
-| hypot_fast8 (8-seg) | 0.0915 | 0.0320 | Shift-only, no multiply |
+| hypot_fast8 (8-seg) | 0.1373 | 0.0185 | Shift-only, no multiply |
 
-*Relative error; reference clamped to 1% of full-scale output.
+*Relative error; reference clamped to 1% of full-scale output. Every s15.16 input in each function's domain, nothing skipped (tests/test_tdd.cpp section 14).
 <!-- ACCURACY_TABLE_END -->
  
 ### What's in the box
@@ -79,26 +79,26 @@ number of fractional bits available.
 <!-- SIZE_TABLE_START -->
 | Target | Lean | Core | Full |
 |--------|-----:|-----:|-----:|
-| AVR ATmega328P | 9.2 KB | 12.8 KB | 15.4 KB |
-| AVR ATtiny85 | 9.4 KB | 13.3 KB | 16.0 KB |
-| 68HC11 | 13.3 KB | 18.4 KB | 22.6 KB |
-| MSP430 | 7.8 KB | 10.7 KB | 12.8 KB |
-| Cortex-M4 (STM32) | 3.3 KB | 4.4 KB | 5.5 KB |
-| Cortex-M0 (RP2040) | 3.4 KB | 4.5 KB | 5.7 KB |
-| ARM Thumb | 3.4 KB | 4.7 KB | 5.9 KB |
-| Xtensa LX7 (ESP32-S3) | 3.9 KB | 5.3 KB | 6.5 KB |
-| RISC-V rv32 | 4.1 KB | 5.5 KB | 6.8 KB |
-| Xtensa LX106 (ESP8266) | 4.2 KB | 5.8 KB | 7.3 KB |
-| ARM32 | 4.3 KB | 5.8 KB | 7.7 KB |
-| m68k | 4.4 KB | 6.2 KB | 7.8 KB |
-| x86-32 | 5.3 KB | 7.2 KB | 9.2 KB |
-| MIPS32 | 5.5 KB | 7.5 KB | 9.6 KB |
-| PowerPC | 5.8 KB | 8.0 KB | 10.4 KB |
-| TCC x86 | 8.2 KB | 11.5 KB | 15.1 KB |
-| RISC-V rv64 | 4.0 KB | 5.5 KB | 6.8 KB |
-| x86-64 (GCC) | 4.6 KB | 6.1 KB | 8.0 KB |
-| AArch64 (ARM64) | 4.8 KB | 6.6 KB | 8.7 KB |
-| x86-64 (Clang) | 4.7 KB | 6.6 KB | 9.0 KB |
+| AVR ATmega328P | 9.3 KB | 13.8 KB | 16.8 KB |
+| AVR ATtiny85 | 9.6 KB | 14.4 KB | 17.3 KB |
+| 68HC11 | 13.6 KB | 19.3 KB | 24.0 KB |
+| MSP430 | 8.1 KB | 11.7 KB | 14.2 KB |
+| Cortex-M4 (STM32) | 3.4 KB | 4.8 KB | 6.0 KB |
+| Cortex-M0 (RP2040) | 3.6 KB | 5.0 KB | 6.3 KB |
+| ARM Thumb | 3.6 KB | 5.1 KB | 6.5 KB |
+| Xtensa LX7 (ESP32-S3) | 4.0 KB | 5.6 KB | 6.9 KB |
+| RISC-V rv32 | 4.2 KB | 6.0 KB | 7.4 KB |
+| Xtensa LX106 (ESP8266) | 4.4 KB | 6.3 KB | 8.0 KB |
+| ARM32 | 4.5 KB | 6.3 KB | 8.3 KB |
+| m68k | 4.4 KB | 6.7 KB | 8.4 KB |
+| x86-32 | 5.5 KB | 7.7 KB | 9.9 KB |
+| MIPS32 | 5.8 KB | 8.2 KB | 10.6 KB |
+| PowerPC | 6.0 KB | 8.7 KB | 11.3 KB |
+| TCC x86 | 8.1 KB | 11.9 KB | 15.7 KB |
+| RISC-V rv64 | 4.3 KB | 6.0 KB | 7.5 KB |
+| x86-64 (GCC) | 5.1 KB | 6.9 KB | 8.9 KB |
+| AArch64 (ARM64) | 5.1 KB | 7.3 KB | 9.5 KB |
+| x86-64 (Clang) | 4.8 KB | 7.0 KB | 9.5 KB |
 <!-- SIZE_TABLE_END -->
 
 **Lean** (`-DFR_LEAN -DFR_NO_PRINT`): radian trig, inv trig, log/exp, sqrt.  
@@ -107,6 +107,16 @@ number of fractional bits available.
 Optional C++ 2D module adds ~1 KB.  
 8/16-bit targets expand some 32-bit op to multiple instructions — hence the larger sizes.  
 See [Building & Testing](docs/building.md) for the full cross-compile setup.  
+
+**Tables stay in flash on AVR:** on classic AVR (ATmega, ATtiny) avr-gcc
+normally copies `const` data into RAM at startup. FR_Math marks its lookup
+tables `__flash`, so they stay in program memory and use no RAM (about
+1 KB saved). This needs `FR_math.c` compiled as C in avr-gcc's default GNU
+mode, which is what the Arduino IDE and PlatformIO do. A C++ or
+`-std=c99` build of `FR_math.c` falls back to RAM-copied tables (1,078
+bytes with every table linked; less with `-Wl,--gc-sections`). Cortex-M,
+ESP32, RISC-V and the newer AVRs (ATmega4809, tinyAVR 0/1/2) keep `const`
+tables in flash anyway.
 
 ### Lean build options
 
@@ -148,7 +158,7 @@ archive without section-level dead-code elimination.
 git clone https://github.com/deftio/fr_math.git
 cd fr_math
 make lib       # build static library
-make test      # run all tests (unit, TDD characterization, 2D)
+make test      # run all tests (unit, every-input sweeps, TDD, 2D)
 ```
 
 ## Example
@@ -233,7 +243,7 @@ The full docs ship in two forms — pick whichever fits how you read.
 **Terminal / editor (plain markdown):**
 
 - [docs/README.md](docs/README.md) — same content as plain markdown.
-- [getting-started.md](docs/getting-started.md) | [fixed-point-primer.md](docs/fixed-point-primer.md) | [api-reference.md](docs/api-reference.md)
+- [getting-started.md](docs/getting-started.md) | [fixed-point-primer.md](docs/fixed-point-primer.md) | [approximations.md](docs/approximations.md) | [api-reference.md](docs/api-reference.md)
 - [examples.md](docs/examples.md) | [building.md](docs/building.md) | [releases.md](docs/releases.md)
 
 ## History

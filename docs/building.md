@@ -27,6 +27,9 @@ CMake build.
 | `make lib` | Library only (`build/libfrmath.a`). |
 | `make examples` | Example programs into `build/`. |
 | `make test` | Build every test binary and run the full suite. |
+| `make test-exhaustive` | Every function at every radix 0..16 on every input in its domain, against a double reference (part of `make test`, ~20 s). Report: `build/test_exhaustive_report.md`. |
+| `make test-exhaustive-s32` | Adds every one of the 2^32 inputs at radix 16 for the six angle functions (~10 min). |
+| `make test-shift` | Every suite rebuilt with clang and the shift-overflow checker in `tests/ubsan_shift_check.c`. |
 | `make coverage` | Build with `-ftest-coverage -fprofile-arcs`, run tests, emit lcov report. |
 | `make clean` | Remove `build/`. |
 | `make cleanall` | Remove `build/` plus editor backups. |
@@ -91,7 +94,7 @@ See `release_management.md` for the full step-by-step reference.
 
 ## The test suite
 
-Tests live under `tests/` and are split into eight
+Tests live under `tests/` and are split into nine
 binaries to keep compile times low:
 
 | Binary | What it checks |
@@ -104,8 +107,9 @@ binaries to keep compile times low:
 | `test_2d_complete` | Extended 2D: matrix composition, inverse, point transforms. |
 | `test_tdd` | Characterization tests pinned to bit-exact reference values. |
 | `test_arduino_compat` | Arduino build compatibility: compiles the headers as ESP32-style and AVR/USBAPI-style cores would (both include orders), plus type-size checks (issue #11). |
+| `test_exhaustive` | Every input, every radix 0..16, every function, with per-function error budgets; nothing skipped (zero crossings, poles, domain edges, both ends of `s32`). |
 
-The suite covers **98%** of the library source lines and every
+The suite covers **99%** of the library source lines and every
 mathematically reachable branch. The remainder is defensive code
 (clamps and guards) that no input can trigger, kept in place as
 insurance against future edits. Every public symbol is exercised
@@ -153,7 +157,7 @@ you do *not* need `libm`.
 | RP2040 (Cortex-M0+) | `arm-none-eabi-gcc` | Docker. |
 | STM32 (Cortex-M4) | `arm-none-eabi-gcc` | Docker. |
 | RISC-V rv64 / rv32 | `riscv64-linux-gnu-gcc`, `riscv64-unknown-elf-gcc` | Docker. |
-| AVR (ATmega328P, ATtiny85) | `avr-gcc` | Docker. |
+| AVR (ATmega328P, ATtiny85) | `avr-gcc` | CI (compile, 16-bit-int warnings) + Docker. |
 | Arduino (AVR, SAMD, etc.) | `arduino-cli` | Manual. |
 | MSP430 | `msp430-gcc` | Docker. |
 | Motorola 68k | `m68k-linux-gnu-gcc` | Docker. |
@@ -177,26 +181,26 @@ usage will be smaller.
 <!-- SIZE_TABLE_START -->
 | Target | Lean | Core | Full |
 |--------|-----:|-----:|-----:|
-| AVR ATmega328P | 9.2 KB | 12.8 KB | 15.4 KB |
-| AVR ATtiny85 | 9.4 KB | 13.3 KB | 16.0 KB |
-| 68HC11 | 13.3 KB | 18.4 KB | 22.6 KB |
-| MSP430 | 7.8 KB | 10.7 KB | 12.8 KB |
-| Cortex-M4 (STM32) | 3.3 KB | 4.4 KB | 5.5 KB |
-| Cortex-M0 (RP2040) | 3.4 KB | 4.5 KB | 5.7 KB |
-| ARM Thumb | 3.4 KB | 4.7 KB | 5.9 KB |
-| Xtensa LX7 (ESP32-S3) | 3.9 KB | 5.3 KB | 6.5 KB |
-| RISC-V rv32 | 4.1 KB | 5.5 KB | 6.8 KB |
-| Xtensa LX106 (ESP8266) | 4.2 KB | 5.8 KB | 7.3 KB |
-| ARM32 | 4.3 KB | 5.8 KB | 7.7 KB |
-| m68k | 4.4 KB | 6.2 KB | 7.8 KB |
-| x86-32 | 5.3 KB | 7.2 KB | 9.2 KB |
-| MIPS32 | 5.5 KB | 7.5 KB | 9.6 KB |
-| PowerPC | 5.8 KB | 8.0 KB | 10.4 KB |
-| TCC x86 | 8.2 KB | 11.5 KB | 15.1 KB |
-| RISC-V rv64 | 4.0 KB | 5.5 KB | 6.8 KB |
-| x86-64 (GCC) | 4.6 KB | 6.1 KB | 8.0 KB |
-| AArch64 (ARM64) | 4.8 KB | 6.6 KB | 8.7 KB |
-| x86-64 (Clang) | 4.7 KB | 6.6 KB | 9.0 KB |
+| AVR ATmega328P | 9.3 KB | 13.8 KB | 16.8 KB |
+| AVR ATtiny85 | 9.6 KB | 14.4 KB | 17.3 KB |
+| 68HC11 | 13.6 KB | 19.3 KB | 24.0 KB |
+| MSP430 | 8.1 KB | 11.7 KB | 14.2 KB |
+| Cortex-M4 (STM32) | 3.4 KB | 4.8 KB | 6.0 KB |
+| Cortex-M0 (RP2040) | 3.6 KB | 5.0 KB | 6.3 KB |
+| ARM Thumb | 3.6 KB | 5.1 KB | 6.5 KB |
+| Xtensa LX7 (ESP32-S3) | 4.0 KB | 5.6 KB | 6.9 KB |
+| RISC-V rv32 | 4.2 KB | 6.0 KB | 7.4 KB |
+| Xtensa LX106 (ESP8266) | 4.4 KB | 6.3 KB | 8.0 KB |
+| ARM32 | 4.5 KB | 6.3 KB | 8.3 KB |
+| m68k | 4.4 KB | 6.7 KB | 8.4 KB |
+| x86-32 | 5.5 KB | 7.7 KB | 9.9 KB |
+| MIPS32 | 5.8 KB | 8.2 KB | 10.6 KB |
+| PowerPC | 6.0 KB | 8.7 KB | 11.3 KB |
+| TCC x86 | 8.1 KB | 11.9 KB | 15.7 KB |
+| RISC-V rv64 | 4.3 KB | 6.0 KB | 7.5 KB |
+| x86-64 (GCC) | 5.1 KB | 6.9 KB | 8.9 KB |
+| AArch64 (ARM64) | 5.1 KB | 7.3 KB | 9.5 KB |
+| x86-64 (Clang) | 4.8 KB | 7.0 KB | 9.5 KB |
 <!-- SIZE_TABLE_END -->
 
 ### Lean build options
@@ -214,7 +218,7 @@ for ROM-constrained targets. Define them before including `FR_math.h`
 
 `FR_LEAN` keeps only radian trig (sin, cos, tan), inverse trig, sqrt,
 log2, ln, exp, pow2, and arithmetic — comparable to libfixmath's API at
-4.7 KB text. `FR_LEAN` implies `FR_NO_WAVES`.
+4.8 KB text (x86-64, clang -Os). `FR_LEAN` implies `FR_NO_WAVES`.
 
 `FR_CORE_ONLY` is a convenience shorthand that defines both
 `FR_NO_PRINT` and `FR_NO_WAVES` in one step.
@@ -290,9 +294,20 @@ functions you call are linked.
 ## CI
 
 GitHub Actions runs on every push and every PR. The workflow file
-is `.github/workflows/ci.yml`. It builds with strict
-warnings, runs `make test`, and caches nothing —
-each run starts from a clean checkout.
+is `.github/workflows/ci.yml`, and it caches nothing: each run starts
+from a clean checkout. Its jobs:
+
+| Job | What it does |
+| --- | --- |
+| `build-and-test` | `make test` with gcc and clang on Linux, clang on macOS, strict warnings; coverage report. |
+| `cross-compile` | Builds the library for ARM and RISC-V Linux. |
+| `avr-16bit-int` | Compiles every build variant with `avr-gcc` (16-bit `int`) and fails on any shift or overflow warning, or if any lookup table lands in RAM (`.data` / `.rodata`) instead of flash. |
+| `test-32bit` | `make test` built with `-m32`. |
+| `overflow-tests` | `make test` under AddressSanitizer + UndefinedBehaviorSanitizer (clang), then `make test-shift`. Any report fails the job. |
+
+GitHub code scanning (CodeQL) also runs on every push and weekly. To run
+the same queries locally before pushing, use `make codeql` (needs the
+CodeQL CLI; see `scripts/codeql_local.sh`).
 
 The CI status badge on the README links directly to the latest
 run.

@@ -33,6 +33,7 @@ or any tooling. If you want the browser version, look in
 | --- | --- |
 | [getting-started.md](getting-started.md) | Clone, build, run your first FR_Math program. |
 | [fixed-point-primer.md](fixed-point-primer.md) | Why fixed-point exists, sM.N notation, operations, how to pick a radix. |
+| [approximations.md](approximations.md) | How each function family is computed (tables, range reduction, shift-and-add), and where its error comes from. |
 | [api-reference.md](api-reference.md) | Every public symbol: signature, radix, precision, error behavior. |
 | [examples.md](examples.md) | Runnable snippets: trig, log, waves, ADSR, 2D transforms. |
 | [building.md](building.md) | Makefile, scripts, test suite, coverage, cross-compilation. |
@@ -49,26 +50,26 @@ for sweeps at radixes 8, 12, 16, and 24.
 | Function | Max err (%)*| Avg err (%) | Note |
 |---|---:|---:|---|
 | sin/cos (BAM) | 0.1526 | 0.0030 | very fast binary angle trig |
-| sin/cos (deg) | 0.1526 | 0.0029 | degree input trig fns |
-| sin/cos (rad) | 0.1828 | 0.0033 | radian (traditional) trig |
-| tan (BAM) | 0.5823 | 0.0008 | binary angle tangent; ±maxint at poles |
-| tan (deg) | 0.5311 | 0.0008 | degree input tangent; saturated at poles |
-| tan (rad) | 0.0386 | 0.0001 | radian (traditional) tangent |
-| asin / acos | 0.7771 | 0.0280 | reverse trig, radian output |
-| atan2 | 0.2564 | 0.0237 | reverse tangent, always safe |
-| atan | 0.2425 | 0.0155 | reverse tangent, accepts up to maxint |
+| sin/cos (deg) | 0.6104 | 0.0090 | degree input trig fns |
+| sin/cos (rad) | 0.6104 | 0.0087 | radian (traditional) trig |
+| tan (BAM) | 0.0003 | 0.0000 | binary angle tangent; ±maxint at poles |
+| tan (deg) | 0.0022 | 0.0000 | degree input tangent; saturated at poles |
+| tan (rad) | 0.0028 | 0.0000 | radian (traditional) tangent |
+| asin / acos | 0.7771 | 0.0276 | reverse trig, radian output |
+| atan2 | 0.0486 | 0.0010 | reverse tangent, always safe |
+| atan | 0.1300 | 0.0005 | reverse tangent, accepts up to maxint |
 | sqrt | 0.0000 | 0.0000 | Round-to-nearest |
-| log2 | 0.0116 | 0.0016 | shift/add only for speed |
-| pow2 | 0.0018 | 0.0004 | shift/add only for speed |
-| ln, log10 | 0.0004 | 0.0000 | shift/add only for speed |
-| exp | 0.0003 | 0.0000 | shift/add only for speed |
-| exp_fast | 0.0009 | 0.0001 | Shift-only scaling |
-| pow10 | 0.0005 | 0.0000 | shift/add only for speed |
-| pow10_fast | 0.0022 | 0.0002 | Shift-only scaling |
+| log2 | 0.0408 | 0.0003 | shift/add only for speed |
+| pow2 | 0.0021 | 0.0004 | shift/add only for speed |
+| ln, log10 | 0.0677 | 0.0003 | shift/add only for speed |
+| exp | 0.0025 | 0.0001 | shift/add only for speed |
+| exp_fast | 0.0104 | 0.0011 | Shift-only scaling |
+| pow10 | 0.0025 | 0.0002 | shift/add only for speed |
+| pow10_fast | 0.0154 | 0.0024 | Shift-only scaling |
 | hypot (exact) | 0.0000 | 0.0000 | Uses 64-bit intermediate |
-| hypot_fast8 (8-seg) | 0.0915 | 0.0320 | Shift-only, no multiply |
+| hypot_fast8 (8-seg) | 0.1373 | 0.0185 | Shift-only, no multiply |
 
-*Relative error; reference clamped to 1% of full-scale output.
+*Relative error; reference clamped to 1% of full-scale output. Every s15.16 input in each function's domain, nothing skipped (tests/test_tdd.cpp section 14).
 <!-- ACCURACY_TABLE_END -->
 
 ## What's in the box
@@ -209,7 +210,8 @@ FR_printNumD(my_putchar, FR2I(lg, R), 4); /* prints "   9" (integer)*/
 See [getting-started.md](getting-started.md) for a complete
 walkthrough, or jump straight to
 [fixed-point-primer.md](fixed-point-primer.md) if you want to
-understand *how* the radix notation works first.
+understand *how* the radix notation works first. [approximations.md](approximations.md)
+explains how the math functions themselves are built.
 
 ## Comparison
 
@@ -221,7 +223,7 @@ understand *how* the radix notation works first.
 | Multiply-free option | No | No | Yes (e.g. `FR_EXP_FAST`, `FR_hypot_fast8`) |
 | Wave generators | No | No | 6 shapes + ADSR |
 | Dependencies | None | ARM only | None |
-| Code size (Cortex-M0, -Os) | 2.4 KB | ~40 KB+ | 3.4 KB lean / 5.7 KB full |
+| Code size (Cortex-M0, -Os) | 2.4 KB | ~40 KB+ | 3.6 KB lean / 6.3 KB full |
 
 Sizes measured with `arm-none-eabi-gcc -mcpu=cortex-m0 -mthumb -Os`.
 libfixmath covers trig/sqrt/exp in Q16.16 only; FR_Math includes

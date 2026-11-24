@@ -948,6 +948,9 @@ answer is almost always "track the radix more carefully"
 or "watch for the intermediate product". For everything
 else:
 
+- **[How the Approximations Work](approximations.md)**
+  — the next step: how sin, log, exp and sqrt are computed in
+  integers, and where each function's error comes from.
 - **[API Reference](api-reference.md)**
   — every public symbol with its radix, inputs, outputs,
   error sentinels, and worst-case error.

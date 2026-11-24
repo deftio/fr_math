@@ -1,11 +1,27 @@
 /*
  * benchmark.cpp — FR_math vs libfixmath comparison
  *
- * WARNING: This file lives in .compare/ and must NOT touch any
+ * WARNING: This file lives in compare_lfm/ and must NOT touch any
  *          files outside this directory.
  *
  * Both libraries use Q16.16 (s15.16) fixed-point: 1.0 = 65536.
- * We compare: speed (wall-clock ns per call) and accuracy (vs double).
+ * We compare: speed (ns per call) and accuracy (vs double).
+ *
+ * Accuracy: every Q16.16 input in each function's domain (see the
+ * "sweep" column); 2-input functions use every pair on a stated grid.
+ * Nothing in a domain is skipped: zero crossings, tan poles and domain
+ * edges are all included.
+ *
+ * Error measure: |got - exact| / max(|exact|, 1.0), in %. For outputs
+ * with |exact| <= 1 that is the absolute error (1 LSB = 0.0015 %); above
+ * 1 it is the relative error. Where the exact value is outside the
+ * Q16.16 range (tan near a pole), a saturated result of the right sign
+ * (|got| >= 0x7FFF0000, or libfixmath's fix16_overflow sentinel for a
+ * negative value) counts as exact; those points are counted in "sat".
+ * Max LSB = max |got - exact| in Q16.16 LSBs (huge for tan near poles in
+ * both libraries, since the exact value there is huge).
+ *
+ * Timing: mean ns/call over the whole input set, min of 3 passes.
  *
  * Output:
  *   stdout → JSON  (machine-readable)
@@ -22,7 +38,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
-#include <cfloat>
+#include <functional>
 
 /* ---- FR_math ---- */
 extern "C" {
@@ -33,769 +49,251 @@ extern "C" {
 /* ---- libfixmath ---- */
 #include "fixmath.h"
 
-/* ================================================================
- * Helpers
- * ================================================================ */
-
 static const int RADIX = 16;                    /* s15.16 */
-static const int32_t ONE = (1 << RADIX);        /* 65536  */
+static const double ONE = 65536.0;
+static const double Q16_LSB = 1.0 / ONE;
 
-/* Separate counts for accuracy (many points) and timing (tight loop) */
-static const int N_ACCURACY = 65536;
-static const int N_TIMING   = 100000;
+static inline double q16_to_dbl(int32_t v) { return (double)v / ONE; }
+static inline int32_t dbl_to_q16(double d) { return (int32_t)std::lround(d * ONE); }
 
-/* Near-zero threshold for relative error — skip |ref| < 0.01 to avoid
- * misleading spikes (1/0.01 = 100x max amplification). Matches the
- * threshold used in the TDD characterization suite. */
-static const double REL_THRESH = 0.01;
-
-/* Convert Q16.16 to double */
-static inline double q16_to_dbl(int32_t v) {
-    return (double)v / (double)ONE;
-}
-
-/* Convert double to Q16.16 */
-static inline int32_t dbl_to_q16(double d) {
-    return (int32_t)(d * ONE + (d >= 0 ? 0.5 : -0.5));
-}
-
-/* High-resolution timer returning nanoseconds */
 static inline int64_t now_ns() {
     return std::chrono::duration_cast<std::chrono::nanoseconds>(
-        std::chrono::high_resolution_clock::now().time_since_epoch()
-    ).count();
+        std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
 /* ================================================================
- * Test-point generators (in Q16.16)
+ * Inputs
  * ================================================================ */
 
-/* Angle inputs in radians Q16.16: sweep -pi to +pi */
-static std::vector<int32_t> make_angle_inputs(int n) {
-    std::vector<int32_t> v(n);
-    double lo = -M_PI, hi = M_PI;
-    for (int i = 0; i < n; i++) {
-        double t = lo + (hi - lo) * i / (n - 1);
-        v[i] = dbl_to_q16(t);
-    }
+/* every raw Q16.16 value in [lo, hi] */
+static std::vector<int32_t> every(double lo, double hi) {
+    int64_t a = (int64_t)std::ceil(lo * ONE), b = (int64_t)std::floor(hi * ONE);
+    std::vector<int32_t> v;
+    v.reserve((size_t)(b - a + 1));
+    for (int64_t x = a; x <= b; x++) v.push_back((int32_t)x);
     return v;
 }
 
-/* Inputs in [-0.999, +0.999] Q16.16 for asin/acos */
-static std::vector<int32_t> make_unit_inputs(int n) {
-    std::vector<int32_t> v(n);
-    double lo = -0.999, hi = 0.999;
-    for (int i = 0; i < n; i++) {
-        double t = lo + (hi - lo) * i / (n - 1);
-        v[i] = dbl_to_q16(t);
-    }
-    return v;
-}
-
-/* Positive inputs (0.01 .. 100) for sqrt / log */
-static std::vector<int32_t> make_pos_inputs(int n) {
-    std::vector<int32_t> v(n);
-    double lo = 0.01, hi = 100.0;
-    for (int i = 0; i < n; i++) {
-        double t = lo + (hi - lo) * i / (n - 1);
-        v[i] = dbl_to_q16(t);
-    }
-    return v;
-}
-
-/* General multiply/divide inputs: moderate range to avoid overflow */
-static std::vector<int32_t> make_arith_inputs(int n) {
-    std::vector<int32_t> v(n);
-    double lo = -50.0, hi = 50.0;
-    for (int i = 0; i < n; i++) {
-        double t = lo + (hi - lo) * i / (n - 1);
-        v[i] = dbl_to_q16(t);
-    }
-    return v;
-}
-
-/* exp inputs: small range to avoid overflow (e^x grows fast) */
-static std::vector<int32_t> make_exp_inputs(int n) {
-    std::vector<int32_t> v(n);
-    double lo = -5.0, hi = 5.0;
-    for (int i = 0; i < n; i++) {
-        double t = lo + (hi - lo) * i / (n - 1);
-        v[i] = dbl_to_q16(t);
-    }
-    return v;
-}
-
-/* atan2 inputs: 360° sweep at multiple radii, all 4 quadrants.
- * Returns parallel (x, y) vectors of length n. */
-static void make_atan2_inputs(int n, std::vector<int32_t>& x_out,
-                              std::vector<int32_t>& y_out) {
-    x_out.resize(n);
-    y_out.resize(n);
-    /* 5 radii, n/5 angles each */
-    double radii[] = {0.1, 1.0, 10.0, 100.0, 1000.0};
-    int nrad = 5;
-    int per_r = n / nrad;
-    int idx = 0;
-    for (int ri = 0; ri < nrad; ri++) {
-        double r = radii[ri];
-        for (int ai = 0; ai < per_r && idx < n; ai++, idx++) {
-            double angle = -M_PI + 2.0 * M_PI * ai / per_r;
-            x_out[idx] = dbl_to_q16(r * std::cos(angle));
-            y_out[idx] = dbl_to_q16(r * std::sin(angle));
+/* every (a, b) on an n x n grid over [alo, ahi] x [blo, bhi] */
+static void grid(int n, double alo, double ahi, double blo, double bhi,
+                 std::vector<int32_t>& a, std::vector<int32_t>& b) {
+    a.clear(); b.clear();
+    for (int i = 0; i < n; i++)
+        for (int j = 0; j < n; j++) {
+            a.push_back(dbl_to_q16(alo + (ahi - alo) * i / (n - 1)));
+            b.push_back(dbl_to_q16(blo + (bhi - blo) * j / (n - 1)));
         }
-    }
-    /* fill remaining */
-    for (; idx < n; idx++) {
-        x_out[idx] = dbl_to_q16(1.0);
-        y_out[idx] = dbl_to_q16(1.0);
-    }
+}
+
+/* every raw (y, x) in [-512, 511]^2, times 2^0, 2^8 and 2^14 (magnitudes
+ * from 1 LSB to 512.0), for atan2 and hypot */
+static void pairs(std::vector<int32_t>& y, std::vector<int32_t>& x) {
+    y.clear(); x.clear();
+    static const int scale[] = {0, 8, 14};
+    for (int s : scale)
+        for (int32_t i = -512; i < 512; i++)
+            for (int32_t j = -512; j < 512; j++) {
+                y.push_back(i * (1 << s));
+                x.push_back(j * (1 << s));
+            }
 }
 
 /* ================================================================
  * Error measurement
  * ================================================================ */
 
-static const double Q16_LSB = 1.0 / (double)ONE;  /* 1.52587890625e-5 */
-
 struct ErrorStats {
-    double max_abs_err;    /* max |fixed - double_ref| in real units */
-    double mean_abs_err;
-    double max_lsb_err;    /* max error expressed in Q16.16 LSBs */
-    double mean_lsb_err;
-    double max_rel_err;    /* max |fixed - double_ref| / |double_ref| (%) */
-    double mean_rel_err;   /* skips |ref| < REL_THRESH to avoid inf */
-    int    count;
-    int    rel_count;      /* how many points contributed to rel_err */
+    double max_pct = 0, mean_pct = 0;   /* |err| / max(|exact|, 1), % */
+    double max_lsb = 0;                 /* |err| in Q16.16 LSBs */
+    double worst_in = 0;                /* input at max_pct */
+    long   count = 0, sat = 0;
 };
 
 static ErrorStats compute_errors(const std::vector<double>& ref,
-                                 const std::vector<int32_t>& fixed) {
-    ErrorStats s = {};
-    double sum_abs = 0, sum_lsb = 0, sum_rel = 0;
-    int rel_count = 0;
-    int n = (int)ref.size();
-    for (int i = 0; i < n; i++) {
-        double got = q16_to_dbl(fixed[i]);
-        double err = std::fabs(got - ref[i]);
-        double lsb = err / Q16_LSB;
-        sum_abs += err;
-        sum_lsb += lsb;
-        if (err > s.max_abs_err) s.max_abs_err = err;
-        if (lsb > s.max_lsb_err) s.max_lsb_err = lsb;
-        if (std::fabs(ref[i]) > REL_THRESH) {
-            double rel = err / std::fabs(ref[i]) * 100.0;
-            sum_rel += rel;
-            if (rel > s.max_rel_err) s.max_rel_err = rel;
-            rel_count++;
+                                 const std::vector<int32_t>& got,
+                                 const std::vector<double>& in) {
+    ErrorStats s;
+    double sum = 0;
+    for (size_t i = 0; i < ref.size(); i++) {
+        double e;
+        if (std::fabs(ref[i]) * ONE >= 2147483647.0) {
+            int32_t g = got[i];
+            bool ok = (ref[i] > 0) ? (g >= 0x7FFF0000)
+                                   : (g <= -0x7FFF0000 || g == (int32_t)0x80000000);
+            s.sat++;
+            e = ok ? 0.0 : 100.0;
+        } else {
+            double d = std::fabs(q16_to_dbl(got[i]) - ref[i]);
+            double lsb = d / Q16_LSB;
+            if (lsb > s.max_lsb) s.max_lsb = lsb;
+            e = 100.0 * d / std::max(std::fabs(ref[i]), 1.0);
         }
+        sum += e;
+        if (e > s.max_pct) { s.max_pct = e; s.worst_in = in[i]; }
     }
-    s.count = n;
-    s.rel_count = rel_count;
-    s.mean_abs_err = sum_abs / n;
-    s.mean_lsb_err = sum_lsb / n;
-    s.mean_rel_err = rel_count > 0 ? sum_rel / rel_count : 0;
+    s.count = (long)ref.size();
+    s.mean_pct = s.count ? sum / s.count : 0;
     return s;
 }
 
 /* ================================================================
- * Per-function benchmark runner
+ * Runner
  * ================================================================ */
 
 struct BenchResult {
-    std::string name;
-    std::string gold_ref;          /* math.h function used as gold standard */
-    double fr_ns_per_call;
-    double lfm_ns_per_call;        /* -1 if libfixmath has no equivalent */
-    ErrorStats fr_err;
-    ErrorStats lfm_err;
-    std::string note = {};         /* optional per-function note */
-    std::string sweep = {};        /* sweep description for table */
+    std::string name, gold_ref;
+    double fr_ns = 0, lfm_ns = -1;      /* lfm_ns < 0: no libfixmath equivalent */
+    ErrorStats fr_err, lfm_err;
+    std::string note, sweep;
 };
 
-/* Prevent compiler from optimizing away the result */
 static volatile int32_t sink;
 
-/* ================================================================
- * Timing helper — runs a function N_TIMING times, returns ns/call.
- * Uses 3 passes and takes the minimum to reduce variance.
- * ================================================================ */
-template<typename Fn>
-static double time_fn(Fn fn) {
-    /* warm-up */
-    for (int i = 0; i < 1000; i++) sink = fn();
-
+/* mean ns/call over all n inputs; min of 3 passes */
+static double time_all(size_t n, const std::function<int32_t(size_t)>& fn) {
+    for (size_t i = 0; i < std::min<size_t>(n, 4096); i++) sink = fn(i);   /* warm-up */
     double best = 1e18;
     for (int pass = 0; pass < 3; pass++) {
         int64_t t0 = now_ns();
-        for (int i = 0; i < N_TIMING; i++)
-            sink = fn();
-        int64_t t1 = now_ns();
-        double ns = (double)(t1 - t0) / N_TIMING;
-        if (ns < best) best = ns;
+        for (size_t i = 0; i < n; i++) sink = fn(i);
+        double ns = (double)(now_ns() - t0) / (double)n;
+        best = std::min(best, ns);
     }
     return best;
 }
 
-/* ================================================================
- * Individual benchmarks
- * ================================================================ */
 
-static BenchResult bench_sin() {
-    auto inputs = make_angle_inputs(N_ACCURACY);
-    int n = N_ACCURACY;
-
-    std::vector<double> ref(n);
-    for (int i = 0; i < n; i++)
-        ref[i] = std::sin(q16_to_dbl(inputs[i]));
-
-    std::vector<int32_t> fr_out(n), lfm_out(n);
-    for (int i = 0; i < n; i++) fr_out[i] = fr_sin(inputs[i], RADIX);
-    for (int i = 0; i < n; i++) lfm_out[i] = fix16_sin(inputs[i]);
-
-    int ti = 0;
-    double fr_ns  = time_fn([&]{ return fr_sin(inputs[ti++ % n], RADIX); });
-    ti = 0;
-    double lfm_ns = time_fn([&]{ return fix16_sin(inputs[ti++ % n]); });
-
-    return {"sin", "std::sin", fr_ns, lfm_ns,
-            compute_errors(ref, fr_out), compute_errors(ref, lfm_out),
-            {}, "65536-pt, [-pi, +pi]"};
-}
-
-static BenchResult bench_cos() {
-    auto inputs = make_angle_inputs(N_ACCURACY);
-    int n = N_ACCURACY;
-
-    std::vector<double> ref(n);
-    for (int i = 0; i < n; i++)
-        ref[i] = std::cos(q16_to_dbl(inputs[i]));
-
-    std::vector<int32_t> fr_out(n), lfm_out(n);
-    for (int i = 0; i < n; i++) fr_out[i] = fr_cos(inputs[i], RADIX);
-    for (int i = 0; i < n; i++) lfm_out[i] = fix16_cos(inputs[i]);
-
-    int ti = 0;
-    double fr_ns  = time_fn([&]{ return fr_cos(inputs[ti++ % n], RADIX); });
-    ti = 0;
-    double lfm_ns = time_fn([&]{ return fix16_cos(inputs[ti++ % n]); });
-
-    return {"cos", "std::cos", fr_ns, lfm_ns,
-            compute_errors(ref, fr_out), compute_errors(ref, lfm_out),
-            {}, "65536-pt, [-pi, +pi]"};
-}
-
-static BenchResult bench_tan() {
-    /* Avoid near ±pi/2 where tan explodes */
-    int n = N_ACCURACY;
-    std::vector<int32_t> inputs(n);
-    double lo = -1.2, hi = 1.2;
-    for (int i = 0; i < n; i++)
-        inputs[i] = dbl_to_q16(lo + (hi - lo) * i / (n - 1));
-
-    std::vector<double> ref(n);
-    for (int i = 0; i < n; i++)
-        ref[i] = std::tan(q16_to_dbl(inputs[i]));
-
-    std::vector<int32_t> fr_out(n), lfm_out(n);
-    for (int i = 0; i < n; i++) fr_out[i] = fr_tan(inputs[i], RADIX);
-    for (int i = 0; i < n; i++) lfm_out[i] = fix16_tan(inputs[i]);
-
-    int ti = 0;
-    double fr_ns  = time_fn([&]{ return fr_tan(inputs[ti++ % n], RADIX); });
-    ti = 0;
-    double lfm_ns = time_fn([&]{ return fix16_tan(inputs[ti++ % n]); });
-
-    return {"tan", "std::tan", fr_ns, lfm_ns,
-            compute_errors(ref, fr_out), compute_errors(ref, lfm_out),
-            "Skip near pi/2", "65536-pt, [-1.2, 1.2] rad"};
-}
-
-static BenchResult bench_asin() {
-    auto inputs = make_unit_inputs(N_ACCURACY);
-    int n = N_ACCURACY;
-
-    std::vector<double> ref(n);
-    for (int i = 0; i < n; i++)
-        ref[i] = std::asin(q16_to_dbl(inputs[i]));
-
-    std::vector<int32_t> fr_out(n), lfm_out(n);
-    for (int i = 0; i < n; i++) fr_out[i] = FR_asin(inputs[i], RADIX, RADIX);
-    for (int i = 0; i < n; i++) lfm_out[i] = fix16_asin(inputs[i]);
-
-    int ti = 0;
-    double fr_ns  = time_fn([&]{ return FR_asin(inputs[ti++ % n], RADIX, RADIX); });
-    ti = 0;
-    double lfm_ns = time_fn([&]{ return fix16_asin(inputs[ti++ % n]); });
-
-    return {"asin", "std::asin", fr_ns, lfm_ns,
-            compute_errors(ref, fr_out), compute_errors(ref, lfm_out),
-            {}, "65536-pt, [-0.999, 0.999]"};
-}
-
-static BenchResult bench_acos() {
-    auto inputs = make_unit_inputs(N_ACCURACY);
-    int n = N_ACCURACY;
-
-    std::vector<double> ref(n);
-    for (int i = 0; i < n; i++)
-        ref[i] = std::acos(q16_to_dbl(inputs[i]));
-
-    std::vector<int32_t> fr_out(n), lfm_out(n);
-    for (int i = 0; i < n; i++) fr_out[i] = FR_acos(inputs[i], RADIX, RADIX);
-    for (int i = 0; i < n; i++) lfm_out[i] = fix16_acos(inputs[i]);
-
-    int ti = 0;
-    double fr_ns  = time_fn([&]{ return FR_acos(inputs[ti++ % n], RADIX, RADIX); });
-    ti = 0;
-    double lfm_ns = time_fn([&]{ return fix16_acos(inputs[ti++ % n]); });
-
-    return {"acos", "std::acos", fr_ns, lfm_ns,
-            compute_errors(ref, fr_out), compute_errors(ref, lfm_out),
-            {}, "65536-pt, [-0.999, 0.999]"};
-}
-
-static BenchResult bench_atan() {
-    auto inputs = make_arith_inputs(N_ACCURACY);
-    int n = N_ACCURACY;
-
-    std::vector<double> ref(n);
-    for (int i = 0; i < n; i++)
-        ref[i] = std::atan(q16_to_dbl(inputs[i]));
-
-    std::vector<int32_t> fr_out(n), lfm_out(n);
-    for (int i = 0; i < n; i++) fr_out[i] = FR_atan(inputs[i], RADIX, RADIX);
-    for (int i = 0; i < n; i++) lfm_out[i] = fix16_atan(inputs[i]);
-
-    int ti = 0;
-    double fr_ns  = time_fn([&]{ return FR_atan(inputs[ti++ % n], RADIX, RADIX); });
-    ti = 0;
-    double lfm_ns = time_fn([&]{ return fix16_atan(inputs[ti++ % n]); });
-
-    return {"atan", "std::atan", fr_ns, lfm_ns,
-            compute_errors(ref, fr_out), compute_errors(ref, lfm_out),
-            {}, "65536-pt, [-50, 50]"};
-}
-
-static BenchResult bench_atan2() {
-    int n = N_ACCURACY;
-    std::vector<int32_t> x_in, y_in;
-    make_atan2_inputs(n, x_in, y_in);
-
-    std::vector<double> ref(n);
-    for (int i = 0; i < n; i++)
-        ref[i] = std::atan2(q16_to_dbl(y_in[i]), q16_to_dbl(x_in[i]));
-
-    std::vector<int32_t> fr_out(n), lfm_out(n);
-    for (int i = 0; i < n; i++) fr_out[i] = FR_atan2(y_in[i], x_in[i], RADIX);
-    for (int i = 0; i < n; i++) lfm_out[i] = fix16_atan2(y_in[i], x_in[i]);
-
-    int ti = 0;
-    double fr_ns  = time_fn([&]{ int j = ti++ % n; return FR_atan2(y_in[j], x_in[j], RADIX); });
-    ti = 0;
-    double lfm_ns = time_fn([&]{ int j = ti++ % n; return fix16_atan2(y_in[j], x_in[j]); });
-
-    return {"atan2", "std::atan2", fr_ns, lfm_ns,
-            compute_errors(ref, fr_out), compute_errors(ref, lfm_out),
-            "All 4 quadrants", "65536-pt, 5 radii x 360 deg"};
-}
-
-static BenchResult bench_sqrt() {
-    auto inputs = make_pos_inputs(N_ACCURACY);
-    int n = N_ACCURACY;
-
-    std::vector<double> ref(n);
-    for (int i = 0; i < n; i++)
-        ref[i] = std::sqrt(q16_to_dbl(inputs[i]));
-
-    std::vector<int32_t> fr_out(n), lfm_out(n);
-    for (int i = 0; i < n; i++) fr_out[i] = FR_sqrt(inputs[i], RADIX);
-    for (int i = 0; i < n; i++) lfm_out[i] = fix16_sqrt(inputs[i]);
-
-    int ti = 0;
-    double fr_ns  = time_fn([&]{ return FR_sqrt(inputs[ti++ % n], RADIX); });
-    ti = 0;
-    double lfm_ns = time_fn([&]{ return fix16_sqrt(inputs[ti++ % n]); });
-
-    return {"sqrt", "std::sqrt", fr_ns, lfm_ns,
-            compute_errors(ref, fr_out), compute_errors(ref, lfm_out),
-            {}, "65536-pt, [0.01, 100]"};
-}
-
-static BenchResult bench_exp() {
-    auto inputs = make_exp_inputs(N_ACCURACY);
-    int n = N_ACCURACY;
-
-    std::vector<double> ref(n);
-    for (int i = 0; i < n; i++)
-        ref[i] = std::exp(q16_to_dbl(inputs[i]));
-
-    std::vector<int32_t> fr_out(n), lfm_out(n);
-    for (int i = 0; i < n; i++) fr_out[i] = FR_EXP(inputs[i], RADIX);
-    for (int i = 0; i < n; i++) lfm_out[i] = fix16_exp(inputs[i]);
-
-    int ti = 0;
-    double fr_ns  = time_fn([&]{ return FR_EXP(inputs[ti++ % n], RADIX); });
-    ti = 0;
-    double lfm_ns = time_fn([&]{ return fix16_exp(inputs[ti++ % n]); });
-
-    return {"exp", "std::exp", fr_ns, lfm_ns,
-            compute_errors(ref, fr_out), compute_errors(ref, lfm_out),
-            {}, "65536-pt, [-5, 5]"};
-}
-
-static BenchResult bench_log() {
-    auto inputs = make_pos_inputs(N_ACCURACY);
-    int n = N_ACCURACY;
-
-    std::vector<double> ref(n);
-    for (int i = 0; i < n; i++)
-        ref[i] = std::log(q16_to_dbl(inputs[i]));
-
-    std::vector<int32_t> fr_out(n), lfm_out(n);
-    for (int i = 0; i < n; i++) fr_out[i] = FR_ln(inputs[i], RADIX, RADIX);
-    for (int i = 0; i < n; i++) lfm_out[i] = fix16_log(inputs[i]);
-
-    int ti = 0;
-    double fr_ns  = time_fn([&]{ return FR_ln(inputs[ti++ % n], RADIX, RADIX); });
-    ti = 0;
-    double lfm_ns = time_fn([&]{ return fix16_log(inputs[ti++ % n]); });
-
-    return {"ln", "std::log", fr_ns, lfm_ns,
-            compute_errors(ref, fr_out), compute_errors(ref, lfm_out),
-            {}, "65536-pt, [0.01, 100]"};
-}
-
-static BenchResult bench_log2() {
-    auto inputs = make_pos_inputs(N_ACCURACY);
-    int n = N_ACCURACY;
-
-    std::vector<double> ref(n);
-    for (int i = 0; i < n; i++)
-        ref[i] = std::log2(q16_to_dbl(inputs[i]));
-
-    std::vector<int32_t> fr_out(n), lfm_out(n);
-    for (int i = 0; i < n; i++) fr_out[i] = FR_log2(inputs[i], RADIX, RADIX);
-    for (int i = 0; i < n; i++) lfm_out[i] = fix16_log2(inputs[i]);
-
-    int ti = 0;
-    double fr_ns  = time_fn([&]{ return FR_log2(inputs[ti++ % n], RADIX, RADIX); });
-    ti = 0;
-    double lfm_ns = time_fn([&]{ return fix16_log2(inputs[ti++ % n]); });
-
-    return {"log2", "std::log2", fr_ns, lfm_ns,
-            compute_errors(ref, fr_out), compute_errors(ref, lfm_out),
-            {}, "65536-pt, [0.01, 100]"};
-}
-
-static BenchResult bench_mul() {
-    int n = N_ACCURACY;
-    auto a_in = make_arith_inputs(n);
-    std::vector<int32_t> b_in(n);
-    for (int i = 0; i < n; i++)
-        b_in[i] = dbl_to_q16(-2.0 + 4.0 * i / (n - 1));
-
-    std::vector<double> ref(n);
-    for (int i = 0; i < n; i++)
-        ref[i] = q16_to_dbl(a_in[i]) * q16_to_dbl(b_in[i]);
-
-    std::vector<int32_t> fr_out(n), lfm_out(n);
-    for (int i = 0; i < n; i++) fr_out[i] = FR_FixMuls(a_in[i], b_in[i]);
-    for (int i = 0; i < n; i++) lfm_out[i] = fix16_mul(a_in[i], b_in[i]);
-
-    int ti = 0;
-    double fr_ns  = time_fn([&]{ int j = ti++ % n; return FR_FixMuls(a_in[j], b_in[j]); });
-    ti = 0;
-    double lfm_ns = time_fn([&]{ int j = ti++ % n; return fix16_mul(a_in[j], b_in[j]); });
-
-    return {"mul", "double a*b", fr_ns, lfm_ns,
-            compute_errors(ref, fr_out), compute_errors(ref, lfm_out),
-            {}, "65536-pt, a in [-50,50], b in [-2,2]"};
-}
-
-static BenchResult bench_div() {
-    int n = N_ACCURACY;
-    std::vector<int32_t> a_in(n), b_in(n);
-    for (int i = 0; i < n; i++) {
-        a_in[i] = dbl_to_q16(-50.0 + 100.0 * i / (n - 1));
-        b_in[i] = dbl_to_q16(0.5 + 49.5 * i / (n - 1));
+/* one-input function */
+static BenchResult run1(const char *name, const char *gold, const char *sweep,
+                        const std::vector<int32_t>& in, double (*ref_fn)(double),
+                        const std::function<int32_t(int32_t)>& fr,
+                        const std::function<int32_t(int32_t)>& lfm,
+                        const char *note = "") {
+    size_t n = in.size();
+    std::vector<double> ref(n), x(n);
+    std::vector<int32_t> fo(n), lo(n);
+    for (size_t i = 0; i < n; i++) { x[i] = q16_to_dbl(in[i]); ref[i] = ref_fn(x[i]); }
+    for (size_t i = 0; i < n; i++) fo[i] = fr(in[i]);
+    BenchResult b;
+    b.name = name; b.gold_ref = gold; b.sweep = sweep; b.note = note;
+    b.fr_err = compute_errors(ref, fo, x);
+    b.fr_ns = time_all(n, [&](size_t i) { return fr(in[i]); });
+    if (lfm) {
+        for (size_t i = 0; i < n; i++) lo[i] = lfm(in[i]);
+        b.lfm_err = compute_errors(ref, lo, x);
+        b.lfm_ns = time_all(n, [&](size_t i) { return lfm(in[i]); });
     }
-
-    std::vector<double> ref(n);
-    for (int i = 0; i < n; i++)
-        ref[i] = q16_to_dbl(a_in[i]) / q16_to_dbl(b_in[i]);
-
-    std::vector<int32_t> fr_out(n), lfm_out(n);
-    for (int i = 0; i < n; i++) fr_out[i] = FR_DIV(a_in[i], RADIX, b_in[i], RADIX);
-    for (int i = 0; i < n; i++) lfm_out[i] = fix16_div(a_in[i], b_in[i]);
-
-    int ti = 0;
-    double fr_ns  = time_fn([&]{ int j = ti++ % n; return FR_DIV(a_in[j], RADIX, b_in[j], RADIX); });
-    ti = 0;
-    double lfm_ns = time_fn([&]{ int j = ti++ % n; return fix16_div(a_in[j], b_in[j]); });
-
-    return {"div", "double a/b", fr_ns, lfm_ns,
-            compute_errors(ref, fr_out), compute_errors(ref, lfm_out),
-            "Both use 64-bit intermediate", "65536-pt, a/b in [-50,50]/[0.5,50]"};
+    return b;
 }
 
-/* --- FR_math-only benchmarks (libfixmath has no equivalent) --- */
-
-static BenchResult bench_hypot() {
-    int n = N_ACCURACY;
-    std::vector<int32_t> x_in, y_in;
-    make_atan2_inputs(n, x_in, y_in);
-
-    std::vector<double> ref(n);
-    for (int i = 0; i < n; i++)
-        ref[i] = std::hypot(q16_to_dbl(x_in[i]), q16_to_dbl(y_in[i]));
-
-    std::vector<int32_t> fr_out(n);
-    for (int i = 0; i < n; i++) fr_out[i] = FR_hypot(x_in[i], y_in[i], RADIX);
-
-    int ti = 0;
-    double fr_ns = time_fn([&]{ int j = ti++ % n; return FR_hypot(x_in[j], y_in[j], RADIX); });
-
-    /* dummy lfm_err (all zeros) */
-    ErrorStats lfm_err = {};
-
-    return {"hypot", "std::hypot", fr_ns, -1,
-            compute_errors(ref, fr_out), lfm_err,
-            "FR_math only (libfixmath has no hypot)", "65536-pt, 5 radii x 360 deg"};
+/* two-input function */
+static BenchResult run2(const char *name, const char *gold, const char *sweep,
+                        const std::vector<int32_t>& a, const std::vector<int32_t>& c,
+                        double (*ref_fn)(double, double),
+                        const std::function<int32_t(int32_t, int32_t)>& fr,
+                        const std::function<int32_t(int32_t, int32_t)>& lfm,
+                        const char *note = "") {
+    size_t n = a.size();
+    std::vector<double> ref(n), x(n);
+    std::vector<int32_t> fo(n), lo(n);
+    for (size_t i = 0; i < n; i++) { x[i] = q16_to_dbl(a[i]); ref[i] = ref_fn(q16_to_dbl(a[i]), q16_to_dbl(c[i])); }
+    for (size_t i = 0; i < n; i++) fo[i] = fr(a[i], c[i]);
+    BenchResult b;
+    b.name = name; b.gold_ref = gold; b.sweep = sweep; b.note = note;
+    b.fr_err = compute_errors(ref, fo, x);
+    b.fr_ns = time_all(n, [&](size_t i) { return fr(a[i], c[i]); });
+    if (lfm) {
+        for (size_t i = 0; i < n; i++) lo[i] = lfm(a[i], c[i]);
+        b.lfm_err = compute_errors(ref, lo, x);
+        b.lfm_ns = time_all(n, [&](size_t i) { return lfm(a[i], c[i]); });
+    }
+    return b;
 }
 
-static BenchResult bench_hypot_fast8() {
-    int n = N_ACCURACY;
-    std::vector<int32_t> x_in, y_in;
-    make_atan2_inputs(n, x_in, y_in);
-
-    std::vector<double> ref(n);
-    for (int i = 0; i < n; i++)
-        ref[i] = std::hypot(q16_to_dbl(x_in[i]), q16_to_dbl(y_in[i]));
-
-    std::vector<int32_t> fr_out(n);
-    for (int i = 0; i < n; i++) fr_out[i] = FR_hypot_fast8(x_in[i], y_in[i]);
-
-    int ti = 0;
-    double fr_ns = time_fn([&]{ int j = ti++ % n; return FR_hypot_fast8(x_in[j], y_in[j]); });
-
-    ErrorStats lfm_err = {};
-
-    return {"hypot_fast8", "std::hypot", fr_ns, -1,
-            compute_errors(ref, fr_out), lfm_err,
-            "FR_math only; shift-only, no multiply", "65536-pt, 5 radii x 360 deg"};
-}
+static double d_mul(double a, double b) { return a * b; }
+static double d_div(double a, double b) { return a / b; }
+static double d_atan2(double y, double x) { return std::atan2(y, x); }
+static double d_hypot(double x, double y) { return std::hypot(x, y); }
+static double d_tan(double x) { return std::tan(x); }
 
 /* ================================================================
- * JSON output
+ * Output
  * ================================================================ */
 
 static void emit_json(FILE *f, const std::vector<BenchResult>& results) {
     fprintf(f, "{\n");
-    fprintf(f, "  \"description\": \"FR_math vs libfixmath benchmark — both measured against math.h double precision (IEEE 754)\",\n");
-    fprintf(f, "  \"gold_standard\": \"<cmath> IEEE 754 double precision (~15 significant digits)\",\n");
+    fprintf(f, "  \"description\": \"FR_math vs libfixmath, every Q16.16 input in each domain, vs IEEE 754 double\",\n");
     fprintf(f, "  \"fixed_point_format\": \"Q16.16 (s15.16), 1 LSB = %.14e\",\n", Q16_LSB);
-    fprintf(f, "  \"accuracy_points\": %d,\n", N_ACCURACY);
-    fprintf(f, "  \"timing_iterations\": %d,\n", N_TIMING);
-    fprintf(f, "  \"rel_error_threshold\": %.2f,\n", REL_THRESH);
-    fprintf(f, "  \"platform\": \"macOS ARM (Apple Silicon)\",\n");
-    fprintf(f, "  \"optimization\": \"-O2\",\n");
+    fprintf(f, "  \"error_measure\": \"|got - exact| / max(|exact|, 1.0) in %%; saturated results beyond the Q16.16 range count as exact\",\n");
+    fprintf(f, "  \"timing\": \"mean ns/call over the whole input set, min of 3 passes\",\n");
     fprintf(f, "  \"results\": [\n");
-
     for (size_t r = 0; r < results.size(); r++) {
-        const auto& b = results[r];
-        fprintf(f, "    {\n");
-        fprintf(f, "      \"function\": \"%s\",\n", b.name.c_str());
-        fprintf(f, "      \"double_reference\": \"%s\",\n", b.gold_ref.c_str());
-        if (!b.sweep.empty())
-            fprintf(f, "      \"sweep\": \"%s\",\n", b.sweep.c_str());
-
-        /* speed */
-        fprintf(f, "      \"speed\": {\n");
-        fprintf(f, "        \"fr_math_ns_per_call\": %.1f", b.fr_ns_per_call);
-        if (b.lfm_ns_per_call >= 0) {
-            fprintf(f, ",\n        \"libfixmath_ns_per_call\": %.1f", b.lfm_ns_per_call);
-            double speedup = b.lfm_ns_per_call / b.fr_ns_per_call;
-            fprintf(f, ",\n        \"fr_math_speedup\": %.2f", speedup);
-            const char *faster = (speedup > 1.0) ? "fr_math" : "libfixmath";
-            fprintf(f, ",\n        \"faster\": \"%s\"", faster);
-        }
-        fprintf(f, "\n      },\n");
-
-        /* accuracy — fr_math */
-        fprintf(f, "      \"accuracy_vs_double\": {\n");
-        fprintf(f, "        \"fr_math\": {\n");
-        fprintf(f, "          \"max_abs_error\": %.8e,\n", b.fr_err.max_abs_err);
-        fprintf(f, "          \"mean_abs_error\": %.8e,\n", b.fr_err.mean_abs_err);
-        fprintf(f, "          \"max_error_lsb\": %.1f,\n", b.fr_err.max_lsb_err);
-        fprintf(f, "          \"mean_error_lsb\": %.1f,\n", b.fr_err.mean_lsb_err);
-        fprintf(f, "          \"max_rel_error_pct\": %.4f,\n", b.fr_err.max_rel_err);
-        fprintf(f, "          \"mean_rel_error_pct\": %.4f\n", b.fr_err.mean_rel_err);
-        fprintf(f, "        }");
-
-        if (b.lfm_ns_per_call >= 0) {
-            /* accuracy — libfixmath */
-            fprintf(f, ",\n        \"libfixmath\": {\n");
-            fprintf(f, "          \"max_abs_error\": %.8e,\n", b.lfm_err.max_abs_err);
-            fprintf(f, "          \"mean_abs_error\": %.8e,\n", b.lfm_err.mean_abs_err);
-            fprintf(f, "          \"max_error_lsb\": %.1f,\n", b.lfm_err.max_lsb_err);
-            fprintf(f, "          \"mean_error_lsb\": %.1f,\n", b.lfm_err.mean_lsb_err);
-            fprintf(f, "          \"max_rel_error_pct\": %.4f,\n", b.lfm_err.max_rel_err);
-            fprintf(f, "          \"mean_rel_error_pct\": %.4f\n", b.lfm_err.mean_rel_err);
-            fprintf(f, "        }");
-
-            const char *closer =
-                (b.fr_err.max_abs_err < b.lfm_err.max_abs_err) ? "fr_math" :
-                (b.fr_err.max_abs_err > b.lfm_err.max_abs_err) ? "libfixmath" : "tie";
-            fprintf(f, ",\n        \"closer_to_double\": \"%s\"", closer);
-        }
-        fprintf(f, "\n      }");
-
-        if (!b.note.empty())
-            fprintf(f, ",\n      \"note\": \"%s\"", b.note.c_str());
+        const BenchResult& b = results[r];
+        fprintf(f, "    {\n      \"function\": \"%s\",\n      \"double_reference\": \"%s\",\n", b.name.c_str(), b.gold_ref.c_str());
+        fprintf(f, "      \"sweep\": \"%s\",\n      \"inputs\": %ld,\n", b.sweep.c_str(), b.fr_err.count);
+        fprintf(f, "      \"fr_math\": { \"ns_per_call\": %.2f, \"max_err_pct\": %.6f, \"mean_err_pct\": %.6f, \"max_err_lsb\": %.1f, \"worst_input\": %.8f, \"saturated_points\": %ld }",
+                b.fr_ns, b.fr_err.max_pct, b.fr_err.mean_pct, b.fr_err.max_lsb, b.fr_err.worst_in, b.fr_err.sat);
+        if (b.lfm_ns >= 0)
+            fprintf(f, ",\n      \"libfixmath\": { \"ns_per_call\": %.2f, \"max_err_pct\": %.6f, \"mean_err_pct\": %.6f, \"max_err_lsb\": %.1f, \"worst_input\": %.8f, \"saturated_points\": %ld }",
+                    b.lfm_ns, b.lfm_err.max_pct, b.lfm_err.mean_pct, b.lfm_err.max_lsb, b.lfm_err.worst_in, b.lfm_err.sat);
+        if (!b.note.empty()) fprintf(f, ",\n      \"note\": \"%s\"", b.note.c_str());
         fprintf(f, "\n    }%s\n", (r + 1 < results.size()) ? "," : "");
     }
-
-    /* summary (head-to-head only, skip FR_math-only functions) */
-    fprintf(f, "  ],\n");
-    fprintf(f, "  \"summary\": {\n");
-
-    int fr_speed_wins = 0, lfm_speed_wins = 0;
-    int fr_closer = 0, lfm_closer = 0, ties = 0;
-    int h2h = 0;
-    for (auto& b : results) {
-        if (b.lfm_ns_per_call < 0) continue;
-        h2h++;
-        if (b.fr_ns_per_call < b.lfm_ns_per_call) fr_speed_wins++;
-        else lfm_speed_wins++;
-        if (b.fr_err.max_abs_err < b.lfm_err.max_abs_err) fr_closer++;
-        else if (b.fr_err.max_abs_err > b.lfm_err.max_abs_err) lfm_closer++;
-        else ties++;
-    }
-    fprintf(f, "    \"head_to_head_functions\": %d,\n", h2h);
-    fprintf(f, "    \"faster_wins\": { \"fr_math\": %d, \"libfixmath\": %d },\n",
-            fr_speed_wins, lfm_speed_wins);
-    fprintf(f, "    \"accuracy_wins\": { \"fr_math\": %d, \"libfixmath\": %d, \"tie\": %d },\n",
-            fr_closer, lfm_closer, ties);
-    fprintf(f, "    \"total_functions_tested\": %d\n", (int)results.size());
-    fprintf(f, "  },\n");
-    fprintf(f, "  \"notes\": [\n");
-    fprintf(f, "    \"All accuracy measured vs IEEE 754 double. Lower = closer to perfect.\",\n");
-    fprintf(f, "    \"LSB = Q16.16 least-significant-bit = 1.53e-5. Best possible = 0.5 LSB.\",\n");
-    fprintf(f, "    \"Percent errors skip |ref| < %.2f to avoid near-zero division spikes.\",\n", REL_THRESH);
-    fprintf(f, "    \"Both libraries use Q16.16 (s15.16): 1.0 = 65536.\",\n");
-    fprintf(f, "    \"FR_math trig: BAM + 129-entry LUT + linear interpolation.\",\n");
-    fprintf(f, "    \"libfixmath trig: parabolic approximation + 5th-order correction.\",\n");
-    fprintf(f, "    \"Timing: min of 3 passes x %d calls; cache-warm.\",\n", N_TIMING);
-    fprintf(f, "    \"Speedup > 1.0 means FR_math is faster by that factor.\"\n");
-    fprintf(f, "  ],\n");
-
-    /* size comparison — compiled from the Makefile in this directory */
-    fprintf(f, "  \"compiled_size_note\": \"Run 'make size' in .compare/ for live numbers. The values below are representative.\",\n");
-    fprintf(f, "  \"compiled_size\": {\n");
-    fprintf(f, "    \"compiler\": \"clang -O2 (macOS ARM)\",\n");
-    fprintf(f, "    \"fr_math\": {\n");
-    fprintf(f, "      \"files\": \"FR_math.c (single file)\",\n");
-    fprintf(f, "      \"functions\": \"trig(6), inv-trig(4), log/ln/log10, exp/pow2/pow10, exp_fast/pow10_fast, sqrt, hypot(2), waves(6), ADSR(4), print(4), format\",\n");
-    fprintf(f, "      \"rom_bytes\": 7470,\n");
-    fprintf(f, "      \"ram_bss_bytes\": 0,\n");
-    fprintf(f, "      \"note\": \"All tables in const ROM. Zero runtime allocation.\"\n");
-    fprintf(f, "    },\n");
-    fprintf(f, "    \"libfixmath\": {\n");
-    fprintf(f, "      \"files\": \"fix16.c, fix16_sqrt.c, fix16_exp.c, fix16_trig.c, fix16_str.c, uint32.c, fract32.c\",\n");
-    fprintf(f, "      \"functions\": \"trig(6), inv-trig(4), log/log2, exp, sqrt, mul/div, str\",\n");
-    fprintf(f, "      \"rom_bytes\": 4912,\n");
-    fprintf(f, "      \"ram_bss_bytes\": 114688,\n");
-    fprintf(f, "      \"rom_bytes_no_cache\": 5476,\n");
-    fprintf(f, "      \"ram_bss_bytes_no_cache\": 0,\n");
-    fprintf(f, "      \"note\": \"Default mode caches 112 KB of sin/exp LUTs in BSS. FIXMATH_NO_CACHE eliminates RAM but recomputes per call.\"\n");
-    fprintf(f, "    }\n");
-    fprintf(f, "  }\n");
-    fprintf(f, "}\n");
+    fprintf(f, "  ]\n}\n");
 }
-
-/* ================================================================
- * Markdown summary table (to stderr for human reading)
- * ================================================================ */
 
 static void emit_markdown(FILE *f, const std::vector<BenchResult>& results) {
     fprintf(f, "\n## FR_math vs libfixmath — Q16.16 comparison\n\n");
-    fprintf(f, "All errors measured vs IEEE 754 double. Pct errors skip |ref| < 0.01.\n\n");
+    fprintf(f, "Every Q16.16 input in each domain (2-input functions: every pair on the stated grid),\n");
+    fprintf(f, "vs IEEE 754 double. Nothing is skipped. Error = |got - exact| / max(|exact|, 1.0);\n");
+    fprintf(f, "beyond the Q16.16 range (tan at its poles) a saturated result of the right sign counts as exact.\n\n");
 
-    /* --- Accuracy table --- */
     fprintf(f, "### Accuracy\n\n");
-    fprintf(f, "| Function | FR max LSB | FR max %%%% | FR avg %%%% | lfm max LSB | lfm max %%%% | lfm avg %%%% | Winner |\n");
-    fprintf(f, "|----------|----------:|---------:|---------:|----------:|---------:|---------:|--------|\n");
-
-    for (auto& b : results) {
-        const char *winner;
-        if (b.lfm_ns_per_call < 0) {
-            winner = "FR only";
-            fprintf(f, "| %-15s | %7.1f | %7.4f | %7.4f | %9s | %8s | %8s | %-8s |\n",
-                    b.name.c_str(),
-                    b.fr_err.max_lsb_err, b.fr_err.max_rel_err, b.fr_err.mean_rel_err,
-                    "---", "---", "---", winner);
-        } else {
-            bool fr_better_abs = b.fr_err.max_abs_err < b.lfm_err.max_abs_err;
-            bool lfm_better_abs = b.lfm_err.max_abs_err < b.fr_err.max_abs_err;
-            winner = fr_better_abs ? "FR" : lfm_better_abs ? "lfm" : "tie";
-            fprintf(f, "| %-15s | %7.1f | %7.4f | %7.4f | %9.1f | %7.4f | %7.4f | %-8s |\n",
-                    b.name.c_str(),
-                    b.fr_err.max_lsb_err, b.fr_err.max_rel_err, b.fr_err.mean_rel_err,
-                    b.lfm_err.max_lsb_err, b.lfm_err.max_rel_err, b.lfm_err.mean_rel_err,
-                    winner);
+    fprintf(f, "| Function | Inputs | Sweep | FR max %% | FR avg %% | lfm max %% | lfm avg %% | More accurate |\n");
+    fprintf(f, "|----------|-------:|-------|---------:|---------:|----------:|----------:|---------------|\n");
+    for (const BenchResult& b : results) {
+        if (b.lfm_ns < 0) {
+            fprintf(f, "| %s | %ld | %s | %.4f | %.4f | --- | --- | FR only |\n",
+                    b.name.c_str(), b.fr_err.count, b.sweep.c_str(), b.fr_err.max_pct, b.fr_err.mean_pct);
+            continue;
         }
+        const char *w = (b.fr_err.max_pct < b.lfm_err.max_pct) ? "FR"
+                      : (b.fr_err.max_pct > b.lfm_err.max_pct) ? "lfm" : "tie";
+        fprintf(f, "| %s | %ld | %s | %.4f | %.4f | %.4f | %.4f | %s |\n",
+                b.name.c_str(), b.fr_err.count, b.sweep.c_str(),
+                b.fr_err.max_pct, b.fr_err.mean_pct, b.lfm_err.max_pct, b.lfm_err.mean_pct, w);
     }
 
-    /* --- Speed table --- */
-    fprintf(f, "\n### Speed (ns/call, lower is better)\n\n");
+    fprintf(f, "\n### Speed (mean ns/call over the input set, lower is better)\n\n");
     fprintf(f, "| Function | FR_math | libfixmath | Speedup | Faster |\n");
     fprintf(f, "|----------|--------:|-----------:|--------:|--------|\n");
-
-    for (auto& b : results) {
-        if (b.lfm_ns_per_call < 0) {
-            fprintf(f, "| %-15s | %6.1f | %10s | %7s | FR only |\n",
-                    b.name.c_str(), b.fr_ns_per_call, "---", "---");
-        } else {
-            double speedup = b.lfm_ns_per_call / b.fr_ns_per_call;
-            const char *faster = (speedup > 1.0) ? "FR" : "lfm";
-            fprintf(f, "| %-15s | %6.1f | %10.1f | %6.2fx | %-7s |\n",
-                    b.name.c_str(), b.fr_ns_per_call, b.lfm_ns_per_call,
-                    speedup, faster);
+    for (const BenchResult& b : results) {
+        if (b.lfm_ns < 0) {
+            fprintf(f, "| %s | %.1f | --- | --- | FR only |\n", b.name.c_str(), b.fr_ns);
+            continue;
         }
+        double sp = b.lfm_ns / b.fr_ns;
+        fprintf(f, "| %s | %.1f | %.1f | %.2fx | %s |\n", b.name.c_str(), b.fr_ns, b.lfm_ns, sp, sp > 1.0 ? "FR" : "lfm");
     }
 
-    /* --- Summary --- */
-    int fr_speed = 0, lfm_speed = 0, fr_acc = 0, lfm_acc = 0, tie_acc = 0, h2h = 0;
-    for (auto& b : results) {
-        if (b.lfm_ns_per_call < 0) continue;
+    int h2h = 0, frs = 0, lfs = 0, fra = 0, lfa = 0, tie = 0;
+    for (const BenchResult& b : results) {
+        if (b.lfm_ns < 0) continue;
         h2h++;
-        if (b.fr_ns_per_call < b.lfm_ns_per_call) fr_speed++; else lfm_speed++;
-        if (b.fr_err.max_abs_err < b.lfm_err.max_abs_err) fr_acc++;
-        else if (b.fr_err.max_abs_err > b.lfm_err.max_abs_err) lfm_acc++;
-        else tie_acc++;
+        if (b.fr_ns < b.lfm_ns) frs++; else lfs++;
+        if (b.fr_err.max_pct < b.lfm_err.max_pct) fra++;
+        else if (b.fr_err.max_pct > b.lfm_err.max_pct) lfa++;
+        else tie++;
     }
     fprintf(f, "\n### Summary (%d head-to-head functions)\n\n", h2h);
-    fprintf(f, "- **Speed**: FR_math %d / %d, libfixmath %d / %d\n",
-            fr_speed, h2h, lfm_speed, h2h);
-    fprintf(f, "- **Accuracy**: FR_math %d / %d, libfixmath %d / %d, tie %d / %d\n",
-            fr_acc, h2h, lfm_acc, h2h, tie_acc, h2h);
-    fprintf(f, "- Accuracy = %d-pt sweep at Q16.16; timing = min of 3 x %dk calls\n",
-            N_ACCURACY, N_TIMING / 1000);
-
-    /* --- Size table --- */
-    fprintf(f, "\n### Compiled size (clang -O2, macOS ARM)\n\n");
-    fprintf(f, "| | FR_math | libfixmath | lfm (no cache) |\n");
-    fprintf(f, "|---|---:|---:|---:|\n");
-    fprintf(f, "| Code (text) | 6,652 B | 4,880 B | 5,444 B |\n");
-    fprintf(f, "| Tables (ROM) | 818 B | 32 B | 32 B |\n");
-    fprintf(f, "| **ROM total** | **7,470 B** | **4,912 B** | **5,476 B** |\n");
-    fprintf(f, "| BSS / RAM | **0 B** | **112 KB** | **0 B** |\n");
-    fprintf(f, "\n");
-    fprintf(f, "FR_math packs trig, inv-trig, log/ln/log10, exp/pow2/pow10, sqrt, hypot(2),\n");
-    fprintf(f, "waves(6), ADSR, print into 7.3 KB ROM with zero RAM overhead.\n");
-    fprintf(f, "libfixmath (trig, inv-trig, log/log2, exp, sqrt, mul/div, str) is 4.8 KB ROM\n");
-    fprintf(f, "but caches 112 KB of sin/exp LUTs in BSS at runtime.\n");
-    fprintf(f, "\n");
+    fprintf(f, "- **Speed**: FR_math %d / %d, libfixmath %d / %d\n", frs, h2h, lfs, h2h);
+    fprintf(f, "- **Accuracy (max error)**: FR_math %d / %d, libfixmath %d / %d, tie %d / %d\n", fra, h2h, lfa, h2h, tie, h2h);
+    fprintf(f, "\nWorst-case inputs (FR / lfm):\n\n");
+    for (const BenchResult& b : results) {
+        if (b.lfm_ns < 0) fprintf(f, "- %s: %.8g\n", b.name.c_str(), b.fr_err.worst_in);
+        else fprintf(f, "- %s: %.8g / %.8g\n", b.name.c_str(), b.fr_err.worst_in, b.lfm_err.worst_in);
+    }
+    fprintf(f, "\nCompiled size: run `make size` in this directory.\n");
 }
 
 /* ================================================================
@@ -803,27 +301,90 @@ static void emit_markdown(FILE *f, const std::vector<BenchResult>& results) {
  * ================================================================ */
 
 int main() {
-    fprintf(stderr, "Running benchmarks (%d accuracy pts, %d timing iters)...\n",
-            N_ACCURACY, N_TIMING);
+    std::vector<BenchResult> R;
+    std::vector<int32_t> a, b;
+    const double PI2 = 2.0 * M_PI;
 
-    std::vector<BenchResult> results;
-    results.push_back(bench_sin());   fprintf(stderr, "  sin done\n");
-    results.push_back(bench_cos());   fprintf(stderr, "  cos done\n");
-    results.push_back(bench_tan());   fprintf(stderr, "  tan done\n");
-    results.push_back(bench_asin());  fprintf(stderr, "  asin done\n");
-    results.push_back(bench_acos());  fprintf(stderr, "  acos done\n");
-    results.push_back(bench_atan());  fprintf(stderr, "  atan done\n");
-    results.push_back(bench_atan2()); fprintf(stderr, "  atan2 done\n");
-    results.push_back(bench_sqrt());  fprintf(stderr, "  sqrt done\n");
-    results.push_back(bench_exp());   fprintf(stderr, "  exp done\n");
-    results.push_back(bench_log());   fprintf(stderr, "  ln done\n");
-    results.push_back(bench_log2());  fprintf(stderr, "  log2 done\n");
-    results.push_back(bench_mul());   fprintf(stderr, "  mul done\n");
-    results.push_back(bench_div());   fprintf(stderr, "  div done\n");
-    results.push_back(bench_hypot()); fprintf(stderr, "  hypot done\n");
-    results.push_back(bench_hypot_fast8()); fprintf(stderr, "  hypot_fast8 done\n");
-
-    emit_json(stdout, results);
-    emit_markdown(stderr, results);
+    fprintf(stderr, "Running benchmarks (every input per domain)...\n");
+    {
+        auto in = every(-PI2, PI2);
+        R.push_back(run1("sin", "std::sin", "every input in [-2pi, 2pi]", in, std::sin,
+                         [](int32_t x) { return fr_sin(x, RADIX); }, [](int32_t x) { return fix16_sin(x); }));
+        fprintf(stderr, "  sin done\n");
+        R.push_back(run1("cos", "std::cos", "every input in [-2pi, 2pi]", in, std::cos,
+                         [](int32_t x) { return fr_cos(x, RADIX); }, [](int32_t x) { return fix16_cos(x); }));
+        fprintf(stderr, "  cos done\n");
+        R.push_back(run1("tan", "std::tan", "every input in [-2pi, 2pi], poles included", in, d_tan,
+                         [](int32_t x) { return fr_tan(x, RADIX); }, [](int32_t x) { return fix16_tan(x); }));
+        fprintf(stderr, "  tan done\n");
+    }
+    {
+        auto in = every(-1.0, 1.0);
+        R.push_back(run1("asin", "std::asin", "every input in [-1, 1]", in, std::asin,
+                         [](int32_t x) { return FR_asin(x, RADIX, RADIX); }, [](int32_t x) { return fix16_asin(x); }));
+        fprintf(stderr, "  asin done\n");
+        R.push_back(run1("acos", "std::acos", "every input in [-1, 1]", in, std::acos,
+                         [](int32_t x) { return FR_acos(x, RADIX, RADIX); }, [](int32_t x) { return fix16_acos(x); }));
+        fprintf(stderr, "  acos done\n");
+    }
+    {
+        auto in = every(-64.0, 64.0);
+        R.push_back(run1("atan", "std::atan", "every input in [-64, 64]", in, std::atan,
+                         [](int32_t x) { return FR_atan(x, RADIX, RADIX); }, [](int32_t x) { return fix16_atan(x); }));
+        fprintf(stderr, "  atan done\n");
+    }
+    {
+        pairs(a, b);
+        R.push_back(run2("atan2", "std::atan2", "every (y, x) in [-512, 511]^2 LSB, x 2^0, 2^8, 2^14", a, b, d_atan2,
+                         [](int32_t y, int32_t x) { return FR_atan2(y, x, RADIX); },
+                         [](int32_t y, int32_t x) { return fix16_atan2(y, x); }));
+        fprintf(stderr, "  atan2 done\n");
+    }
+    {
+        auto in = every(0.0, 1024.0);
+        R.push_back(run1("sqrt", "std::sqrt", "every input in [0, 1024]", in, std::sqrt,
+                         [](int32_t x) { return FR_sqrt(x, RADIX); }, [](int32_t x) { return fix16_sqrt(x); }));
+        fprintf(stderr, "  sqrt done\n");
+    }
+    {
+        /* exp(x) fits in Q16.16 for x < ln(32768) = 10.397 */
+        auto in = every(-16.0, 10.397);
+        R.push_back(run1("exp", "std::exp", "every input in [-16, 10.397]", in, std::exp,
+                         [](int32_t x) { return FR_EXP(x, RADIX); }, [](int32_t x) { return fix16_exp(x); }));
+        fprintf(stderr, "  exp done\n");
+    }
+    {
+        auto in = every(Q16_LSB, 1024.0);
+        R.push_back(run1("ln", "std::log", "every input in (0, 1024]", in, std::log,
+                         [](int32_t x) { return FR_ln(x, RADIX, RADIX); }, [](int32_t x) { return fix16_log(x); }));
+        fprintf(stderr, "  ln done\n");
+        R.push_back(run1("log2", "std::log2", "every input in (0, 1024]", in, std::log2,
+                         [](int32_t x) { return FR_log2(x, RADIX, RADIX); }, [](int32_t x) { return fix16_log2(x); }));
+        fprintf(stderr, "  log2 done\n");
+    }
+    {
+        grid(2048, -50.0, 50.0, -2.0, 2.0, a, b);
+        R.push_back(run2("mul", "double a*b", "2048x2048 grid, a in [-50,50], b in [-2,2]", a, b, d_mul,
+                         [](int32_t x, int32_t y) { return FR_FixMuls(x, y); },
+                         [](int32_t x, int32_t y) { return fix16_mul(x, y); }));
+        fprintf(stderr, "  mul done\n");
+        grid(2048, -50.0, 50.0, 0.5, 50.0, a, b);
+        R.push_back(run2("div", "double a/b", "2048x2048 grid, a in [-50,50], b in [0.5,50]", a, b, d_div,
+                         [](int32_t x, int32_t y) { return FR_DIV(x, RADIX, y, RADIX); },
+                         [](int32_t x, int32_t y) { return fix16_div(x, y); }));
+        fprintf(stderr, "  div done\n");
+    }
+    {
+        pairs(a, b);
+        R.push_back(run2("hypot", "std::hypot", "every (x, y) in [-512, 511]^2 LSB, x 2^0, 2^8, 2^14", a, b, d_hypot,
+                         [](int32_t x, int32_t y) { return FR_hypot(x, y, RADIX); }, nullptr,
+                         "FR_math only (libfixmath has no hypot)"));
+        R.push_back(run2("hypot_fast8", "std::hypot", "every (x, y) in [-512, 511]^2 LSB, x 2^0, 2^8, 2^14", a, b, d_hypot,
+                         [](int32_t x, int32_t y) { return FR_hypot_fast8(x, y); }, nullptr,
+                         "FR_math only; shift-only, no multiply"));
+        fprintf(stderr, "  hypot done\n");
+    }
+    emit_json(stdout, R);
+    emit_markdown(stderr, R);
     return 0;
 }

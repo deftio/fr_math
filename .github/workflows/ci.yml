@@ -21,7 +21,9 @@ jobs:
             compiler: gcc  # Use default clang on macOS
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
 
     - name: Set up compiler
       run: |
@@ -71,7 +73,9 @@ jobs:
             arch: RISC-V
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
 
     - name: Install cross-compiler
       run: |
@@ -96,11 +100,71 @@ jobs:
         ls -lh build/*.o >> $GITHUB_STEP_SUMMARY
         echo '```' >> $GITHUB_STEP_SUMMARY
 
+  # 16-bit int: on AVR (Arduino Uno/Nano), MSP430 and 68HC11 a plain int
+  # is 16 bits, so a constant like `1 << 15` or `1u << 30` overflows
+  # unless it is cast to s32/u32 first (2.0.11 shipped such bugs in
+  # FR_log2 and FR_LOG2MIN). There is no AVR runtime here, so this job
+  # compiles every build variant with avr-gcc and fails on any shift or
+  # overflow warning.
+  avr-16bit-int:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
+
+    - name: Install avr-gcc
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gcc-avr avr-libc
+
+    - name: Compile for ATmega328P and check shift warnings
+      run: |
+        EXTRA=""
+        if echo 'int x;' | avr-gcc -Wshift-overflow=2 -x c -c -o /dev/null - 2>/dev/null; then
+          EXTRA="-Wshift-overflow=2"
+        fi
+        status=0
+        for defs in "" "-DFR_CORE_ONLY" "-DFR_LEAN -DFR_NO_PRINT" "-DFR_NO_STDINT"; do
+          echo "== avr-gcc $defs"
+          out=$(avr-gcc -mmcu=atmega328p -Os -Wall $EXTRA $defs -Isrc \
+                -c src/FR_math.c -o build-avr.o 2>&1) || status=1
+          echo "$out"
+          if echo "$out" | grep -E "shift|overflow"; then status=1; fi
+          avr-size build-avr.o || true
+        done
+        exit $status
+
+    - name: Check lookup tables stay in flash (no RAM copy)
+      run: |
+        # FR_PGM puts the tables in the __flash address space on avr-gcc, so
+        # nothing should land in .data or .rodata (both are copied to RAM at
+        # startup on classic AVR). Compile-time check only, no simulator.
+        status=0
+        for defs in "" "-DFR_LEAN -DFR_NO_PRINT"; do
+          avr-gcc -mmcu=atmega328p -Os $defs -Isrc -c src/FR_math.c -o tab-avr.o || status=1
+          echo "== avr-gcc $defs"
+          avr-objdump -h tab-avr.o | grep -E '\.(data|rodata|progmem)' || true
+          ram=0
+          while read -r _ name size _; do
+            case "$name" in .data*|.rodata*) ram=$((ram + 0x$size)) ;; esac
+          done < <(avr-objdump -h tab-avr.o | grep -E '^ +[0-9]+ ')
+          echo "RAM-copied data: $ram bytes"
+          if [ "$ram" -ne 0 ]; then status=1; fi
+          if ! avr-objdump -h tab-avr.o | grep -q '\.progmem'; then
+            echo "tables not in .progmem"; status=1
+          fi
+        done
+        exit $status
+
   test-32bit:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
 
     - name: Install 32-bit support
       run: |
@@ -125,16 +189,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      with:
+        persist-credentials: false
 
-    - name: Build with sanitizers
+    # Full test suite under AddressSanitizer + UndefinedBehaviorSanitizer.
+    # Any report fails the job (-fno-sanitize-recover=all). Notes:
+    #  - clang: the old -fsanitize=integer flag is clang-only.
+    #  - -fsanitize=integer is not used: it flags unsigned wraparound, which
+    #    the library relies on (BAM phase accumulators wrap at 65536).
+    #  - shift-base is off: the library deliberately left-shifts negative
+    #    values (arithmetic shift on every supported compiler). All other
+    #    UB checks (signed overflow, bounds, shift exponent, divide by
+    #    zero, ...) are on. Shift overflow is checked by the next step.
+    - name: Build and test with sanitizers
+      env:
+        CC: clang
+        CXX: clang++
+        CFLAGS: -fsanitize=address,undefined -fno-sanitize=shift-base -fno-sanitize-recover=all -g
+        CXXFLAGS: -fsanitize=address,undefined -fno-sanitize=shift-base -fno-sanitize-recover=all -g
       run: |
-        export CFLAGS="-fsanitize=undefined -fsanitize=integer -fno-sanitize-recover=all"
-        export CXXFLAGS="-fsanitize=undefined -fsanitize=integer -fno-sanitize-recover=all"
         make clean
-        make test || true  # Allow failure to see all issues
+        make test
 
-    - name: Run overflow edge case tests
-      run: |
-        echo "Testing overflow and saturation behavior..."
-        # This will be expanded when we enhance the test suite
+    # Shift overflow: every suite rebuilt with -fsanitize=shift and the
+    # handler in tests/ubsan_shift_check.c, which accepts in-range shifts
+    # of negative values and aborts on any shift that overflows (see the
+    # makefile's test-shift target).
+    - name: Build and test with the shift-overflow checker
+      run: make test-shift

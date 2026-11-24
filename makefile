@@ -4,6 +4,17 @@
 # Compiler configuration
 CC ?= gcc
 CXX ?= g++
+
+# Flags passed in by the caller (environment or command line), e.g.
+#   CFLAGS="-m32" CXXFLAGS="-m32" make test         (32-bit build)
+#   CFLAGS="-fsanitize=address,undefined" ...       (sanitizers)
+# The CFLAGS/CXXFLAGS assignments below used to override these silently,
+# and the library objects never used CFLAGS at all. They are captured
+# here and added to every compile and link line via CC/CXX.
+USER_CFLAGS   := $(CFLAGS)
+USER_CXXFLAGS := $(CXXFLAGS)
+override CC  := $(CC) $(USER_CFLAGS)
+override CXX := $(CXX) $(USER_CXXFLAGS)
 AR = ar
 SIZE = size
 
@@ -18,8 +29,9 @@ COV_DIR = coverage
 # LIB_WARN: strictest for library source (includes -Wconversion -Wpedantic)
 # CFLAGS:   for tests/examples (no -Wconversion/-Wpedantic — macro casts are intentional)
 LIB_WARN = -Wall -Wextra -Wpedantic -Wshadow -Wconversion -Werror
-CFLAGS   = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Werror -Os
-CXXFLAGS = $(CFLAGS)
+# (override: caller flags are in USER_CFLAGS/USER_CXXFLAGS, see above)
+override CFLAGS   = -I$(SRC_DIR) -Wall -Wextra -Wshadow -Werror -Os
+override CXXFLAGS = $(CFLAGS)
 TEST_FLAGS = -ftest-coverage -fprofile-arcs
 LDFLAGS = -lm
 
@@ -51,6 +63,9 @@ help:
 	@echo "  test-2d-complete Run 2D complete coverage tests"
 	@echo "  test-tdd         Run TDD characterization tests"
 	@echo "  test-arduino-compat  Run Arduino environment compatibility tests"
+	@echo "  test-exhaustive  Every input in each function's test domain, radix 0..16"
+	@echo "  test-exhaustive-s32  Also every s32 input at radix 16 (angle fns; minutes)"
+	@echo "  test-shift       Run all tests with the shift-overflow checker (clang)"
 	@echo ""
 	@echo "Analysis targets:"
 	@echo "  accuracy         Show accuracy summary table"
@@ -61,6 +76,8 @@ help:
 	@echo "  size-report      Multi-architecture size report (Docker)"
 	@echo "  size-update      Size report + patch doc files"
 	@echo "  size-simple      Size report for current platform"
+	@echo "  codeql           CodeQL scan, same queries as GitHub code scanning (needs codeql CLI)"
+	@echo "  codeql-extended  CodeQL with the security-extended suite"
 	@echo ""
 	@echo "Tools:"
 	@echo "  tools            Build diagnostic tools"
@@ -69,6 +86,15 @@ help:
 	@echo "Maintenance:"
 	@echo "  clean            Remove build artifacts"
 	@echo "  cleanall         Remove build artifacts and backups"
+
+# Static analysis: the same CodeQL queries GitHub code scanning runs, on the
+# files git would push. See scripts/codeql_local.sh.
+.PHONY: codeql codeql-extended
+codeql:
+	@scripts/codeql_local.sh
+
+codeql-extended:
+	@scripts/codeql_local.sh --extended
 
 .PHONY: all
 all: dirs lib examples
@@ -134,7 +160,45 @@ run-examples: examples
 
 # Build and run tests
 .PHONY: test
-test: dirs examples test-basic test-comprehensive test-2d test-overflow test-full test-2d-complete test-tdd test-arduino-compat test-trig-crest test-s16-safe
+test: dirs examples test-basic test-comprehensive test-2d test-overflow test-full test-2d-complete test-tdd test-arduino-compat test-trig-crest test-s16-safe test-exhaustive
+
+# Every-input accuracy tests (tests/test_exhaustive.c): each function is
+# run on every input of its test domain at every radix 0..16 against a
+# double-precision reference, with per-function error budgets. Built at
+# -O2 without coverage flags (~20 s). The table is written to
+# build/test_exhaustive_report.md; failures are also shown on the console.
+.PHONY: test-exhaustive test-exhaustive-s32
+test-exhaustive: $(BUILD_DIR)/test_exhaustive
+	@echo "Running exhaustive accuracy tests..."
+	@./$(BUILD_DIR)/test_exhaustive > $(BUILD_DIR)/test_exhaustive_report.md || \
+	  { grep "FAIL" $(BUILD_DIR)/test_exhaustive_report.md; exit 1; }
+	@tail -1 $(BUILD_DIR)/test_exhaustive_report.md
+	@echo "Report written to $(BUILD_DIR)/test_exhaustive_report.md"
+
+test-exhaustive-s32: $(BUILD_DIR)/test_exhaustive
+	@echo "Running exhaustive accuracy tests, plus every s32 input at radix 16..."
+	@./$(BUILD_DIR)/test_exhaustive --s32 > $(BUILD_DIR)/test_exhaustive_s32_report.md || \
+	  { grep "FAIL" $(BUILD_DIR)/test_exhaustive_s32_report.md; exit 1; }
+	@tail -1 $(BUILD_DIR)/test_exhaustive_s32_report.md
+
+$(BUILD_DIR)/test_exhaustive: $(TEST_DIR)/test_exhaustive.c $(SRC_DIR)/FR_math.c $(HEADERS) | dirs
+	$(CC) $(CFLAGS) -O2 $(TEST_DIR)/test_exhaustive.c $(SRC_DIR)/FR_math.c $(LDFLAGS) -o $@
+
+# Shift-overflow check (clang): every suite rebuilt with -fsanitize=shift
+# and the handler in tests/ubsan_shift_check.c, which accepts in-range
+# shifts of negative values (the library's arithmetic-shift convention)
+# and aborts on any shift that overflows its type or has a bad exponent.
+# The stock shift-base check cannot be used: it rejects every negative
+# shift, and reports only the first problem per source line.
+SHIFT_TMP ?= /tmp/fr_math_shift_check
+SHIFT_FLAGS = -fsanitize=shift -fsanitize-recover=shift -fno-sanitize-link-runtime \
+              -Wno-unused-command-line-argument -Wl,$(SHIFT_TMP)/ubsan_shift_check.o -g
+.PHONY: test-shift
+test-shift:
+	@mkdir -p $(SHIFT_TMP)
+	clang -O1 -c $(TEST_DIR)/ubsan_shift_check.c -o $(SHIFT_TMP)/ubsan_shift_check.o
+	$(MAKE) clean
+	CC=clang CXX=clang++ CFLAGS="$(SHIFT_FLAGS)" CXXFLAGS="$(SHIFT_FLAGS)" $(MAKE) test
 
 # Exact vs s16-safe crest demo pair (examples/trig-crest).
 .PHONY: test-trig-crest

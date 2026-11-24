@@ -176,7 +176,7 @@ so call sites read as intent:</p>
   <td><code>FR_numstr(s, r)</code></td>
   <td><code>s</code>: null-terminated decimal string (e.g. <code>"3.14159"</code>); <code>r</code>: target radix</td>
   <td><code>s32</code> at radix <code>r</code></td>
-  <td>Runtime string-to-fixed-point parser (inverse of <code>FR_printNumF</code>). Handles signs, leading whitespace, and leading-zero fractions like <code>"0.05"</code>. Up to 9 fractional digits. No malloc, no strtod, no libm. Returns 0 for NULL or empty input.</td>
+  <td>Runtime string-to-fixed-point parser (inverse of <code>FR_printNumF</code>). Handles signs, leading whitespace, and leading-zero fractions like <code>"0.05"</code>. Up to 9 fractional digits. No malloc, no strtod, no libm. Returns 0 for NULL or empty input. Out-of-range values saturate to <code>FR_OVERFLOW_POS</code> / <code>FR_OVERFLOW_NEG</code> (as <code>FR_FixMulSat</code> does); <code>"-32768"</code> at radix 16 is exactly <code>INT32_MIN</code>.</td>
 </tr>
 <tr>
   <td><code>FR2D(x, r)</code></td>
@@ -525,12 +525,17 @@ representations:</p>
 <table>
 <thead><tr><th>Macro</th><th>Direction</th><th>Worst-case error</th></tr></thead>
 <tbody>
-<tr><td><code>FR_DEG2BAM(deg)</code></td><td>integer degrees &rarr; BAM</td><td>&le; 0.5 LSB BAM (&asymp; 0.0028&deg;), no accumulation.</td></tr>
-<tr><td><code>FR_BAM2DEG(bam)</code></td><td>BAM &rarr; integer degrees</td><td>Truncation only (&plusmn; 0.5&deg;).</td></tr>
-<tr><td><code>FR_RAD2BAM(rad, r)</code></td><td>radians (at radix <code>r</code>) &rarr; BAM</td><td>&asymp; 0.036% (constant 10430 &asymp; 65536 / 2&pi;).</td></tr>
-<tr><td><code>FR_BAM2RAD(bam, r)</code></td><td>BAM &rarr; radians (at radix <code>r</code>)</td><td>&asymp; 0.006% (constant 6434 &asymp; 2&pi; &times; 1024).</td></tr>
+<tr><td><code>FR_DEG2BAM(deg)</code></td><td>degrees &rarr; BAM (&times; 65536/360)</td><td>&le; 0.5 LSB BAM (&asymp; 0.0028&deg;), no accumulation.</td></tr>
+<tr><td><code>FR_BAM2DEG(bam)</code></td><td>BAM &rarr; degrees (&times; 360/65536)</td><td>Truncation only (&plusmn; 0.5&deg;).</td></tr>
+<tr><td><code>FR_RAD2BAM(rad)</code></td><td>radians &rarr; BAM (&times; 65536/2&pi;, 10 shift terms, relative error &lt; 1e-9)</td><td>Valid for |rad| &le; &pi; at s15.16, where the top 16 bits of the result are the u16 BAM; beyond that the result overflows.</td></tr>
+<tr><td><code>FR_BAM2RAD(bam)</code></td><td>BAM &rarr; radians (&times; 2&pi;/65536, 5 shift terms, relative error &asymp; 3e-6)</td><td>Truncating shifts.</td></tr>
 </tbody>
 </table>
+
+<p>Each macro takes one argument and multiplies it by a constant, so the
+result is at the same radix as the argument. For any angle at any radix,
+use the functions <code>fr_rad_to_bam(rad, radix)</code> and
+<code>fr_deg_to_bam(deg, radix)</code> instead.</p>
 
 <h4>Worked example: keeping precision on chips without a multiplier</h4>
 
@@ -591,9 +596,11 @@ for (int n = 0; n &lt; nsamples; ++n) {
 }
 
 /* Radians (at radix 16) to BAM and back. */
-s32 rad_16 = 1L &lt;&lt; 16;            /* 1.0 rad */
-u16 bam    = FR_RAD2BAM(rad_16, 16);
-s32 back   = FR_BAM2RAD(bam, 16);
+s32 rad_16 = 1L &lt;&lt; 16;                                   /* 1.0 rad          */
+u16 bam    = fr_rad_to_bam(rad_16, 16);                  /* 10430; any angle */
+u16 bam_m  = (u16)((FR_RAD2BAM(rad_16) + 0x8000) &gt;&gt; 16); /* macro: |rad| &lt;= pi */
+s32 back   = FR_BAM2RAD((s32)bam &lt;&lt; 15) &lt;&lt; 1;            /* BAM at r15 -&gt; rad r16:
+                                                            65530 = 0.99991 rad */
 </code></pre>
 
 <h2>Trigonometry</h2>
@@ -626,7 +633,7 @@ flag off unless you need that cast.</p>
 <tbody>
 <tr><td><code>fr_sin_bam</code></td><td><code>s32 fr_sin_bam(u16 bam)</code></td><td>s15.16. Default range [&minus;65536, +65536] (exact crest). With <code>FR_TRIG_S16_SAFE</code>: [&minus;65534, +65534]. Zeros exact.</td></tr>
 <tr><td><code>fr_cos_bam</code></td><td><code>s32 fr_cos_bam(u16 bam)</code></td><td>s15.16, same range. Defined as <code>fr_sin_bam(bam + FR_BAM_QUADRANT)</code>.</td></tr>
-<tr><td><code>fr_tan_bam</code></td><td><code>s32 fr_tan_bam(u16 bam)</code></td><td>s15.16. Uses a 65-entry octant table for [0, 45&deg;] and the reciprocal identity <code>tan(x) = 1/tan(90&deg;&minus;x)</code> for (45&deg;, 90&deg;). Saturates to <code>&plusmn;FR_TRIG_MAXVAL</code> at the poles (90&deg;, 270&deg;). Returns exact 0 at 0&deg; and 180&deg;. No 64-bit intermediates; one 32-bit division only in the &gt;45&deg; path.</td></tr>
+<tr><td><code>fr_tan_bam</code></td><td><code>s32 fr_tan_bam(u16 bam)</code></td><td>s15.16. Uses a 65-entry octant table for [0, 45&deg;] and the reciprocal identity <code>tan(x) = 1/tan(90&deg;&minus;x)</code> for (45&deg;, 90&deg;). Within 10&deg; of a pole it returns cot of the exact distance to the pole instead (<code>1/e &minus; e/3</code>, one 32-bit division), since the table reciprocal amplifies interpolation error there. Saturates to <code>&plusmn;FR_TRIG_MAXVAL</code> at the poles (90&deg;, 270&deg;). Returns exact 0 at 0&deg; and 180&deg;. No 64-bit intermediates; one 32-bit division only in the &gt;45&deg; path.</td></tr>
 </tbody>
 </table>
 
@@ -635,9 +642,9 @@ flag off unless you need that cast.</p>
 <table>
 <thead><tr><th>Function</th><th>Signature</th><th>Notes</th></tr></thead>
 <tbody>
-<tr><td><code>fr_cos</code></td><td><code>s32 fr_cos(s32 rad, u16 radix)</code></td><td><code>rad</code> is interpreted at the given radix. Result is s15.16.</td></tr>
+<tr><td><code>fr_cos</code></td><td><code>s32 fr_cos(s32 rad, u16 radix)</code></td><td><code>rad</code> is interpreted at the given radix. Result is s15.16. Any <code>s32</code> input at any radix 0&ndash;30: angles beyond &plusmn;4&pi; (and all angles whose radix-16 form would not fit in <code>s32</code>) are reduced with 2&pi; to 64 bits, so large angles do not drift.</td></tr>
 <tr><td><code>fr_sin</code></td><td><code>s32 fr_sin(s32 rad, u16 radix)</code></td><td>Same convention. Result is s15.16.</td></tr>
-<tr><td><code>fr_tan</code></td><td><code>s32 fr_tan(s32 rad, u16 radix)</code></td><td>Returns at <strong>radix 16</strong> (<code>FR_TRIG_OUT_PREC</code>). Computed as <code>(sin &lt;&lt; 16) / cos</code>; saturates to <code>&plusmn;INT32_MAX</code> (<code>FR_TRIG_MAXVAL</code>) near &pi;/2 + k&pi; where cos &rarr; 0.</td></tr>
+<tr><td><code>fr_tan</code></td><td><code>s32 fr_tan(s32 rad, u16 radix)</code></td><td>Returns at <strong>radix 16</strong> (<code>FR_TRIG_OUT_PREC</code>). Octant table with the reciprocal identity; within 10&deg; of &pi;/2 + k&pi; it returns cot of the exact distance to the pole (taken in 2<sup>&minus;32</sup> turns, <code>1/e &minus; e/3</code>). Saturates to <code>&plusmn;INT32_MAX</code> (<code>FR_TRIG_MAXVAL</code>) where |tan| exceeds the s15.16 range. Same input range as <code>fr_cos</code>.</td></tr>
 </tbody>
 </table>
 
@@ -657,12 +664,12 @@ are legacy aliases that map to the same functions.</p>
 <table>
 <thead><tr><th>Symbol</th><th>Signature</th><th>Kind</th></tr></thead>
 <tbody>
-<tr><td><code>FR_SinI</code></td><td><code>FR_SinI(deg)</code> &rarr; <code>s32</code> (s15.16)</td><td>Macro: <code>fr_sin_bam(FR_DEG2BAM(deg))</code>. Zero-cost inline.</td></tr>
-<tr><td><code>FR_CosI</code></td><td><code>FR_CosI(deg)</code> &rarr; <code>s32</code> (s15.16)</td><td>Macro: <code>fr_cos_bam(FR_DEG2BAM(deg))</code>.</td></tr>
-<tr><td><code>FR_TanI</code></td><td><code>s32 FR_TanI(s16 deg)</code></td><td>Function. Returns at radix 16; saturates to <code>&plusmn;INT32_MAX</code> near 90&deg; / 270&deg;.</td></tr>
+<tr><td><code>FR_SinI</code></td><td><code>FR_SinI(deg)</code> &rarr; <code>s32</code> (s15.16)</td><td>Macro: <code>fr_sin_bam(FR_DEG2BAM_I(deg))</code>. Zero-cost inline. Valid for |deg| &lt; 2<sup>18</sup>; <code>fr_sin_deg(deg, 0)</code> gives the same result for any <code>s32</code>.</td></tr>
+<tr><td><code>FR_CosI</code></td><td><code>FR_CosI(deg)</code> &rarr; <code>s32</code> (s15.16)</td><td>Macro: <code>fr_cos_bam(FR_DEG2BAM_I(deg))</code>. Same range; <code>fr_cos_deg(deg, 0)</code> for any <code>s32</code>.</td></tr>
+<tr><td><code>FR_TanI</code></td><td><code>s32 FR_TanI(s32 deg)</code></td><td>Function. Returns at radix 16; any <code>s32</code>. Same pole handling as <code>fr_tan_deg</code>.</td></tr>
 <tr><td><code>fr_sin_deg</code></td><td><code>s32 fr_sin_deg(s32 deg, u16 radix)</code></td><td>Function. <code>deg</code> is fixed-point at <code>radix</code>. Returns s15.16.</td></tr>
 <tr><td><code>fr_cos_deg</code></td><td><code>s32 fr_cos_deg(s32 deg, u16 radix)</code></td><td>Function. Same.</td></tr>
-<tr><td><code>fr_tan_deg</code></td><td><code>s32 fr_tan_deg(s32 deg, u16 radix)</code></td><td>Function. Returns at radix 16; saturates to <code>&plusmn;INT32_MAX</code> near 90&deg; / 270&deg;.</td></tr>
+<tr><td><code>fr_tan_deg</code></td><td><code>s32 fr_tan_deg(s32 deg, u16 radix)</code></td><td>Function. Returns at radix 16. Within 10&deg; of 90&deg; / 270&deg; it returns cot of the exact degree distance to the pole; saturates to <code>&plusmn;INT32_MAX</code> where |tan| exceeds the s15.16 range (exact poles: sign of the input). Any <code>s32</code> input at any radix.</td></tr>
 <tr><td><code>FR_Sin</code></td><td><code>FR_Sin(deg, radix)</code></td><td>Legacy macro alias for <code>fr_sin_deg</code>.</td></tr>
 <tr><td><code>FR_Cos</code></td><td><code>FR_Cos(deg, radix)</code></td><td>Legacy macro alias for <code>fr_cos_deg</code>.</td></tr>
 <tr><td><code>FR_Tan</code></td><td><code>FR_Tan(deg, radix)</code></td><td>Legacy macro alias for <code>fr_tan_deg</code>.</td></tr>
@@ -737,19 +744,19 @@ radix. <code>FR_ln</code> and <code>FR_log10</code> multiply the
     <code>u16 out_r</code> &mdash; output radix
   </td>
   <td><code>s32</code> at radix <code>out_r</code>. Worst-case error &le; 4 LSB at Q16.16.</td>
-  <td>Domain: <code>input &gt; 0</code>. Returns <code>FR_DOMAIN_ERROR</code> for <code>input &le; 0</code>.</td>
+  <td>Domain: <code>input &gt; 0</code>. Returns <code>FR_LOG2MIN</code> (&minus;32767.0 at radix 16) for <code>input &le; 0</code>.</td>
 </tr>
 <tr>
   <td><code>FR_ln</code></td>
   <td>Same shape as <code>FR_log2</code>.</td>
   <td><code>s32</code> at radix <code>out_r</code>. Natural log.</td>
-  <td>Same domain. Internally computed as <code>FR_log2(x) &times; ln(2)</code>.</td>
+  <td>Same domain; returns <code>FR_LOG2MIN</code> for <code>input &le; 0</code>. Internally computed as <code>FR_log2(x) &times; ln(2)</code>.</td>
 </tr>
 <tr>
   <td><code>FR_log10</code></td>
   <td>Same shape as <code>FR_log2</code>.</td>
   <td><code>s32</code> at radix <code>out_r</code>. Common log.</td>
-  <td>Same domain. Internally computed as <code>FR_log2(x) / log2(10)</code>.</td>
+  <td>Same domain; returns <code>FR_LOG2MIN</code> for <code>input &le; 0</code>. Internally computed as <code>FR_log2(x) / log2(10)</code>.</td>
 </tr>
 </tbody>
 </table>
@@ -797,8 +804,10 @@ expensive.</p>
   <td><code>s32 input</code> at <code>radix</code> (exponent)<br>
       <code>u16 radix</code></td>
   <td><code>s32</code> at the <strong>same radix</strong>.</td>
-  <td>Domain: input up to <code>30 &lt;&lt; radix</code>; above that,
-      saturates to <code>FR_OVERFLOW_POS</code>. Negative inputs are
+  <td>Any <code>s32</code> input. The result saturates to
+      <code>FR_OVERFLOW_POS</code> when it does not fit in <code>s32</code>
+      (from 2<sup>15</sup> at radix 16, 2<sup>31</sup> at radix 0) and
+      underflows to 0. Negative inputs are
       floored toward &minus;&infin; before splitting into integer +
       fractional parts. Uses a 65-entry lookup table (260 bytes) with
       linear interpolation.</td>
@@ -808,24 +817,30 @@ expensive.</p>
   <td>Macro</td>
   <td>Same as <code>FR_pow2</code>.</td>
   <td><code>s32</code> at <code>radix</code>.</td>
-  <td>Expands to <code>FR_pow2(FR_MULK28(input, FR_kLOG2E_28), radix)</code>.
-      Uses a radix-28 constant for ~9 digits of precision in the base
-      conversion.</td>
+  <td><code>FR_pow2</code> of <code>input &times; log2(e)</code>, the product
+      formed with a radix-28 constant (~9 digits) like <code>FR_MULK28</code>,
+      kept in the <code>s32</code> range so very large inputs give
+      <code>FR_OVERFLOW_POS</code> / 0 instead of wrapping. The exponent is
+      rounded at the input radix, so accuracy follows the radix:
+      &asymp; 0.003% at radix 16, &asymp; 2% at radix 4.</td>
 </tr>
 <tr>
   <td><code>FR_POW10</code></td>
   <td>Macro</td>
   <td>Same as <code>FR_pow2</code>.</td>
   <td><code>s32</code> at <code>radix</code>.</td>
-  <td>Expands to <code>FR_pow2(FR_MULK28(input, FR_kLOG2_10_28), radix)</code>.
-      Saturates around <code>input &ge; 9 &lt;&lt; radix</code>.</td>
+  <td><code>FR_pow2</code> of <code>input &times; log2(10)</code>, as
+      <code>FR_EXP</code>. Saturates to <code>FR_OVERFLOW_POS</code> when
+      10<sup>x</sup> does not fit (x &ge; 4.52 at radix 16, x &ge; 9.33 at
+      radix 0).</td>
 </tr>
 <tr>
   <td><code>FR_EXP_FAST</code></td>
   <td>Macro</td>
   <td>Same as <code>FR_pow2</code>.</td>
   <td><code>s32</code> at <code>radix</code>.</td>
-  <td>Shift-only variant: <code>FR_pow2(FR_SLOG2E(input), radix)</code>.
+  <td>Shift-only variant: <code>FR_pow2(FR_SLOG2E(input), radix)</code>,
+      with the same range handling as <code>FR_EXP</code>.
       No multiply instruction. Lower accuracy (~5&ndash;10 LSB at Q16.16).</td>
 </tr>
 <tr>
@@ -833,7 +848,8 @@ expensive.</p>
   <td>Macro</td>
   <td>Same as <code>FR_pow2</code>.</td>
   <td><code>s32</code> at <code>radix</code>.</td>
-  <td>Shift-only variant: <code>FR_pow2(FR_SLOG2_10(input), radix)</code>.
+  <td>Shift-only variant: <code>FR_pow2(FR_SLOG2_10(input), radix)</code>,
+      with the same range handling as <code>FR_POW10</code>.
       No multiply instruction.</td>
 </tr>
 <tr>
@@ -907,6 +923,9 @@ where 64-bit multiply is very expensive.</p>
   <td><code>s32</code> at the same radix.</td>
   <td>8-segment shift-only piecewise-linear approximate magnitude.
       &sim;0.14% peak error. No multiply, no 64-bit, no ROM table.
+      Accepts the full <code>s32</code> input range; saturates at
+      <code>FR_OVERFLOW_POS</code> when the result exceeds
+      2<sup>31</sup>&minus;1.
       Based on the method of US Patent 6,567,777 B1 (public domain).
       No <code>radix</code> parameter needed &mdash; the algorithm is
       scale-invariant. Same shift-only
@@ -1368,6 +1387,8 @@ can direct output at a UART, an in-memory buffer, or
 <ul>
   <li><a href="fixed-point-primer.html">Fixed-Point Primer</a>
       &mdash; what radixes are and how to pick one.</li>
+  <li><a href="approximations.html">How the Approximations Work</a>
+      &mdash; the algorithm and error budget behind each function.</li>
   <li><a href="examples.html">Examples</a> &mdash; runnable snippets
       for every topic below.</li>
   <li><a href="getting-started.html">Getting Started</a> &mdash;

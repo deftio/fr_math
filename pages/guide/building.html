@@ -46,6 +46,9 @@ one screen.</p>
 <tr><td><code>make lib</code></td><td>Library only (<code>build/libfrmath.a</code>).</td></tr>
 <tr><td><code>make examples</code></td><td>Example programs into <code>build/</code>.</td></tr>
 <tr><td><code>make test</code></td><td>Build every test binary and run the full suite.</td></tr>
+<tr><td><code>make test-exhaustive</code></td><td>Every function at every radix 0..16 on every input in its domain, against a double reference (part of <code>make test</code>, ~20 s). Report: <code>build/test_exhaustive_report.md</code>.</td></tr>
+<tr><td><code>make test-exhaustive-s32</code></td><td>Adds every one of the 2<sup>32</sup> inputs at radix 16 for the six angle functions (~10 min).</td></tr>
+<tr><td><code>make test-shift</code></td><td>Every suite rebuilt with clang and the shift-overflow checker in <code>tests/ubsan_shift_check.c</code>.</td></tr>
 <tr><td><code>make coverage</code></td><td>Build with <code>-ftest-coverage -fprofile-arcs</code>, run tests, emit lcov report.</td></tr>
 <tr><td><code>make clean</code></td><td>Remove <code>build/</code>.</td></tr>
 <tr><td><code>make cleanall</code></td><td>Remove <code>build/</code> plus editor backups.</td></tr>
@@ -107,7 +110,7 @@ reference.</p>
 
 <h2>The test suite</h2>
 
-<p>Tests live under <code>tests/</code> and are split into eight
+<p>Tests live under <code>tests/</code> and are split into nine
 binaries to keep compile times low:</p>
 
 <table>
@@ -121,10 +124,11 @@ binaries to keep compile times low:</p>
 <tr><td><code>test_2d_complete</code></td><td>Extended 2D: matrix composition, inverse, point transforms.</td></tr>
 <tr><td><code>test_tdd</code></td><td>Characterization tests pinned to bit-exact reference values.</td></tr>
 <tr><td><code>test_arduino_compat</code></td><td>Arduino build compatibility: compiles the headers as ESP32-style and AVR/USBAPI-style cores would (both include orders), plus type-size checks (issue #11).</td></tr>
+<tr><td><code>test_exhaustive</code></td><td>Every input, every radix 0..16, every function, with per-function error budgets; nothing skipped (zero crossings, poles, domain edges, both ends of <code>s32</code>).</td></tr>
 </tbody>
 </table>
 
-<p>The suite covers <strong>98%</strong> of the library source lines
+<p>The suite covers <strong>99%</strong> of the library source lines
 and every mathematically reachable branch; the remainder is defensive
 code (clamps and guards) that no input can trigger, kept in place as
 insurance against future edits.
@@ -172,7 +176,7 @@ need a floating-point unit, and you do <em>not</em> need
 <tr><td>RP2040 (Cortex-M0+)</td><td><code>arm-none-eabi-gcc</code></td><td>Docker.</td></tr>
 <tr><td>STM32 (Cortex-M4)</td><td><code>arm-none-eabi-gcc</code></td><td>Docker.</td></tr>
 <tr><td>RISC-V rv64 / rv32</td><td><code>riscv64-linux-gnu-gcc</code>, <code>riscv64-unknown-elf-gcc</code></td><td>Docker.</td></tr>
-<tr><td>AVR (ATmega328P, ATtiny85)</td><td><code>avr-gcc</code></td><td>Docker.</td></tr>
+<tr><td>AVR (ATmega328P, ATtiny85)</td><td><code>avr-gcc</code></td><td>CI (compile, 16-bit-int warnings) + Docker.</td></tr>
 <tr><td>Arduino (AVR, SAMD, etc.)</td><td><code>arduino-cli</code></td><td>Manual.</td></tr>
 <tr><td>MSP430</td><td><code>msp430-gcc</code></td><td>Docker.</td></tr>
 <tr><td>Motorola 68k</td><td><code>m68k-linux-gnu-gcc</code></td><td>Docker.</td></tr>
@@ -199,26 +203,26 @@ usage will be smaller.</p>
 <table>
 <thead><tr><th>Target</th><th>Lean</th><th>Core</th><th>Full</th></tr></thead>
 <tbody>
-<tr><td>AVR ATmega328P</td><td>9.2 KB</td><td>12.8 KB</td><td>15.4 KB</td></tr>
-<tr><td>AVR ATtiny85</td><td>9.4 KB</td><td>13.3 KB</td><td>16.0 KB</td></tr>
-<tr><td>68HC11</td><td>13.3 KB</td><td>18.4 KB</td><td>22.6 KB</td></tr>
-<tr><td>MSP430</td><td>7.8 KB</td><td>10.7 KB</td><td>12.8 KB</td></tr>
-<tr><td>Cortex-M4 (STM32)</td><td>3.3 KB</td><td>4.4 KB</td><td>5.5 KB</td></tr>
-<tr><td>Cortex-M0 (RP2040)</td><td>3.4 KB</td><td>4.5 KB</td><td>5.7 KB</td></tr>
-<tr><td>ARM Thumb</td><td>3.4 KB</td><td>4.7 KB</td><td>5.9 KB</td></tr>
-<tr><td>Xtensa LX7 (ESP32-S3)</td><td>3.9 KB</td><td>5.3 KB</td><td>6.5 KB</td></tr>
-<tr><td>RISC-V rv32</td><td>4.1 KB</td><td>5.5 KB</td><td>6.8 KB</td></tr>
-<tr><td>Xtensa LX106 (ESP8266)</td><td>4.2 KB</td><td>5.8 KB</td><td>7.3 KB</td></tr>
-<tr><td>ARM32</td><td>4.3 KB</td><td>5.8 KB</td><td>7.7 KB</td></tr>
-<tr><td>m68k</td><td>4.4 KB</td><td>6.2 KB</td><td>7.8 KB</td></tr>
-<tr><td>x86-32</td><td>5.3 KB</td><td>7.2 KB</td><td>9.2 KB</td></tr>
-<tr><td>MIPS32</td><td>5.5 KB</td><td>7.5 KB</td><td>9.6 KB</td></tr>
-<tr><td>PowerPC</td><td>5.8 KB</td><td>8.0 KB</td><td>10.4 KB</td></tr>
-<tr><td>TCC x86</td><td>8.2 KB</td><td>11.5 KB</td><td>15.1 KB</td></tr>
-<tr><td>RISC-V rv64</td><td>4.0 KB</td><td>5.5 KB</td><td>6.8 KB</td></tr>
-<tr><td>x86-64 (GCC)</td><td>4.6 KB</td><td>6.1 KB</td><td>8.0 KB</td></tr>
-<tr><td>AArch64 (ARM64)</td><td>4.8 KB</td><td>6.6 KB</td><td>8.7 KB</td></tr>
-<tr><td>x86-64 (Clang)</td><td>4.7 KB</td><td>6.6 KB</td><td>9.0 KB</td></tr>
+<tr><td>AVR ATmega328P</td><td>9.3 KB</td><td>13.8 KB</td><td>16.8 KB</td></tr>
+<tr><td>AVR ATtiny85</td><td>9.6 KB</td><td>14.4 KB</td><td>17.3 KB</td></tr>
+<tr><td>68HC11</td><td>13.6 KB</td><td>19.3 KB</td><td>24.0 KB</td></tr>
+<tr><td>MSP430</td><td>8.1 KB</td><td>11.7 KB</td><td>14.2 KB</td></tr>
+<tr><td>Cortex-M4 (STM32)</td><td>3.4 KB</td><td>4.8 KB</td><td>6.0 KB</td></tr>
+<tr><td>Cortex-M0 (RP2040)</td><td>3.6 KB</td><td>5.0 KB</td><td>6.3 KB</td></tr>
+<tr><td>ARM Thumb</td><td>3.6 KB</td><td>5.1 KB</td><td>6.5 KB</td></tr>
+<tr><td>Xtensa LX7 (ESP32-S3)</td><td>4.0 KB</td><td>5.6 KB</td><td>6.9 KB</td></tr>
+<tr><td>RISC-V rv32</td><td>4.2 KB</td><td>6.0 KB</td><td>7.4 KB</td></tr>
+<tr><td>Xtensa LX106 (ESP8266)</td><td>4.4 KB</td><td>6.3 KB</td><td>8.0 KB</td></tr>
+<tr><td>ARM32</td><td>4.5 KB</td><td>6.3 KB</td><td>8.3 KB</td></tr>
+<tr><td>m68k</td><td>4.4 KB</td><td>6.7 KB</td><td>8.4 KB</td></tr>
+<tr><td>x86-32</td><td>5.5 KB</td><td>7.7 KB</td><td>9.9 KB</td></tr>
+<tr><td>MIPS32</td><td>5.8 KB</td><td>8.2 KB</td><td>10.6 KB</td></tr>
+<tr><td>PowerPC</td><td>6.0 KB</td><td>8.7 KB</td><td>11.3 KB</td></tr>
+<tr><td>TCC x86</td><td>8.1 KB</td><td>11.9 KB</td><td>15.7 KB</td></tr>
+<tr><td>RISC-V rv64</td><td>4.3 KB</td><td>6.0 KB</td><td>7.5 KB</td></tr>
+<tr><td>x86-64 (GCC)</td><td>5.1 KB</td><td>6.9 KB</td><td>8.9 KB</td></tr>
+<tr><td>AArch64 (ARM64)</td><td>5.1 KB</td><td>7.3 KB</td><td>9.5 KB</td></tr>
+<tr><td>x86-64 (Clang)</td><td>4.8 KB</td><td>7.0 KB</td><td>9.5 KB</td></tr>
 </tbody>
 </table>
 <!-- SIZE_TABLE_END -->
@@ -241,7 +245,7 @@ for ROM-constrained targets. Define them before including
 
 <p><code>FR_LEAN</code> keeps only radian trig (sin, cos, tan), inverse trig, sqrt,
 log2, ln, exp, pow2, and arithmetic &mdash; comparable to libfixmath&rsquo;s API at
-4.7&nbsp;KB text. <code>FR_LEAN</code> implies <code>FR_NO_WAVES</code>.</p>
+4.8&nbsp;KB text (x86-64, clang -Os). <code>FR_LEAN</code> implies <code>FR_NO_WAVES</code>.</p>
 
 <p><code>FR_CORE_ONLY</code> is a convenience shorthand that defines both
 <code>FR_NO_PRINT</code> and <code>FR_NO_WAVES</code> in one step.</p>
@@ -307,9 +311,23 @@ dead-code elimination, only the functions you call are linked.</p>
 <h2>CI</h2>
 
 <p>GitHub Actions runs on every push and every PR. The workflow file
-is <code>.github/workflows/ci.yml</code>. It builds with strict
-warnings, runs <code>make test</code>, and caches nothing &mdash;
-each run starts from a clean checkout.</p>
+is <code>.github/workflows/ci.yml</code>, and it caches nothing: each run
+starts from a clean checkout. Its jobs:</p>
+
+<table>
+<thead><tr><th>Job</th><th>What it does</th></tr></thead>
+<tbody>
+<tr><td><code>build-and-test</code></td><td><code>make test</code> with gcc and clang on Linux, clang on macOS, strict warnings; coverage report.</td></tr>
+<tr><td><code>cross-compile</code></td><td>Builds the library for ARM and RISC-V Linux.</td></tr>
+<tr><td><code>avr-16bit-int</code></td><td>Compiles every build variant with <code>avr-gcc</code> (16-bit <code>int</code>) and fails on any shift or overflow warning, or if any lookup table lands in RAM (<code>.data</code> / <code>.rodata</code>) instead of flash.</td></tr>
+<tr><td><code>test-32bit</code></td><td><code>make test</code> built with <code>-m32</code>.</td></tr>
+<tr><td><code>overflow-tests</code></td><td><code>make test</code> under AddressSanitizer + UndefinedBehaviorSanitizer (clang), then <code>make test-shift</code>. Any report fails the job.</td></tr>
+</tbody>
+</table>
+
+<p>GitHub code scanning (CodeQL) also runs on every push and weekly. To run
+the same queries locally before pushing, use <code>make codeql</code> (needs the
+CodeQL CLI; see <code>scripts/codeql_local.sh</code>).</p>
 
 <p>The CI status badge on the README links directly to the latest
 run.</p>

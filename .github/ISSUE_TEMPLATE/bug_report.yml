@@ -1,0 +1,48 @@
+name: Bug report
+description: A function returns a wrong result, fails to build, or crashes.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. For a security problem (out-of-bounds access,
+        undefined behavior, a hang), please report it privately instead; see
+        SECURITY.md.
+  - type: input
+    id: version
+    attributes:
+      label: FR_Math version or commit
+      placeholder: "2.0.11, or a commit SHA"
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Compiler, flags and target
+      placeholder: "arm-none-eabi-gcc 13.2 -Os, Cortex-M4; or clang 17 on x86-64"
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproducer
+      description: The function, its arguments and the radix. A few lines of C is ideal.
+      render: c
+      placeholder: |
+        s32 r = FR_log2(FR_NUM(10, 0, 0, 16), 16, 16);
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened
+      description: The value you got, or the build error or crash output.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+      description: The expected value and where it comes from (for example, libm in double precision).
+    validations:
+      required: true

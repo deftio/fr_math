@@ -8,8 +8,9 @@ or libraries. Pure C99, zero dependencies beyond `<stdint.h>`.
 
 - Repository: https://github.com/deftio/fr_math
 - Documentation: https://deftio.github.io/fr_math/
+- How each function is computed, with error budgets: docs/approximations.md
 - License: BSD-2-Clause
-- Version: 2.0.11
+- Version: 2.0.12
 
 ## Installation
 
@@ -94,10 +95,13 @@ s32 fr_tan_bam(u16 bam);
 // FR_TRIG_S16_SAFE (compile FR_math.c): s16-safe crest for (s16)(x>>1);
 // still returns s15.16, not q1.15. Default off = exact ±1.0.
 
-// Degree API at any radix:
-s32 FR_Cos(s16 deg, u16 radix);
-s32 FR_Sin(s16 deg, u16 radix);
-s32 FR_Tan(s16 deg, u16 radix);
+// Degree API at any radix (any s32 input; FR_Cos/FR_Sin/FR_Tan are aliases):
+s32 fr_cos_deg(s32 deg, u16 radix);
+s32 fr_sin_deg(s32 deg, u16 radix);
+s32 fr_tan_deg(s32 deg, u16 radix);
+s32 FR_TanI(s32 deg);      // integer degrees, s15.16 result
+// FR_CosI / FR_SinI macros: valid for |deg| < 2^18 (use fr_cos_deg(x, 0) beyond)
+// tan (all variants) saturates to +-FR_TRIG_MAXVAL at the poles
 
 // Inverse trig:
 s32 FR_atan2(s32 y, s32 x, u16 out_radix);
@@ -108,7 +112,9 @@ s32 FR_atan(s32 input, u16 radix, u16 out_radix);
 // Angle conversion macros (shift-only, no multiply):
 FR_DEG2RAD(x)   FR_RAD2DEG(x)
 FR_DEG2BAM(deg) FR_BAM2DEG(bam)
-FR_RAD2BAM(rad, radix) FR_BAM2RAD(bam, radix)
+FR_RAD2BAM(rad) FR_BAM2RAD(bam)   // one argument; see the API reference
+u16 fr_rad_to_bam(s32 rad, u16 radix);  // any s32 radian input -> BAM
+u16 fr_deg_to_bam(s32 deg, u16 radix);  // any s32 degree input -> BAM
 ```
 
 ### Logarithms and exponentials
@@ -121,13 +127,17 @@ FR_EXP(input, radix)      // e^x via pow2
 FR_POW10(input, radix)    // 10^x via pow2
 FR_EXP_FAST(input, radix) // shift-only approximation
 FR_POW10_FAST(input, radix)
+// log2/ln/log10 of input <= 0 return FR_LOG2MIN.
+// pow2/EXP/POW10 return FR_OVERFLOW_POS when the result does not fit in s32.
+// EXP/POW10 round the exponent at the input radix: pass small integers at
+// radix 16, not radix 0 (39% error at radix 0, 0.003% at radix 16).
 ```
 
 ### Roots and distance
 ```c
 s32 FR_sqrt(s32 input, u16 radix);
 s32 FR_hypot(s32 x, s32 y, u16 radix);       // exact, 64-bit intermediate
-s32 FR_hypot_fast8(s32 x, s32 y);             // 8-segment, 0.10% error, no multiply
+s32 FR_hypot_fast8(s32 x, s32 y);             // 8-segment, ~0.14% error, no multiply
 ```
 
 ### Wave generators
@@ -176,7 +186,9 @@ s32 ex    = FR_EXP(I2FR(1, R), R);        // e^1
 
 ```bash
 make lib           # build static library objects
-make test          # run all test suites
+make test          # run all test suites (includes every-input sweeps, ~20 s)
+make test-exhaustive-s32  # every s32 input at radix 16 for the angle functions (~10 min)
+make test-shift    # all suites under the shift-overflow checker (clang)
 make examples      # build example programs
 make size-report   # cross-compile size report (Docker)
 make size-update   # size report + patch doc files
@@ -195,4 +207,4 @@ Define before including FR_math.h to exclude optional subsystems:
 
 Tested on: AVR (Arduino), ARM Cortex-M0/M4, ESP32 (Xtensa), RISC-V,
 x86/x64, MSP430, m68k, PowerPC, MIPS32, 68HC11.
-Code size is 3-9 KB at -Os on 32-bit targets (Lean to Full).
+Code size is about 3.4-10 KB at -Os on 32-bit targets (Lean to Full).

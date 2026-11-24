@@ -32,8 +32,8 @@
 #ifndef __FR_Math_h__
 #define __FR_Math_h__
 
-#define FR_MATH_VERSION     "2.0.11"
-#define FR_MATH_VERSION_HEX  0x02000B  /* major << 16 | minor << 8 | patch */
+#define FR_MATH_VERSION     "2.0.12"
+#define FR_MATH_VERSION_HEX  0x02000C  /* major << 16 | minor << 8 | patch */
 
 #ifdef FR_CORE_ONLY
 #define FR_NO_PRINT
@@ -117,7 +117,7 @@ FR_INT(x,r) convert a fixed radix variable x of radix r to an integer
 #define FR_CHRDX(x, r_cur, r_new) (((r_cur) - (r_new)) >= 0 ? ((x) >> ((r_cur) - (r_new))) : ((x) << ((r_new) - (r_cur))))
 
 /* return only the fractional part of x */
-#define FR_FRAC(x, r) ((FR_ABS(x)) & (((1 << (r)) - 1)))
+#define FR_FRAC(x, r) ((FR_ABS(x)) & ((((s32)1 << (r)) - 1)))
 
 /* return the fractional part of number x with radix xr scaled to radix nr bits */
 #define FR_FRACS(x, xr, nr) (FR_CHRDX(FR_FRAC((x), (xr)), (xr), (nr)))
@@ -165,8 +165,8 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 /* floor and ceiling in current radix, leaving current radix intact
  * this means the lower radix number of bits are set to 0
  */
-#define FR_FLOOR(x, r) ((x) & (~((1 << r) - 1)))
-#define FR_CEIL(x, r) (FR_FLOOR(x, r) + ((FR_FRAC(x, r) ? (1 << r) : 0)))
+#define FR_FLOOR(x, r) ((x) & (~(((s32)1 << (r)) - 1)))
+#define FR_CEIL(x, r) (FR_FLOOR(x, r) + ((FR_FRAC(x, r) ? ((s32)1 << (r)) : 0)))
 
 /*******************************************************
   Interpolate between 2 fixed point values (x0,x1) of any radix,
@@ -182,15 +182,15 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
    range is btw [0<= delta < 1] --> ((0 ... (1<<prec)-1)
    Note: delta should be >= 0
 */
-#define FR_INTERPI(x0, x1, delta, prec) ((x0) + ((((x1) - (x0)) * ((delta) & ((1 << (prec)) - 1))) >> (prec)))
+#define FR_INTERPI(x0, x1, delta, prec) ((x0) + ((((x1) - (x0)) * ((delta) & (((s32)1 << (prec)) - 1))) >> (prec)))
 
 /******************************************************
   Convert to double, this is for debug only and WILL NOT compile under many embedded systems.
   Fixed Radix to Floating Point Double Conversion
   since this is a MACRO it will not be compiled or instantiated unless it is actually called in code.
 */
-#define FR2D(x, r) ((double)(((double)(x)) / ((double)(1 << (r)))))
-#define D2FR(d, r) ((s32)(d * (1 << r)))
+#define FR2D(x, r) ((double)(((double)(x)) / ((double)((s32)1 << (r)))))
+#define D2FR(d, r) ((s32)((d) * ((s32)1 << (r))))
 
 /******************************************************
   Useful Constants
@@ -233,7 +233,7 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
  * Result stays at x's radix. Uses 64-bit intermediate.
  * Rounds to nearest (adds 0.5 LSB before shift).
  */
-#define FR_MULK28(x, k) ((s32)((((int64_t)(x) * (int64_t)(k)) + (1 << 27)) >> 28))
+#define FR_MULK28(x, k) ((s32)((((int64_t)(x) * (int64_t)(k)) + ((int64_t)1 << 27)) >> 28))
 
 // common sqrts
 #define FR_kSQRT2 (92682)   /* 1.414213562373 */
@@ -267,7 +267,7 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
  */
 #define FR_TRIG_PREC     (15)
 #define FR_TRIG_OUT_PREC (16)
-#define FR_TRIG_MASK     ((1 << (FR_TRIG_PREC)) - 1)
+#define FR_TRIG_MASK     (((s32)1 << (FR_TRIG_PREC)) - 1)
 #define FR_TRIG_ONE      (1L << FR_TRIG_OUT_PREC)         /* 65536 = 1.0 */
 #define FR_TRIG_MAXVAL   ((s32)0x7fffffff)                 /* tan saturation max */
 #define FR_TRIG_MINVAL   (-FR_TRIG_MAXVAL)                  /* tan saturation min */
@@ -336,22 +336,26 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 /* FR_BAM2DEG(x): multiply by 360/65536 = 0.00549316 (4 terms, exact) */
 #define FR_BAM2DEG(x) (((x)>>8)+((x)>>9)-((x)>>12)-((x)>>13))
 
-/* FR_RAD2BAM(x): multiply by 65536/(2*pi) ≈ 10430.378 (7 terms, ~21 bits).
- * CAUTION: overflows s32 when |x| > ~4 rad at s15.16 (x<<13 term).
+/* FR_RAD2BAM(x): multiply by 65536/(2*pi) ≈ 10430.378 (10 terms, ~21 bits).
+ * x is radians at s15.16; the result is full s32 BAM (upper 16 bits are
+ * the u16 BAM). Valid for |x| <= pi (a half turn is 2^31): beyond that the
+ * result itself overflows s32. Terms are ordered (as in rad_to_bam_full)
+ * so the intermediate sums stay within s32 over that whole range.
  * For safe conversion at any radix, use fr_rad_to_bam() instead. 
  * #define FR_RAD2BAM(x) (((x)<<13)+((x)<<11)+((x)<<7)+((x)<<6)-((x)<<1)+((x)>>1)-((x)>>3)) */
-#define FR_RAD2BAM(x) (((x)<<13)+((x)<<11)+((x)<<7)+((x)<<6)-((x)<<1)+((x)>>1)-((x)>>3)+((x)>>8)-((x)>>11)-((x)>>14))
+#define FR_RAD2BAM(x) (((x)<<13)-((x)<<1)+((x)<<11)-((x)>>3)+((x)<<7)+((x)<<6)+((x)>>1)+((x)>>8)-((x)>>11)-((x)>>14))
 /* ── Overflow-safe rad/deg to BAM conversion functions ─────────────
  *
  * These replace the FR_RAD2BAM / FR_DEG2BAM macros for callers that
  * need the full ±2*pi or ±360° range at any radix.
  *
- * Strategy: normalize input to radix 16, conditionally reduce into
- * a safe zone, apply the full-precision shift-only multiply, then
- * extract the u16 BAM.  No precision loss from halving/quartering.
+ * Any s32 input at any radix 0..30. Strategy: reduce the angle by its
+ * period (exactly: 360 degrees at the caller's radix, or 2*pi to 64 bits
+ * for large radian values), normalize to radix 16, apply the
+ * full-precision shift-only multiply, then extract the u16 BAM.
  *
- * fr_rad_to_bam: reduce to [-pi, pi], reordered terms.  ±2*pi safe.
- * fr_deg_to_bam: reduce to [-90, 90) + quadrant offset.  ±360° safe.
+ * fr_rad_to_bam: reduce to [0, 2*pi], then [-pi/2, pi/2) per quadrant.
+ * fr_deg_to_bam: reduce to [-90, 90) + quadrant offset.
  */
 
 /* Pi constants at any radix: FR_PI(r) = round(pi * 2^r), etc.
@@ -445,8 +449,12 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
   s32 fr_sin(s32 rad, u16 radix);
   s32 fr_tan(s32 rad, u16 radix);
 
-/* Integer degrees -> BAM using division (exact at all multiples of 45 deg). */
-#define FR_DEG2BAM_I(deg) ((u16)((((s32)(deg) << 16) + ((deg) >= 0 ? 180 : -180)) / 360))
+/* Integer degrees -> BAM using division (exact at all multiples of 45 deg).
+ * deg * 65536/360 rounded, written as deg * 8192/45 (the same result) so
+ * that it is valid for |deg| < 2^18 instead of 2^15. The library's own
+ * integer-degree paths (FR_CosI's function forms, FR_TanI, radix 0) also
+ * reduce larger values mod 360 first. */
+#define FR_DEG2BAM_I(deg) ((u16)((((s32)(deg) * 8192) + ((deg) >= 0 ? 22 : -22)) / 45))
 
 /* Legacy single-arg integer-degree macros — use FR_CosI / FR_SinI instead */
 /* #define fr_cos_deg(deg)  fr_cos_bam(FR_DEG2BAM_I(deg)) — removed, name reused for 2-arg function */
@@ -478,7 +486,8 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 #endif /* FR_LEAN */
 
   /* Inverse trig — output in radians at caller-specified radix (s32).
-   * FR_atan2 returns radians at radix 16 (s15.16).
+   * FR_atan2(y, x, out_radix): y and x share any radix (only their ratio
+   * matters); the result is at out_radix.
    * Range: acos [0, pi], asin [-pi/2, pi/2],
    *        atan [-pi/2, pi/2], atan2 [-pi, pi].
    */
@@ -488,7 +497,7 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
   s32 FR_atan2(s32 y, s32 x, u16 out_radix);
 
 /* Logarithms */
-#define FR_LOG2MIN (-(32767 << 16)) /* returned instead of "negative infinity" */
+#define FR_LOG2MIN (-((s32)32767 << 16)) /* returned instead of "negative infinity" */
 
   s32 FR_log2(s32 input, u16 radix, u16 output_radix);
   s32 FR_ln(s32 input, u16 radix, u16 output_radix);
@@ -498,15 +507,36 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
 
   /* Power */
   s32 FR_pow2(s32 input, u16 radix);
-#define FR_EXP(input, radix)   (FR_pow2(FR_MULK28((input), FR_kLOG2E_28), (radix)))
-#define FR_POW10(input, radix) (FR_pow2(FR_MULK28((input), FR_kLOG2_10_28), (radix)))
+/* Exponent helpers for FR_EXP / FR_POW10 (and the _FAST forms): the base-2
+ * exponent x * log2(base) at x's radix. When it does not fit in s32 the
+ * result of the power is 0 or FR_OVERFLOW_POS (exactly, for radix <= 26),
+ * so the exponent is pinned to the s32 range instead of wrapping, which
+ * returned e.g. FR_OVERFLOW_POS for FR_EXP(INT32_MIN, 0). In-range inputs
+ * give the same exponent as FR_MULK28 / FR_SLOG2E / FR_SLOG2_10. */
+static inline s32 fr_pow2_arg_k28(s32 x, s32 k) {
+    int64_t p = ((int64_t)x * (int64_t)k + ((int64_t)1 << 27)) >> 28;
+    return (p > 0x7fffffff) ? (s32)0x7fffffff
+         : (p < -0x7fffffffLL - 1) ? (s32)(-0x7fffffff - 1) : (s32)p;
+}
+/* |x| < 0x50000000: FR_SLOG2E's partial sums stay in s32. */
+static inline s32 fr_pow2_arg_slog2e(s32 x) {
+    return (x >=  0x50000000) ? (s32)0x7fffffff
+         : (x <= -0x50000000) ? (s32)(-0x7fffffff - 1) : FR_SLOG2E(x);
+}
+/* |x| < 0x20000000: FR_SLOG2_10's partial sums stay in s32. */
+static inline s32 fr_pow2_arg_slog2_10(s32 x) {
+    return (x >=  0x20000000) ? (s32)0x7fffffff
+         : (x <= -0x20000000) ? (s32)(-0x7fffffff - 1) : FR_SLOG2_10(x);
+}
+#define FR_EXP(input, radix)   (FR_pow2(fr_pow2_arg_k28((input), FR_kLOG2E_28), (radix)))
+#define FR_POW10(input, radix) (FR_pow2(fr_pow2_arg_k28((input), FR_kLOG2_10_28), (radix)))
 
 /* Shift-only (multiply-free) base-conversion variants.
  * Lower accuracy (~5-10 LSB at Q16.16) but no multiply instruction.
  * Use these on targets where 32x32->64 multiply is expensive.
  */
-#define FR_EXP_FAST(input, radix)   (FR_pow2(FR_SLOG2E(input), radix))
-#define FR_POW10_FAST(input, radix) (FR_pow2(FR_SLOG2_10(input), radix))
+#define FR_EXP_FAST(input, radix)   (FR_pow2(fr_pow2_arg_slog2e(input), radix))
+#define FR_POW10_FAST(input, radix) (FR_pow2(fr_pow2_arg_slog2_10(input), radix))
 
 /*===============================================
  * Formatted output and string parsing
@@ -526,7 +556,8 @@ static inline s32 FR_div_rnd(s64 num, s32 den) {
   int FR_printNumD(int (*f)(char), int n, int pad);                      /* print decimal number with optional padding e.g. " 12" */
   int FR_printNumH(int (*f)(char), int n, int showPrefix);               /* print num as a hexidecimal e.g. "0x12ab"              */
 
-  /* string-to-fixed-point parser (inverse of FR_printNumF) */
+  /* string-to-fixed-point parser (inverse of FR_printNumF); out-of-range
+   * input saturates to FR_OVERFLOW_POS / FR_OVERFLOW_NEG */
   s32 FR_numstr(const char *s, u16 radix);
 
 #endif /* FR_NO_PRINT */

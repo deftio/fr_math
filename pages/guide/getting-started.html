@@ -73,7 +73,7 @@ cd fr_math
 
 <p><code>build.sh</code> wipes <code>build/</code>, rebuilds the
 library, examples, and tests, and runs the full test suite. On success
-the output shows all tests passing (98% line coverage, 100% of reachable branches).</p>
+the output shows all tests passing (99% line coverage, 100% of reachable branches).</p>
 
 <h2>A first program</h2>
 
@@ -314,7 +314,7 @@ envelope, and log/exp walkthroughs.</p>
 make coverage       # coverage report (requires gcov)</code></pre>
 
 <p>Run <code>make test</code> for a full pass. With <code>make coverage</code>,
-line coverage of the library sources is about <strong>98%</strong>, with every mathematically reachable branch exercised.
+line coverage of the library sources is about <strong>99%</strong>, with every mathematically reachable branch exercised.
 See <a href="building.html">Building &amp; Testing</a> for targets,
 cross-compilation, and CI.</p>
 
@@ -324,6 +324,8 @@ cross-compilation, and CI.</p>
   <li><strong><a href="fixed-point-primer.html">Fixed-Point Primer</a></strong>
       &mdash; how the radix notation and the library&rsquo;s naming
       conventions work.</li>
+  <li><strong><a href="approximations.html">How the Approximations Work</a></strong>
+      &mdash; how each function is computed and where its error comes from.</li>
   <li><strong><a href="api-reference.html">API Reference</a></strong>
       &mdash; per-symbol inputs, outputs, precision, and saturation
       behavior.</li>

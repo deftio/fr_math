@@ -122,7 +122,7 @@ so call sites read as intent:
 | `FR2I(x, r)` | `x`: fixed-point at radix `r` | integer | `(x) >> (r)`. Truncates toward **−∞** (C's signed shift). `FR2I(-1, 4) == -1`, not 0. |
 | `FR_INT(x, r)` | `x`: fixed-point at radix `r` | integer | Truncates toward **zero**. `FR_INT(-1, 4) == 0`. Useful when you want C's normal integer-cast behavior. |
 | `FR_NUM(i, f, d, r)` | `i`: integer part; `f`: decimal fraction digits; `d`: number of digits in `f`; `r`: target radix | `s32` at radix `r` | Build a fixed-point literal from decimal. `FR_NUM(12, 34, 2, 10)` is 12.34 at s.10. Rounds toward zero; for round-to-nearest, add half an LSB at the call site. |
-| `FR_numstr(s, r)` | `s`: null-terminated decimal string (e.g. `"3.14159"`); `r`: target radix | `s32` at radix `r` | Runtime string-to-fixed-point parser (inverse of `FR_printNumF`). Handles signs, leading whitespace, and leading-zero fractions like `"0.05"`. Up to 9 fractional digits. No malloc, no strtod, no libm. Returns 0 for NULL or empty input. |
+| `FR_numstr(s, r)` | `s`: null-terminated decimal string (e.g. `"3.14159"`); `r`: target radix | `s32` at radix `r` | Runtime string-to-fixed-point parser (inverse of `FR_printNumF`). Handles signs, leading whitespace, and leading-zero fractions like `"0.05"`. Up to 9 fractional digits. No malloc, no strtod, no libm. Returns 0 for NULL or empty input. Out-of-range values saturate to `FR_OVERFLOW_POS` / `FR_OVERFLOW_NEG` (as `FR_FixMulSat` does); `"-32768"` at radix 16 is exactly `INT32_MIN`. |
 | `FR2D(x, r)` | `x`: fixed-point at radix `r` | `double` | Debug-only: `x / (double)(1 << r)`. Pulls in `libm` — compile it out of release builds. |
 | `D2FR(d, r)` | `d`: `double`; `r`: target radix | `s32` at radix `r` | Debug-only: `(s32)(d * (1 << r))`. Same caveat as above. |
 
@@ -307,10 +307,15 @@ representations:
 
 | Macro | Direction | Worst-case error |
 | --- | --- | --- |
-| `FR_DEG2BAM(deg)` | integer degrees → BAM | ≤ 0.5 LSB BAM (≈ 0.0028°), no accumulation. |
-| `FR_BAM2DEG(bam)` | BAM → integer degrees | Truncation only (± 0.5°). |
-| `FR_RAD2BAM(rad, r)` | radians (at radix `r`) → BAM | ≈ 0.036% (constant 10430 ≈ 65536 / 2π). |
-| `FR_BAM2RAD(bam, r)` | BAM → radians (at radix `r`) | ≈ 0.006% (constant 6434 ≈ 2π × 1024). |
+| `FR_DEG2BAM(deg)` | degrees → BAM (× 65536/360) | ≤ 0.5 LSB BAM (≈ 0.0028°), no accumulation. |
+| `FR_BAM2DEG(bam)` | BAM → degrees (× 360/65536) | Truncation only (± 0.5°). |
+| `FR_RAD2BAM(rad)` | radians → BAM (× 65536/2π, 10 shift terms, relative error < 1e-9) | Valid for \|rad\| ≤ π at s15.16, where the top 16 bits of the result are the u16 BAM; beyond that the result overflows. |
+| `FR_BAM2RAD(bam)` | BAM → radians (× 2π/65536, 5 shift terms, relative error ≈ 3e-6) | Truncating shifts. |
+
+Each macro takes one argument and multiplies it by a constant, so the
+result is at the same radix as the argument. For any angle at any radix,
+use the functions `fr_rad_to_bam(rad, radix)` and
+`fr_deg_to_bam(deg, radix)` instead.
 
 #### Worked example: keeping precision on chips without a multiplier
 
@@ -374,9 +379,11 @@ for (int n = 0; n < nsamples; ++n) {
 }
 
 /* Radians (at radix 16) to BAM and back. */
-s32 rad_16 = 1L << 16;            /* 1.0 rad */
-u16 bam    = FR_RAD2BAM(rad_16, 16);
-s32 back   = FR_BAM2RAD(bam, 16);
+s32 rad_16 = 1L << 16;                                   /* 1.0 rad          */
+u16 bam    = fr_rad_to_bam(rad_16, 16);                  /* 10430; any angle */
+u16 bam_m  = (u16)((FR_RAD2BAM(rad_16) + 0x8000) >> 16); /* macro: |rad| <= pi */
+s32 back   = FR_BAM2RAD((s32)bam << 15) << 1;            /* BAM at r15 -> rad r16:
+                                                            65530 = 0.99991 rad */
 ```
 
 ## Trigonometry
@@ -406,15 +413,15 @@ need that cast.
 | --- | --- | --- |
 | `fr_sin_bam` | `s32 fr_sin_bam(u16 bam)` | s15.16. Default range [−65536, +65536] (exact crest). With `FR_TRIG_S16_SAFE`: [−65534, +65534]. Zeros exact. |
 | `fr_cos_bam` | `s32 fr_cos_bam(u16 bam)` | s15.16, same range. Defined as `fr_sin_bam(bam + FR_BAM_QUADRANT)`. |
-| `fr_tan_bam` | `s32 fr_tan_bam(u16 bam)` | s15.16. Uses a 65-entry octant table for [0, 45°] and the reciprocal identity `tan(x) = 1/tan(90°−x)` for (45°, 90°). Saturates to `±FR_TRIG_MAXVAL` at the poles (90°, 270°). Returns exact 0 at 0° and 180°. No 64-bit intermediates; one 32-bit division only in the >45° path. |
+| `fr_tan_bam` | `s32 fr_tan_bam(u16 bam)` | s15.16. Uses a 65-entry octant table for [0, 45°] and the reciprocal identity `tan(x) = 1/tan(90°−x)` for (45°, 90°). Within 10° of a pole it returns cot of the exact distance to the pole instead (`1/e − e/3`, one 32-bit division), since the table reciprocal amplifies interpolation error there. Saturates to `±FR_TRIG_MAXVAL` at the poles (90°, 270°). Returns exact 0 at 0° and 180°. No 64-bit intermediates; one 32-bit division only in the >45° path. |
 
 ### Radian-native
 
 | Function | Signature | Notes |
 | --- | --- | --- |
-| `fr_cos` | `s32 fr_cos(s32 rad, u16 radix)` | `rad` is interpreted at the given radix. Result is s15.16. |
+| `fr_cos` | `s32 fr_cos(s32 rad, u16 radix)` | `rad` is interpreted at the given radix. Result is s15.16. Any `s32` input at any radix 0–30: angles beyond ±4π (and all angles whose radix-16 form would not fit in `s32`) are reduced with 2π to 64 bits, so large angles do not drift. |
 | `fr_sin` | `s32 fr_sin(s32 rad, u16 radix)` | Same convention. |
-| `fr_tan` | `s32 fr_tan(s32 rad, u16 radix)` | Returns at **radix 16** (`FR_TRIG_OUT_PREC`). Computed as `(sin << 16) / cos`; saturates to `±INT32_MAX` (`FR_TRIG_MAXVAL`) near π/2 + kπ where cos → 0. |
+| `fr_tan` | `s32 fr_tan(s32 rad, u16 radix)` | Returns at **radix 16** (`FR_TRIG_OUT_PREC`). Octant table with the reciprocal identity; within 10° of π/2 + kπ it returns cot of the exact distance to the pole (taken in 2<sup>−32</sup> turns, `1/e − e/3`). Saturates to `±INT32_MAX` (`FR_TRIG_MAXVAL`) where \|tan\| exceeds the s15.16 range. Same input range as `fr_cos`. |
 
 ### Degree wrappers (current and legacy)
 
@@ -424,9 +431,9 @@ fixed-point at a caller-chosen radix:
 
 | Function | Signature | Notes |
 | --- | --- | --- |
-| `fr_sin_deg` | `s32 fr_sin_deg(s32 deg, u16 radix)` | `deg` is fixed-point degrees at `radix`. Returns s15.16. |
+| `fr_sin_deg` | `s32 fr_sin_deg(s32 deg, u16 radix)` | `deg` is fixed-point degrees at `radix`. Returns s15.16. Any `s32` input at any radix (reduced mod 360° exactly). |
 | `fr_cos_deg` | `s32 fr_cos_deg(s32 deg, u16 radix)` | Same. |
-| `fr_tan_deg` | `s32 fr_tan_deg(s32 deg, u16 radix)` | Returns at radix 16; saturates to `±INT32_MAX` near 90° / 270°. |
+| `fr_tan_deg` | `s32 fr_tan_deg(s32 deg, u16 radix)` | Returns at radix 16. Within 10° of 90° / 270° it returns cot of the exact degree distance to the pole; saturates to `±INT32_MAX` where \|tan\| exceeds the s15.16 range (exact poles: sign of the input). |
 
 Pass `radix = 0` for plain integer degrees, or a higher radix
 for fractional degrees (e.g. 42.375° at radix 4).
@@ -437,9 +444,9 @@ take plain integer degrees -- the trailing *I* denotes
 
 | Symbol | Signature | Kind |
 | --- | --- | --- |
-| `FR_SinI` | `FR_SinI(deg)` -> `s32` (s15.16) | Macro: `fr_sin_bam(FR_DEG2BAM(deg))`. Zero-cost inline. |
-| `FR_CosI` | `FR_CosI(deg)` -> `s32` (s15.16) | Macro: `fr_cos_bam(FR_DEG2BAM(deg))`. |
-| `FR_TanI` | `s32 FR_TanI(s16 deg)` | Function. Returns at radix 16; saturates to `±INT32_MAX` near 90° / 270°. |
+| `FR_SinI` | `FR_SinI(deg)` -> `s32` (s15.16) | Macro: `fr_sin_bam(FR_DEG2BAM_I(deg))`. Zero-cost inline. Valid for \|deg\| < 2<sup>18</sup>; `fr_sin_deg(deg, 0)` gives the same result for any `s32`. |
+| `FR_CosI` | `FR_CosI(deg)` -> `s32` (s15.16) | Macro: `fr_cos_bam(FR_DEG2BAM_I(deg))`. Same range; `fr_cos_deg(deg, 0)` for any `s32`. |
+| `FR_TanI` | `s32 FR_TanI(s32 deg)` | Function. Returns at radix 16; any `s32`. Same pole handling as `fr_tan_deg`. |
 
 **Legacy aliases.** The uppercase `FR_Sin`, `FR_Cos`, and
 `FR_Tan` macros still work -- they map directly to
@@ -487,9 +494,9 @@ returning.
 
 | Function | Inputs | Output | Domain / precision |
 | --- | --- | --- | --- |
-| `FR_log2` | `s32 input` at radix `in_r`<br>`u16 in_r` — input radix<br>`u16 out_r` — output radix | `s32` at radix `out_r`. Worst-case error ≤ 4 LSB at Q16.16. | Domain: `input > 0`. Returns `FR_DOMAIN_ERROR` for `input ≤ 0`. |
-| `FR_ln` | Same shape as `FR_log2`. | `s32` at radix `out_r`. Natural log. | Same domain. Internally computed as `FR_log2(x) × ln(2)`. |
-| `FR_log10` | Same shape as `FR_log2`. | `s32` at radix `out_r`. Common log. | Same domain. Internally computed as `FR_log2(x) / log2(10)`. |
+| `FR_log2` | `s32 input` at radix `in_r`<br>`u16 in_r` — input radix<br>`u16 out_r` — output radix | `s32` at radix `out_r`. Worst-case error ≤ 4 LSB at Q16.16. | Domain: `input > 0`. Returns `FR_LOG2MIN` (−32767.0 at radix 16) for `input ≤ 0`. |
+| `FR_ln` | Same shape as `FR_log2`. | `s32` at radix `out_r`. Natural log. | Same domain; returns `FR_LOG2MIN` for `input ≤ 0`. Internally computed as `FR_log2(x) × ln(2)`. |
+| `FR_log10` | Same shape as `FR_log2`. | `s32` at radix `out_r`. Common log. | Same domain; returns `FR_LOG2MIN` for `input ≤ 0`. Internally computed as `FR_log2(x) / log2(10)`. |
 
 **Worked example.** You have an audio-meter input
 at radix 16, and you want the level in "deci-bels-ish"
@@ -518,11 +525,11 @@ are available for targets where 32×32→64 multiply is expensive.
 
 | Symbol | Kind | Inputs | Output | Notes |
 | --- | --- | --- | --- | --- |
-| `FR_pow2` | Function | `s32 input` at `radix` (exponent)<br>`u16 radix` | `s32` at the **same radix**. | Domain: input up to `30 << radix`; above that, saturates to `FR_OVERFLOW_POS`. Negative inputs are floored toward −∞ before splitting into integer + fractional parts. Uses a 65-entry lookup table (260 bytes) with linear interpolation. |
-| `FR_EXP` | Macro | Same as `FR_pow2`. | `s32` at `radix`. | Expands to `FR_pow2(FR_MULK28(input, FR_kLOG2E_28), radix)`. Uses a radix-28 constant for ~9 digits of precision in the base conversion. |
-| `FR_POW10` | Macro | Same as `FR_pow2`. | `s32` at `radix`. | Expands to `FR_pow2(FR_MULK28(input, FR_kLOG2_10_28), radix)`. Saturates around `input ≥ 9 << radix`. |
-| `FR_EXP_FAST` | Macro | Same as `FR_pow2`. | `s32` at `radix`. | Shift-only variant: `FR_pow2(FR_SLOG2E(input), radix)`. No multiply instruction. Lower accuracy (~5–10 LSB at Q16.16). |
-| `FR_POW10_FAST` | Macro | Same as `FR_pow2`. | `s32` at `radix`. | Shift-only variant: `FR_pow2(FR_SLOG2_10(input), radix)`. No multiply instruction. |
+| `FR_pow2` | Function | `s32 input` at `radix` (exponent)<br>`u16 radix` | `s32` at the **same radix**. | Any `s32` input. The result saturates to `FR_OVERFLOW_POS` when it does not fit in `s32` (from 2<sup>15</sup> at radix 16, 2<sup>31</sup> at radix 0) and underflows to 0. Negative inputs are floored toward −∞ before splitting into integer + fractional parts. Uses a 65-entry lookup table (260 bytes) with linear interpolation. |
+| `FR_EXP` | Macro | Same as `FR_pow2`. | `s32` at `radix`. | `FR_pow2` of `input × log2(e)`, the product formed with a radix-28 constant (~9 digits) like `FR_MULK28`, kept in the `s32` range so very large inputs give `FR_OVERFLOW_POS` / 0 instead of wrapping. The exponent is rounded at the input radix, so accuracy follows the radix: ≈ 0.003% at radix 16, ≈ 2% at radix 4. |
+| `FR_POW10` | Macro | Same as `FR_pow2`. | `s32` at `radix`. | `FR_pow2` of `input × log2(10)`, as `FR_EXP`. Saturates to `FR_OVERFLOW_POS` when 10<sup>x</sup> does not fit (x ≥ 4.52 at radix 16, x ≥ 9.33 at radix 0). |
+| `FR_EXP_FAST` | Macro | Same as `FR_pow2`. | `s32` at `radix`. | Shift-only variant: `FR_pow2(FR_SLOG2E(input), radix)`, with the same range handling as `FR_EXP`. No multiply instruction. Lower accuracy (~5–10 LSB at Q16.16). |
+| `FR_POW10_FAST` | Macro | Same as `FR_pow2`. | `s32` at `radix`. | Shift-only variant: `FR_pow2(FR_SLOG2_10(input), radix)`, with the same range handling as `FR_POW10`. No multiply instruction. |
 | `FR_MULK28` | Macro | `s32 x`, radix-28 constant `k` | `s32` at the same radix as `x`. | Multiplies a fixed-point value by a radix-28 constant using a 64-bit intermediate. Rounds to nearest. Used internally by `FR_EXP`, `FR_POW10`, `FR_ln`, `FR_log10`. |
 
 **Worked example.** Compute `e^1.5`
@@ -548,7 +555,7 @@ targets (AVR, 8051) where 64-bit multiply is very expensive.
 | --- | --- | --- | --- |
 | `FR_sqrt` | `s32 input` at `radix`<br>`u16 radix` | `s32` at the **same radix**. | Domain: `input ≥ 0`. Returns `FR_DOMAIN_ERROR` for negative input. Digit-by-digit integer isqrt on an `int64_t` accumulator — deterministic 32-iteration cost, no floating point anywhere. **Rounds to nearest** (remainder > root → +1). Worst-case error is ±0.5 LSB at the input radix. |
 | `FR_hypot` | `s32 x`, `s32 y` both at `radix`<br>`u16 radix` | `s32` at the **same radix**. | Overflow-safe magnitude: computes `sqrt(x² + y²)` without an intermediate 32-bit overflow by promoting the sum of squares to `int64_t`. Accepts the full `s32` input range; output saturates at `FR_OVERFLOW_POS` only if the true hypot exceeds `2^31−1` at the given radix. |
-| `FR_hypot_fast8` | `s32 x`, `s32 y` (any radix) | `s32` at the same radix. | 8-segment shift-only piecewise-linear approximate magnitude. ~0.14% peak error. No multiply, no 64-bit, no ROM table. Based on the method of US Patent 6,567,777 B1 (public domain). No `radix` parameter needed — the algorithm is scale-invariant. |
+| `FR_hypot_fast8` | `s32 x`, `s32 y` (any radix) | `s32` at the same radix. | 8-segment shift-only piecewise-linear approximate magnitude. ~0.14% peak error. No multiply, no 64-bit, no ROM table. Accepts the full `s32` input range; saturates at `FR_OVERFLOW_POS` when the result exceeds 2<sup>31</sup>−1. Based on the method of US Patent 6,567,777 B1 (public domain). No `radix` parameter needed — the algorithm is scale-invariant. |
 
 ## Wave generators
 
@@ -759,6 +766,8 @@ can direct output at a UART, an in-memory buffer, or
 
 - [Fixed-Point Primer](fixed-point-primer.md)
   — what radixes are and how to pick one.
+- [How the Approximations Work](approximations.md)
+  — the algorithm and error budget behind each function.
 - [Examples](examples.md) — runnable snippets
   for every topic below.
 - [Getting Started](getting-started.md) —
