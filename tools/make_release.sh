@@ -14,6 +14,12 @@
 #   bash tools/make_release.sh --validate      # local validation only
 #   bash tools/make_release.sh --skip-cross    # skip cross-compile step
 #
+# Safe to re-run after any stop: an existing PR is reused, a PR that was
+# already merged (by this script or on github.com) resumes at "switch to
+# master", and a pushed tag without a release resumes at the release wait.
+# Merging is done from the CLI (gh pr merge --squash) once CI is green and
+# GitHub reports the PR mergeable; repository auto-merge is not needed.
+#
 # Exit status: 0 if every step passes, non-zero on first failure.
 
 set -euo pipefail
@@ -35,6 +41,8 @@ MODE="full"
 BRANCH=""
 ON_MASTER=false
 TAG_EXISTS=false
+ALREADY_MERGED=false
+CI_SHA=""
 SKIP_CROSS=0
 
 # -----------------------------------------------------------------------
@@ -72,6 +80,126 @@ pass() {
 run_cmd() {
     echo "  \$ $*"
     "$@"
+}
+
+# Like confirm, but defaults to No and returns 1 instead of exiting, for
+# optional or risky actions the caller handles either way.
+ask() {
+    local prompt="${1:-Continue?}"
+    echo ""
+    read -r -p "  $prompt [y/N] " answer
+    case "${answer:-n}" in
+        [Yy]*) return 0 ;;
+        *) return 1 ;;
+    esac
+}
+
+# Status checks that branch protection on master requires, one per line.
+# Empty if there is no protection or the token cannot read it; callers
+# then fall back to "every reported check".
+required_contexts() {
+    gh api "repos/{owner}/{repo}/branches/master/protection/required_status_checks" \
+        --jq '.contexts[]' 2>/dev/null || true
+}
+
+# Evaluate CI from a JSON list of checks, each {name, result}, where result
+# is one of pass / fail / pending / skipping / cancel (the `bucket` values
+# of `gh pr checks --json`). Prints one line per check, then a final line
+# with the overall verdict: pass, pending or fail. Every required context
+# (passed as further arguments) must be present and passing; one that has
+# not been reported yet counts as pending, so a workflow that starts late
+# cannot be skipped.
+#
+# Do not test the raw `state` field: a running GitHub Actions job reports
+# IN_PROGRESS or QUEUED there, never PENDING, which made an earlier version
+# of this script treat running CI as finished.
+evaluate_checks() {
+    local checks_json="$1"; shift
+    CHECKS_JSON="$checks_json" python3 - "$@" <<'EOF'
+import json, os, sys
+checks = json.loads(os.environ["CHECKS_JSON"] or "[]")
+required = [r for r in sys.argv[1:] if r]
+icons = {"pass": "ok", "fail": "FAIL", "cancel": "CANC", "pending": "...", "skipping": "skip"}
+by_name = {}
+for c in checks:
+    print("  [%4s] %s" % (icons.get(c["result"], c["result"]), c["name"]))
+    by_name.setdefault(c["name"], []).append(c["result"])
+missing = [r for r in required if r not in by_name]
+for r in missing:
+    print("  [ ...] %s (required, not reported yet)" % r)
+results = [x for v in by_name.values() for x in v]
+if any(x in ("fail", "cancel") for x in results):
+    print("fail")
+elif missing or not results or any(x == "pending" for x in results):
+    print("pending")
+else:
+    print("pass")
+EOF
+}
+
+# Wait for CI. $1 = description, $2 = command that prints the checks as
+# JSON [{name, result}]. Fails on any failed or cancelled check; asks
+# before continuing on timeout.
+wait_for_checks() {
+    local what="$1" fetch="$2"
+    local -a required=()
+    local line
+    while IFS= read -r line; do
+        [ -n "$line" ] && required+=("$line")
+    done < <(required_contexts)
+    if [ ${#required[@]} -gt 0 ]; then
+        echo "  Branch protection requires ${#required[@]} check(s) on master."
+    else
+        echo "  No required checks readable from branch protection; waiting for every reported check."
+    fi
+
+    local attempts=0 max_attempts=80   # 80 x 30 s = 40 min
+    while [ $attempts -lt $max_attempts ]; do
+        local checks_json out verdict
+        checks_json=$($fetch)
+        echo ""
+        echo "  $what:"
+        out=$(evaluate_checks "$checks_json" ${required[@]+"${required[@]}"}) || fail "Could not parse CI status."
+        verdict=$(echo "$out" | tail -1)
+        echo "$out" | sed '$d'
+
+        case "$verdict" in
+            pass)
+                echo ""
+                pass "All CI checks passed."
+                return 0 ;;
+            fail)
+                echo ""
+                fail "One or more CI checks failed or were cancelled. Fix the issue and re-run." ;;
+        esac
+
+        attempts=$((attempts + 1))
+        echo "  ... checks still running; waiting 30s (attempt $attempts/$max_attempts)"
+        sleep 30
+    done
+
+    echo ""
+    echo "  Timed out waiting for CI after $max_attempts attempts."
+    confirm "Continue without CI? (not recommended; branch protection may still block the merge)"
+}
+
+# Checks on the PR, as [{name, result}].
+fetch_pr_checks() {
+    # gh pr checks exits non-zero while checks are pending or failing;
+    # the JSON is still printed.
+    gh pr checks "$PR_NUM" --json name,bucket \
+        --jq '[.[] | {name, result: .bucket}]' 2>/dev/null || true
+}
+
+# Check runs on a commit ($CI_SHA), as [{name, result}].
+fetch_commit_checks() {
+    gh api "repos/{owner}/{repo}/commits/$CI_SHA/check-runs?per_page=100" \
+        --jq '[.check_runs[] | {name, result: (
+            if .status != "completed" then "pending"
+            elif (.conclusion == "success" or .conclusion == "neutral") then "pass"
+            elif .conclusion == "skipped" then "skipping"
+            elif .conclusion == "cancelled" then "cancel"
+            else "fail" end)}]' 2>/dev/null || true
 }
 
 # -----------------------------------------------------------------------
@@ -364,6 +492,23 @@ do_check_git() {
     if [ "$BRANCH" = "master" ] || [ "$BRANCH" = "main" ]; then
         ON_MASTER=true
         echo "  Already on $BRANCH — will skip PR steps."
+    else
+        # Re-run after the PR was merged (by this script or by hand): a
+        # merged PR whose head is exactly this commit. Resume at "switch to
+        # master" instead of pushing the branch again, merging master back
+        # into it and opening a second PR.
+        local head_sha merged
+        head_sha=$(git rev-parse HEAD)
+        echo "  \$ gh pr list --head $BRANCH --base master --state merged"
+        merged=$(gh pr list --head "$BRANCH" --base master --state merged \
+            --json number,headRefOid \
+            --jq "[.[] | select(.headRefOid == \"$head_sha\")][0].number // empty" 2>/dev/null || true)
+        if [ -n "$merged" ]; then
+            PR_NUM="$merged"
+            ALREADY_MERGED=true
+            echo "  PR #$PR_NUM from $BRANCH at $(git rev-parse --short HEAD) is already merged."
+            echo "  Resuming: switch to master, verify, tag, release."
+        fi
     fi
 
     # Tag check
@@ -411,7 +556,23 @@ do_push_branch() {
 
     run_cmd git fetch origin master
 
-    if ! $ON_MASTER; then
+    if $ON_MASTER; then
+        # On master: CI is checked on HEAD and HEAD is what gets tagged, so
+        # a local master behind origin (say, after merging the PR on
+        # github.com) would test and tag the old commit. Fast-forward it.
+        local ahead behind
+        ahead=$(git rev-list --count "origin/master..HEAD" 2>/dev/null || echo "0")
+        behind=$(git rev-list --count "HEAD..origin/master" 2>/dev/null || echo "0")
+        if [ "$behind" -gt 0 ] && [ "$ahead" -gt 0 ]; then
+            fail "Local master and origin/master have diverged ($ahead local, $behind remote commit(s)). Resolve by hand first."
+        fi
+        if [ "$behind" -gt 0 ]; then
+            echo "  Local master is $behind commit(s) behind origin/master."
+            run_cmd git merge --ff-only origin/master
+            pass "Fast-forwarded master to $(git rev-parse --short HEAD)."
+            echo "  (Step \"Verify build on master\" rebuilds and tests this commit before tagging.)"
+        fi
+    else
         # Feature branch: merge in latest master first.
         local behind
         behind=$(git rev-list --count "HEAD..origin/master" 2>/dev/null || echo "0")
@@ -493,145 +654,109 @@ do_open_pr() {
 
 do_wait_ci() {
     if $ON_MASTER; then
-        step_header "Wait for CI on master push"
-        echo "  Polling commit status every 30s..."
-        echo ""
-        local sha
-        sha=$(git rev-parse HEAD)
-
-        local attempts=0
-        local max_attempts=40
-        while [ $attempts -lt $max_attempts ]; do
-            local state
-            echo "  \$ gh api repos/:owner/:repo/commits/$sha/status"
-            state=$(gh api "repos/{owner}/{repo}/commits/$sha/status" --jq '.state' 2>/dev/null || echo "pending")
-
-            echo "  Combined status: $state"
-
-            if [ "$state" = "failure" ] || [ "$state" = "error" ]; then
-                echo ""
-                fail "CI failed on master. Fix the issue and re-run."
-            fi
-
-            if [ "$state" = "success" ]; then
-                echo ""
-                pass "All CI checks passed on master."
-                return 0
-            fi
-
-            # Also check via check-runs API (GitHub Actions uses this instead of commit status)
-            local checks_json
-            checks_json=$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" --jq '.check_runs[] | {name, status, conclusion}' 2>/dev/null || true)
-            if [ -n "$checks_json" ]; then
-                local any_in_progress any_failed_cr
-                any_in_progress=$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" \
-                    --jq '[.check_runs[] | select(.status != "completed")] | length' 2>/dev/null || echo "1")
-                any_failed_cr=$(gh api "repos/{owner}/{repo}/commits/$sha/check-runs" \
-                    --jq '[.check_runs[] | select(.conclusion == "failure")] | length' 2>/dev/null || echo "0")
-
-                if [ "$any_failed_cr" -gt 0 ]; then
-                    echo ""
-                    fail "CI check-run failed on master. Fix the issue and re-run."
-                fi
-                if [ "$any_in_progress" -eq 0 ]; then
-                    echo ""
-                    pass "All CI check-runs passed on master."
-                    return 0
-                fi
-            fi
-
-            attempts=$((attempts + 1))
-            echo "  ... waiting 30s (attempt $attempts/$max_attempts)"
-            echo ""
-            sleep 30
-        done
-
-        echo ""
-        echo "  Timed out waiting for CI after $max_attempts attempts."
-        confirm "Continue without CI? (not recommended)"
+        step_header "Wait for CI on master at $(git rev-parse --short HEAD)"
+        CI_SHA=$(git rev-parse HEAD)
+        wait_for_checks "Check runs on $(git rev-parse --short HEAD)" fetch_commit_checks
         return 0
     fi
 
     step_header "Wait for CI on PR #$PR_NUM"
-    echo "  Polling every 30s..."
-    echo ""
-
-    local attempts=0
-    local max_attempts=40
-    while [ $attempts -lt $max_attempts ]; do
-        local checks_json
-        echo "  \$ gh pr checks $PR_NUM"
-        checks_json=$(gh pr checks "$PR_NUM" --json name,state 2>/dev/null || true)
-
-        if [ -z "$checks_json" ] || [ "$checks_json" = "[]" ]; then
-            attempts=$((attempts + 1))
-            echo "  Waiting for checks to start... (attempt $attempts/$max_attempts)"
-            sleep 30
-            continue
-        fi
-
-        echo "$checks_json" | python3 -c "
-import sys, json
-checks = json.load(sys.stdin)
-for c in checks:
-    icon = {'SUCCESS':'ok','FAILURE':'FAIL','PENDING':'...'}.get(c['state'], c['state'])
-    print(f\"  [{icon:>4}] {c['name']}\")
-" 2>/dev/null || echo "$checks_json"
-
-        local any_pending any_failed
-        any_pending=$(echo "$checks_json" | python3 -c "
-import sys, json
-checks = json.load(sys.stdin)
-print('yes' if any(c['state'] == 'PENDING' for c in checks) else 'no')
-" 2>/dev/null || echo "no")
-
-        any_failed=$(echo "$checks_json" | python3 -c "
-import sys, json
-checks = json.load(sys.stdin)
-print('yes' if any(c['state'] == 'FAILURE' for c in checks) else 'no')
-" 2>/dev/null || echo "no")
-
-        if [ "$any_failed" = "yes" ]; then
-            echo ""
-            fail "One or more CI checks failed. Fix the issue and re-run."
-        fi
-
-        if [ "$any_pending" = "no" ]; then
-            echo ""
-            pass "All CI checks passed."
-            return 0
-        fi
-
-        attempts=$((attempts + 1))
-        echo "  ... waiting 30s (attempt $attempts/$max_attempts)"
-        echo ""
-        sleep 30
-    done
-
-    echo ""
-    echo "  Timed out waiting for CI after $max_attempts attempts."
-    confirm "Continue without CI? (not recommended)"
+    wait_for_checks "Checks on PR #$PR_NUM" fetch_pr_checks
 }
 
 # -----------------------------------------------------------------------
 # Step 10: Merge PR
 # -----------------------------------------------------------------------
 
+# Squash-merge directly from the CLI once GitHub says the PR is mergeable.
+# No --auto: auto-merge is a repository setting (off here), and with CI
+# already green there is nothing to wait for. The squash commit's subject
+# and body are set explicitly, so trailers from branch commits
+# (Co-authored-by and the like) never reach master.
 do_merge_pr() {
     if $ON_MASTER; then return 0; fi
 
-    step_header "Enable auto-merge on PR #$PR_NUM"
+    step_header "Merge PR #$PR_NUM"
 
-    local pr_state
-    pr_state=$(gh pr view "$PR_NUM" --json state --jq '.state' 2>/dev/null || true)
-    if [ "$pr_state" = "MERGED" ]; then
-        pass "PR #$PR_NUM is already merged."
-        return 0
-    fi
+    local head_sha
+    head_sha=$(git rev-parse HEAD)
 
-    confirm "Enable auto-merge (squash) for PR #$PR_NUM?"
-    run_cmd gh pr merge "$PR_NUM" --auto --squash --delete-branch
-    pass "Auto-merge enabled. Will merge when all requirements are met."
+    local attempts=0 max_attempts=40   # 40 x 15 s = 10 min
+    while [ $attempts -lt $max_attempts ]; do
+        local info pr_state merge_state review pr_head
+        echo "  \$ gh pr view $PR_NUM --json state,mergeStateStatus,reviewDecision,headRefOid"
+        info=$(gh pr view "$PR_NUM" --json state,mergeStateStatus,reviewDecision,headRefOid \
+            --jq '[.state, .mergeStateStatus, (.reviewDecision // ""), .headRefOid] | join("|")' 2>/dev/null || true)
+        # "|"-separated: reviewDecision is often empty, and whitespace
+        # splitting would shift headRefOid into its place.
+        IFS='|' read -r pr_state merge_state review pr_head <<< "$info"
+
+        if [ "$pr_state" = "MERGED" ]; then
+            pass "PR #$PR_NUM is already merged."
+            return 0
+        fi
+        if [ "$pr_state" = "CLOSED" ]; then
+            fail "PR #$PR_NUM is closed without being merged."
+        fi
+        if [ -n "${pr_head:-}" ] && [ "$pr_head" != "$head_sha" ]; then
+            fail "PR #$PR_NUM head is ${pr_head:0:7}, local HEAD is ${head_sha:0:7}. Someone pushed to the branch; pull and re-run."
+        fi
+
+        echo "  Merge state: ${merge_state:-unknown}${review:+, review: $review}"
+        case "$merge_state" in
+            CLEAN|HAS_HOOKS)
+                confirm "Squash-merge PR #$PR_NUM into master as \"Release $VER_STRING (#$PR_NUM)\"?"
+                run_cmd gh pr merge "$PR_NUM" --squash --delete-branch \
+                    --match-head-commit "$head_sha" \
+                    --subject "Release $VER_STRING (#$PR_NUM)" \
+                    --body "Release $VER_STRING. See release_notes.md for details." \
+                    || fail "gh pr merge failed (see message above). Nothing was merged."
+                pass "PR #$PR_NUM merged."
+                return 0 ;;
+            BEHIND)
+                echo "  Branch protection requires the branch to be up to date with master."
+                confirm "Update the PR branch from master on GitHub (new CI run), then wait again?"
+                run_cmd gh pr update-branch "$PR_NUM"
+                fail "Branch updated on GitHub. Run 'git pull' on $BRANCH, then re-run this script to wait for the new CI run." ;;
+            DIRTY)
+                fail "PR #$PR_NUM has merge conflicts with master. Merge master into $BRANCH, resolve, and re-run." ;;
+            DRAFT)
+                confirm "PR #$PR_NUM is a draft. Mark it ready for review?"
+                run_cmd gh pr ready "$PR_NUM" ;;
+            UNSTABLE)
+                fail "PR #$PR_NUM has failing checks (merge state UNSTABLE). Run 'gh pr checks $PR_NUM'." ;;
+            BLOCKED)
+                # Right after CI goes green GitHub can still report BLOCKED
+                # for a short while, so give it time before deciding.
+                if [ $attempts -ge 8 ]; then
+                    echo ""
+                    echo "  PR #$PR_NUM is still blocked by branch protection although CI passed."
+                    if [ "$review" = "REVIEW_REQUIRED" ] || [ "$review" = "CHANGES_REQUESTED" ]; then
+                        echo "  Reason: a pull request review is required ($review)."
+                    fi
+                    echo "  Settings: https://github.com/deftio/fr_math/settings/branches"
+                    if ask "Merge anyway as an admin (gh pr merge --admin bypasses branch protection)?"; then
+                        run_cmd gh pr merge "$PR_NUM" --squash --delete-branch --admin \
+                            --match-head-commit "$head_sha" \
+                            --subject "Release $VER_STRING (#$PR_NUM)" \
+                            --body "Release $VER_STRING. See release_notes.md for details." \
+                            || fail "gh pr merge --admin failed (see message above). Nothing was merged."
+                        pass "PR #$PR_NUM merged (admin)."
+                        return 0
+                    fi
+                    fail "Not merged. Resolve the block, then re-run this script (it resumes where it stopped)."
+                fi ;;
+            *)
+                # UNKNOWN or empty: GitHub is still computing mergeability.
+                ;;
+        esac
+
+        attempts=$((attempts + 1))
+        echo "  ... waiting 15s (attempt $attempts/$max_attempts)"
+        sleep 15
+    done
+
+    fail "PR #$PR_NUM did not become mergeable within 10 minutes. Check 'gh pr view $PR_NUM', then re-run."
 }
 
 # -----------------------------------------------------------------------
@@ -655,8 +780,7 @@ do_switch_master() {
         return 0
     fi
 
-    step_header "Wait for PR merge, then switch to master"
-    echo "  Polling every 15s for merge completion..."
+    step_header "Confirm PR #$PR_NUM is merged, then switch to master"
 
     local attempts=0
     while [ $attempts -lt 80 ]; do
@@ -679,17 +803,49 @@ do_switch_master() {
         fail "Timed out waiting for PR to merge."
     fi
 
-    run_cmd git checkout master
-    run_cmd git fetch origin master
-    # After a squash-merge, local master and origin/master have diverged
-    # (the squash commit is a new commit). Reset to origin/master which
-    # has the authoritative squash-merged content.
-    if ! git merge-base --is-ancestor origin/master HEAD 2>/dev/null; then
-        echo "  Local master diverged from origin (expected after squash-merge)."
-        run_cmd git reset --hard origin/master
-    else
-        run_cmd git pull --ff-only origin master
+    local merged_branch="$BRANCH" merge_sha
+    merge_sha=$(gh pr view "$PR_NUM" --json mergeCommit --jq '.mergeCommit.oid // empty' 2>/dev/null || true)
+
+    # gh pr merge --delete-branch may already have switched to master.
+    if [ "$(git rev-parse --abbrev-ref HEAD)" != "master" ]; then
+        run_cmd git checkout master
     fi
+    run_cmd git fetch origin master
+
+    if [ -n "$merge_sha" ] && ! git merge-base --is-ancestor "$merge_sha" origin/master 2>/dev/null; then
+        fail "Merge commit ${merge_sha:0:7} of PR #$PR_NUM is not on origin/master."
+    fi
+
+    # Local master normally has no commits of its own and just
+    # fast-forwards to the squash commit. If it does have some, they are
+    # not on origin and would be lost by a reset, so ask.
+    local local_only
+    local_only=$(git rev-list --count "origin/master..HEAD" 2>/dev/null || echo "0")
+    if [ "$local_only" -gt 0 ]; then
+        echo "  Local master has $local_only commit(s) that are not on origin/master:"
+        git log --oneline "origin/master..HEAD" | sed 's/^/    /'
+        if ask "Discard them and reset local master to origin/master?"; then
+            run_cmd git reset --hard origin/master
+        else
+            fail "Local master differs from origin/master. Sort it out by hand, then re-run."
+        fi
+    else
+        run_cmd git merge --ff-only origin/master
+    fi
+
+    # After a merge on github.com (not by this script) the PR branch can
+    # still exist on origin and locally.
+    if [ "$merged_branch" != "master" ]; then
+        if git ls-remote --exit-code --heads origin "$merged_branch" >/dev/null 2>&1; then
+            if ask "Delete the merged branch $merged_branch on origin?"; then
+                run_cmd git push origin --delete "$merged_branch"
+            fi
+        fi
+        if git show-ref --verify --quiet "refs/heads/$merged_branch"; then
+            echo "  Local branch $merged_branch is kept. Delete it with: git branch -D $merged_branch"
+        fi
+    fi
+
     BRANCH="master"
     ON_MASTER=true
     pass "On master at $(git rev-parse --short HEAD)."
@@ -771,9 +927,9 @@ do_wait_release() {
         run_conclusion=$(gh api repos/:owner/:repo/actions/runs \
             --jq ".workflow_runs[] | select(.name==\"Release\" and .head_branch==\"$VER_TAG\") | .conclusion" \
             2>/dev/null | head -1 || true)
-        if [ "$run_conclusion" = "failure" ]; then
+        if [ -n "$run_conclusion" ] && [ "$run_conclusion" != "success" ] && [ "$run_conclusion" != "null" ]; then
             echo ""
-            echo "  Release workflow FAILED. Check:"
+            echo "  Release workflow ended with '$run_conclusion'. Check:"
             echo "    https://github.com/deftio/fr_math/actions"
             echo ""
             echo "  To retry: delete the tag and re-run:"
@@ -887,6 +1043,14 @@ do_commit_pipeline_changes
 do_check_git
 
 if $TAG_EXISTS; then
+    do_wait_release
+    do_done
+elif $ALREADY_MERGED; then
+    # PR already merged (e.g. on github.com): pick up from master.
+    do_switch_master
+    do_wait_ci
+    do_verify_master
+    do_tag
     do_wait_release
     do_done
 else
